@@ -1,8 +1,6 @@
 import logging
 from copy import deepcopy
-from accasim.utils.misc import CONSTANT
-import itertools
-
+from accasim.utils.misc import CONSTANT, FrozenDict
 
 class resources_class:
     """
@@ -22,8 +20,9 @@ class resources_class:
         self.groups = {}
         self.resources = {}
         self.system_resource_types = []
+        self.system_total_resources = None
         # self.resources_tree = resource_map(kwargs['groups'])
-        self.allocated = {}
+        # self.allocated = {}
         self.node_prefix = kwargs['node_prefix'] if 'node_prefix' in kwargs else 'node_' 
         self.available_prefix = kwargs['available_prefix'] if 'available_prefix' in kwargs else 'a_'
         self.used_prefix = kwargs['used_prefix'] if 'available_prefix' in kwargs else 'u_'
@@ -43,6 +42,16 @@ class resources_class:
                 self.resources[_node_name] = deepcopy(_attrs_values)
                 # self.resources_tree.add(_node_name, kwargs['groups'][group_name])
                 j += 1              
+
+    def total_resources(self):
+        if self.system_total_resources:
+            return self.system_total_resources
+        avl_types = {_type: 0 for _type in self.system_resource_types}
+        for _node_values in self.resources.values():
+            for _type in avl_types.keys():
+                avl_types[_type] += _node_values[self.available_resource_key(_type)]
+        self.system_total_resources = FrozenDict(**avl_types)
+        return avl_types
 
     def define_group(self, name, group):
         assert(isinstance(group, dict))
@@ -103,7 +112,14 @@ class resources_class:
             } 
             for r in self.system_resource_types
         }
-        return _capacity        
+        return _capacity
+    
+    def resource_manager(self):
+        return resource_manager(self)
+    
+    def available_resource_key(self, _key):
+        assert(_key in self.system_resource_types)
+        return '{}{}'.format(self.available_prefix, _key)          
 
     def __str__(self):
         _str = "Resources:\n"
@@ -146,67 +162,32 @@ class resource_manager:
         return self.resources.availability()
 
     def resource_types(self):
-        return list(set([ resource.split('_')[1]  for group, group_resources in self.resources.groups.items() for resource in group_resources ]))
+        return self.resources.system_resource_types
 
     def get_nodes(self):
         return list(self.resources.resources.keys())
+    
+    def get_total_resources(self, *args):
+        """
+            Return the total system resource for the required argument. The resource have to exist in the system. 
+            If no arguments is proportioned all resources are returned.
+            @param *args: Depends on the system configuration. But at least it must have ('core', 'mem') resources          
+        """
+        _resources = self.resources.total_resources()
+        if not args or len(args) == 0:
+            return {k: v for k, v in _resources.items()}
+        avl_types = {}
+        for arg in args:
+            assert(arg in _resources), '{} is not a resource of the system. Available resource are {}'.format(arg, self.resource_types()) 
+            avl_types[arg] = _resources[arg]
+        return avl_types
 
-    def get_total_cores(self):
-        return sum([attrs['a_core'] for attrs in self.resources.resources.values()])
-
-    def get_total_gpu(self):
-        return sum([attrs['a_gpu'] for attrs in self.resources.resources.values()])
-
-    def get_total_mic(self):
-        return sum([attrs['a_mic'] for attrs in self.resources.resources.values()])
-
-    def get_total_mem(self):
-        return sum([attrs['a_mem'] for attrs in self.resources.resources.values()])
-
-    def get_base_resources(self):
-        prf = 'a'
-        base = {}
-        for k in self.resource_types():
-            s = '_'.join([prf, k])
-            base[k] = sum([attrs[s] for attrs in self.resources.resources.values()])
-        return base
-
-    def get_used_resources(self):
-        prf = 'u'
-        used = {}
-        for k in self.resource_types():
-            s = '_'.join([prf, k])
-            used[k] = sum([attrs[s] for attrs in self.resources.resources.values()])
-        return used
-
-if __name__ == '__main__':
-
-    class event:
-        def __init__(self, id):
-            self.id = id
-            self.core = 3
-            self.gpu = 2
-            self.mic = 0
-            self.mem = 14
-        def update_core(self):
-            self.core = 6
-
-        def __str__(self):
-            return 'ID: %s, core: %i, gpu: %i, mic: %i and mem: %i' % (self.id, self.core, self.gpu, self.mic, self.mem)
-
-    groups = {
-        'g0': {'core': 8, 'gpu':2, 'mic': 0, 'mem': 14},
-        'g1': {'core': 8, 'gpu':2, 'mic': 0, 'mem': 14}
-    }
-    resources = {
-        'g0': 2,
-        'g1': 3,
-    }
-    _resource = resources_class(groups=groups, resources=resources)
-    print(_resource)
-    rm = resource_manager(_resource)
-    nodes = ['node_1', 'node_4']
-    e = event('e.1')
-    rm.allocate_event(e, nodes)
-    print(rm.availability())
-    rm.remove_event(e.id)
+    #===========================================================================
+    # def get_used_resources(self):
+    #     prf = 'u'
+    #     used = {}
+    #     for k in self.resource_types():
+    #         s = '_'.join([prf, k])
+    #         used[k] = sum([attrs[s] for attrs in self.resources.resources.values()])
+    #     return used
+    #===========================================================================

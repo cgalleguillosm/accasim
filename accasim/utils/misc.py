@@ -10,7 +10,7 @@ from threading import Timer, Thread
 from inspect import getouterframes, currentframe
 import functools
 import inspect
-from collections import namedtuple
+from collections import namedtuple, Mapping
 from _collections import deque
 from math import sqrt
 from bisect import bisect, bisect_left, bisect_right
@@ -23,6 +23,35 @@ from itertools import islice
 from builtins import int, str
 import sys
 
+_swf_int_pattern = ('\s*(?P<{}>[-+]?\d+)', int)
+_swf_float_pattern = ('\s*(?P<{}>[-+]?\d+\.\d+|[-+]?\d+)', float)
+_swf_avoid_regexps = [r'^;.*']
+default_swf_parse_config = (
+    {
+        'job_number': _swf_int_pattern,
+        'submit_time': _swf_int_pattern,
+        'wait_time': _swf_int_pattern,
+        'duration': _swf_int_pattern,
+        'allocated_processors': _swf_int_pattern,
+        'avg_cpu_time': _swf_float_pattern,
+        'used_memory': _swf_int_pattern,
+        'requested_number_processors': _swf_int_pattern,
+        'requested_time': _swf_int_pattern,
+        'requested_memory': _swf_int_pattern,
+        'status': _swf_int_pattern,
+        'user_id': _swf_int_pattern,
+        'group_id': _swf_int_pattern,
+        'executable_number': _swf_int_pattern,
+        'queue_number': _swf_int_pattern,
+        'partition_number': _swf_int_pattern,
+        'preceding_job_number': _swf_int_pattern,
+        'think_time_prejob': _swf_int_pattern
+    }, _swf_avoid_regexps)
+
+default_swf_mapper = {
+    'job_number': 'job_id',
+    'submit_time': 'queued_time'    
+}
 
 def default_sorting_function(obj1, obj2, avoid_data_tokens=[';']): 
     if obj1[0] in avoid_data_tokens or obj2[0] in avoid_data_tokens:
@@ -571,6 +600,30 @@ class sorted_list:
             if self.list[i] >= self.list[i + 1]:
                 self.list[0:i + 1]
                 raise Exception('Sorting problem!')
+            
+class FrozenDict(Mapping):
+    """
+        Inmutable dictionary useful for storing parameter that are dinamycally loaded
+    """
+    def __init__(self, *args, **kwargs):
+        self._d = dict(*args, **kwargs)
+        self._hash = None
+
+    def __iter__(self):
+        return iter(self._d)
+
+    def __len__(self):
+        return len(self._d)
+
+    def __getitem__(self, key):
+        return self._d[key]
+
+    def __hash__(self):
+        if self._hash is None:
+            self._hash = 0
+            for pair in self.iteritems():
+                self._hash ^= hash(pair)
+        return self._hash
             
 if __name__ == '__main__2':
     Resource = namedtuple('Resource', ['q', 'w'])
