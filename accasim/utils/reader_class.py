@@ -82,7 +82,7 @@ class reader:
             return lines
         return None
     
-    def next_dicts(self, n_lines):
+    def next_dicts(self, n_lines=1):
         """
             @param n_lines: number of lines to be parsed
             @return: return a list of dicts corresponding to the lines   

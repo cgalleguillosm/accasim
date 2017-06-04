@@ -50,7 +50,10 @@ default_swf_parse_config = (
 
 default_swf_mapper = {
     'job_number': 'job_id',
-    'submit_time': 'queued_time'    
+    'submit_time': 'queued_time',
+    'requested_time': 'expected_time',
+    'requested_number_processors': 'core',
+    'requested_memory': 'mem'
 }
 
 def default_sorting_function(obj1, obj2, avoid_data_tokens=[';']): 

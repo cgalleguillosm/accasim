@@ -1,7 +1,8 @@
-from events_simulator.resource_manager.resource_manager_class import resource_manager
-from events_simulator.allocators.allocator_class import allocator_base
-from events_simulator.utils.misc import CONSTANT
+from accasim.base.resource_manager_class import resource_manager
+from accasim.base.allocator_class import allocator_base
+from accasim.utils.misc import CONSTANT
 import random
+import logging
 from abc import abstractmethod, ABC
 
 
@@ -60,8 +61,14 @@ class simple_heuristic(scheduler_base):
     """
 
     POLICIES = {
-        'fifo': {
-            'key': lambda x: eval('x.queued_time'),
+        #=======================================================================
+        # 'fifo': {
+        #     'key': lambda x: eval('x.queued_time'),
+        #     'reverse': False
+        # },
+        #=======================================================================
+        'fifo':{
+            'key': lambda x: getattr(x, 'queued_time'),
             'reverse': False
         },
         'longest_duration': {

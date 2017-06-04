@@ -3,27 +3,29 @@ import re
 import sys, os
 import time
 from abc import abstractmethod, ABC
-from accasim.utils.misc import CONSTANT, sorted_list
 from pydoc import locate
 import asyncio
 from builtins import str, filter
 from inspect import signature
 from _functools import reduce
 from types import MethodType
+from accasim.utils.misc import CONSTANT, sorted_list
+from accasim.base.resource_manager_class import resource_manager
+
 
 class attribute_type:
     
-    def __init__(self, name, type_class, optional=False):
+    def __init__(self, name, type_class=None, optional=False):
         """
         @param name: Attribute name
-        @param type_class: Class type of attribute (str, int, float, etc.)
+        @param type_class: Class type of attribute (str, int, float, etc.) for casting. If value  is already casted it is not necesary.
         @param optional: False by default. If it is True, the default value will be None and it is not required to give any value to this.  
         """
         assert(isinstance(name, str))
         self.name = name
         self.type = type_class
         self.optional = optional  
-        
+                
 class event(ABC):
     
     def __init__(self, job_id, queued_time, duration):
@@ -84,17 +86,19 @@ class job_factory:
         self.mapper = mapper
         
         for attr in attrs:
-            assert(attr.name not in self.attrs_names + self.obj_parameters), '{} attribute name already set. Names must be unique'.format(attr.name)
+            _attr_name = attr.name
+            assert(_attr_name not in self.attrs_names + self.obj_parameters), '{} attribute name already set. Names must be unique'.format(_attr_name)
             if attr.optional:
-                self.optional_attrs[attr.name] = attr
+                self.optional_attrs[_attr_name] = attr
             else:
-                self.mandatory_attrs[attr.name] = attr
+                self.mandatory_attrs[_attr_name] = attr
+            self.attrs_names.append(_attr_name)
                  
     def factory(self, **kwargs):
         for _old, _new in self.mapper.items():
             value = kwargs.pop(_old)
             kwargs[_new] = value
-        _missing = list(filter(lambda x:x not in kwargs, self.obj_parameters + list(self.mandatory_attrs)))
+        _missing = list(filter(lambda x:x not in kwargs, set(self.obj_parameters + list(self.mandatory_attrs))))
         assert(not _missing), 'Missing attributes: {}'.format(', '.join(_missing))
         _tmp = self.obj_type(**{k:kwargs[k] for k in self.obj_parameters})
         self.add_attrs(_tmp, self.mandatory_attrs, kwargs)
@@ -106,7 +110,7 @@ class job_factory:
             _type = reference[_attr].type
             _value = None
             if not reference[_attr].optional or (_attr in values and values[_attr]):
-                _value = _type(values[_attr])
+                _value = _type(values[_attr]) if _type else values[_attr] 
             setattr(obj, _attr, _value)
         
             
@@ -116,7 +120,9 @@ class event_mapper:
         kwargs:
             - nothing by the moment
     """
-    def __init__(self, **kwargs):
+    def __init__(self, _resource_manager, **kwargs):
+        assert(isinstance(_resource_manager, resource_manager)), 'Wrong type for the resource_manager argument.'
+        self.resource_manager = _resource_manager
         self.constants = CONSTANT()
         #=======================================================================
         # if 'resource_manager' in kwargs:            
@@ -266,5 +272,41 @@ class event_mapper:
             print('%s\t%s\t%s\t%s\t%.2f\t%s\t%s\t%s\t%s\t%s\t%s' % (i, _e.id, _wtime, _rtime, _bsld, _e.requested_nodes, _e_resources['core'], _e_resources['gpu'], _e_resources['mic'], _e_resources['mem'], ','.join([n.split('_')[1] for n in _e.assigned_nodes])))
             i += 1        
  
+    def dispatch_events(self, event_dict, to_dispatch, time_diff, _debug=False):
+        for (_time, _id, _nodes) in to_dispatch:
+            assert(_time is None or _time >= self.current_time), 'Receiving wrong schedules.'
+            """
+            Time must be equal or later than current time.
+                Equals will be dispatched in the momement, instead later ones, which will be requeued with expected ending time of the job that release the resources. 
+            If the expected ending is surpass, because the job takes more time to finish, the time tuple\'s element must be None. '
+            """
+            if not _nodes:
+                # For blocked jobs
+                if _time is not None and _time != self.current_time:
+                    self.time_points.add(_time)
+                """
+                 Maintaining the event in the queue 
+                """
+                self.submit_event(_id)
+                continue
+            _e = event_dict[_id]
+            # print(_e, _time, time_diff, _nodes)
+            if self.dispatch_event(_e, _time, time_diff, _nodes):
+                self.resource_manager.allocate_event(_e, _nodes)
+                
+    def release_ended_events(self, event_dict):
+        _es = self.move_to_finished(event_dict)
+        for _e in _es:
+            self.resource_manager.remove_event(_e)
+            # Freeing mem (finished events)
+            event_dict.pop(_e)
+        return _es
+    
+    def availability(self):
+        return self.resource_manager.availability()
+    
+    def usage(self):
+        return self.resource_manager.resources.usage()
+    
     def __str__(self):
         return 'Loaded: %s\nQueued: %s\nRunning: %s\nExpected job finish: %s\nReal job finish on: %s,\nFinished: %s\nNext time events: %s' % (self.loaded, self.queued, self.running, None, self.real_ending, self.finished, self.time_points)  
