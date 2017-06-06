@@ -1,7 +1,9 @@
+import random
+import sys
+from abc import abstractmethod, ABC
 from accasim.utils.misc import CONSTANT
 from accasim.base.resource_manager_class import resource_manager
-import random
-from abc import abstractmethod, ABC
+
 
 
 class allocator_base(ABC):
@@ -152,7 +154,7 @@ class allocator_simple(allocator_base):
             requested_resources = e.requested_resources
             # We verify that the job does not violate the system's resource constraints
             for t in requested_resources.keys():
-                assert requested_resources[t] * requested_nodes <= self._base_availability[t], 'There are %i %s total resources in the system, requested %i ' % (self._base_availability[t], t, requested_resources[t])
+                assert requested_resources[t] * requested_nodes <= self._base_availability[t], 'There are %i %s total resources in the system, requested %i by job %s' % (self._base_availability[t], t, requested_resources[t] * requested_nodes, e.id)
 
             # If the input arguments relative to backfilling are not supplied, the method operates in regular mode.
             # Otherwise, backfilling mode is enabled, allowing the allocator to skip jobs and consider the reservation.

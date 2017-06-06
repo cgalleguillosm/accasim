@@ -51,9 +51,7 @@ default_swf_parse_config = (
 default_swf_mapper = {
     'job_number': 'job_id',
     'submit_time': 'queued_time',
-    'requested_time': 'expected_time',
-    'requested_number_processors': 'core',
-    'requested_memory': 'mem'
+    'requested_time': 'expected_duration'
 }
 
 def default_sorting_function(obj1, obj2, avoid_data_tokens=[';']): 
@@ -383,6 +381,37 @@ class str_time:
         
     def __str__(self):
         return self.str_time
+    
+class str_resources:
+    
+    def __init__(self, nodes, resources):
+        self.nodes = nodes
+        self.resources = resources  # namedtuple('resources', [k for k in resources.keys()])(**resources)
+        self.constants = CONSTANT()
+        if hasattr(self.constants, 'resource_order'):
+            self.order = getattr(self.constants, 'resource_order')
+        else:
+            self.order = list (self.resources.keys())
+        
+    def __str__(self):
+        #=======================================================================
+        # r = self.resources
+        # print(self.nodes, r)
+        # return '#'.join([';'.join([node.split('_')[1], str(r.core), str(r.gpu), str(r.mic), str(r.mem)]) for node in self.nodes]) + '#'
+        #=======================================================================
+        return '#'.join([';'.join([node.split('_')[1]] + [str(self.resources[_k]) for _k in self.order]) for node in self.nodes]) + '#'
+
+class str_nodes:
+    
+    def __init__(self, nodes):
+        self.nodes = nodes
+    
+    def __format__(self, format_spec):
+        return self.__str__()
+    
+    def __str__(self):
+        return ','.join([node.split('_')[1] for node in self.nodes])
+
 
 
 class sorted_object_list():

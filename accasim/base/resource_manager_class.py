@@ -118,8 +118,8 @@ class resources_class:
         return resource_manager(self)
     
     def available_resource_key(self, _key):
-        assert(_key in self.system_resource_types)
-        return '{}{}'.format(self.available_prefix, _key)          
+        assert(_key in self.system_resource_types), '{} is not a resource type'.format(_key)
+        return '{}{}'.format(self.available_prefix, _key)        
 
     def __str__(self):
         _str = "Resources:\n"
@@ -181,6 +181,15 @@ class resource_manager:
             assert(arg in _resources), '{} is not a resource of the system. Available resource are {}'.format(arg, self.resource_types()) 
             avl_types[arg] = _resources[arg]
         return avl_types
+
+    def groups_available_resource(self, _key=None):
+        if not _key:
+            _group = {}
+            for k, v in self.resources.groups.items():
+                _group[k] = {_type: v[self.resources.available_resource_key(_type)] for _type in self.resources.system_resource_types} 
+            return _group
+        _group_key = self.resources.available_resource_key(_key)
+        return {_group:_v[_group_key]  for _group, _v in self.resources.groups.items()} 
 
     #===========================================================================
     # def get_used_resources(self):

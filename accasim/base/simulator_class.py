@@ -38,7 +38,7 @@ class simulator_base(ABC):
 		_system_resources = self.resource_manager.resources.system_resource_types
 		for _res in _system_resources:
 			if not(_res in attrs_names):
-				return False
+				return False		
 		return True
 	
 
@@ -107,9 +107,15 @@ class hpc_simulator(simulator_base):
 		# _stop.set()
 		#=======================================================================
 		self.reader.open_file()
-		self.start_hpc_simulation(True)
+		#=======================================================================
+		# if 'tweak_function' in kwargs:
+		# 	_func = kwargs['tweak_function']
+		# 	assert(callable(_func))
+		# 	self.tweak_function = _func
+		#=======================================================================
+		self.start_hpc_simulation(**kwargs)
         
-	def start_hpc_simulation(self, _debug=False, **kwargs):        
+	def start_hpc_simulation(self, _debug=False, tweak_function=None):        
         #=======================================================================
         # The following list can be useful for improving the incremental loading
         # it includes queued (submission) points of all jobs.
@@ -123,7 +129,7 @@ class hpc_simulator(simulator_base):
 		event_dict = self.mapper.events
 		self.start_time = _clock()
         
-		self.load_events(event_dict, self.mapper, self.max_sample)
+		self.load_events(event_dict, self.mapper, _debug, self.max_sample, tweak_function)
 		events = self.mapper.next_events()
 
         #=======================================================================
@@ -158,7 +164,7 @@ class hpc_simulator(simulator_base):
 			#===================================================================
 			if len(self.mapper.loaded) < 10: 
 				sample = self.max_sample if(len(self.mapper.loaded) < self.max_sample) else 2
-				self.load_events(event_dict, self.mapper, sample)
+				self.load_events(event_dict, self.mapper, _debug, sample, tweak_function)
             #===================================================================
             # Continue with next events            
             #===================================================================
@@ -179,16 +185,16 @@ class hpc_simulator(simulator_base):
 			f.write('Avg. waiting times: %s\n' % (reduce(lambda x, y: x + y, wtimes) / float(len(wtimes))))
 			f.write('Avg. slowdown: %s\n' % (reduce(lambda x, y: x + y, slds) / float(len(slds))))
                             
-	def load_events(self, jobs_dict, mapper, job_tweak=None, time_samples=2):
+	def load_events(self, jobs_dict, mapper, _debug=False, time_samples=2, dict_tweak=None):
 		_time = None
 		while not self.reader.EOF and time_samples > 0:
 			_dicts = self.reader.next_dicts()
 			tmp_dict = {}
 			job_list = []
 			for _dict in _dicts:
+				if callable(dict_tweak):
+					dict_tweak(_dict)
 				je = self.job_factory.factory(**_dict)
-				if callable(job_tweak):
-					je = job_tweak(je)
 				self.loaded_jobs += 1
 				tmp_dict[je.id] = je
 				job_list.append(je)

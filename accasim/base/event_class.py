@@ -51,11 +51,14 @@ class event(ABC):
     
     def schd_write_out(self):
         _dict = self.constants.schedule_output
-        _attrs = {a: locate(av[-1])(*self.subattr(self, av[:-1])) for a, av in _dict['attributes'].items()}
+        # _attrs = {a: locate(av[-1])(*self.subattr(self, av[:-1])) for a, av in _dict['attributes'].items()}
+        _attrs = {}
+        for a, av in _dict['attributes'].items():
+            _attrs[a] = locate(av[-1])(*self.subattr(self, av[:-1])) 
         output_format = _dict['format']
         format_elements = re.findall('\{(\w+)\}', output_format)
         values = {k: v for k, v in _attrs.items() if k in format_elements}
-        with open(self.constants.output_filepath, 'a') as f:
+        with open(self.constants.sched_output_filepath, 'a') as f:
             f.write(output_format.format(**values) + '\n')
     
     def schd_pprint_write_out(self):
@@ -71,14 +74,20 @@ class event(ABC):
             f.write(output_format.format(*values) + '\n')
             
 class job_factory:
-    def __init__(self, obj_type=event, attrs=[], mapper={}):
+    def __init__(self, _resource_manager, _class=event, attrs=[], mapper={}):
         """
-         @param attrs: The extra attributes (attribute_type class) (already job_id, queued_time and duration are mandatory) to be set in the JobEvent class 
+        @param _resource_manager: The resource manager of the simulator. It is required for creating the job requests.
+        @param _class: The class to be created by the Factory. By default it uses the Event class, but any subclass of it can be used (modified versions). 
+        @param attrs: The extra attributes (attribute_type class) (already job_id, queued_time and duration are mandatory) to be set in the JobEvent class
+        @param mapper: 
         """
-        assert(issubclass(obj_type, event)), 'Only subclasses of event class are accepted. Received: {} class'.format(obj_type.__name__)
+        assert(isinstance(_resource_manager, resource_manager))
+        assert(issubclass(_class, event)), 'Only subclasses of event class are accepted. Received: {} class'.format(_class.__name__)
         assert(isinstance(attrs, list) and all(isinstance(attr_type, attribute_type) for attr_type in attrs))
-        
-        self.obj_type = obj_type
+        # self.resource_manager = _resource_manager
+        self.group_resources = _resource_manager.groups_available_resource()
+        self.system_resources = _resource_manager.resources.system_resource_types
+        self.obj_type = _class
         self.obj_parameters = list(signature(self.obj_type).parameters)
         self.attrs_names = []
         self.mandatory_attrs = {}
@@ -89,6 +98,7 @@ class job_factory:
             _attr_name = attr.name
             assert(_attr_name not in self.attrs_names + self.obj_parameters), '{} attribute name already set. Names must be unique'.format(_attr_name)
             if attr.optional:
+                assert(_attr_name in self.obj_parameters), '{} attribute name is mandatory.'.format(_attr_name)
                 self.optional_attrs[_attr_name] = attr
             else:
                 self.mandatory_attrs[_attr_name] = attr
@@ -101,8 +111,10 @@ class job_factory:
         _missing = list(filter(lambda x:x not in kwargs, set(self.obj_parameters + list(self.mandatory_attrs))))
         assert(not _missing), 'Missing attributes: {}'.format(', '.join(_missing))
         _tmp = self.obj_type(**{k:kwargs[k] for k in self.obj_parameters})
+        setattr(_tmp, '_dict', kwargs)
         self.add_attrs(_tmp, self.mandatory_attrs, kwargs)
         self.add_attrs(_tmp, self.optional_attrs, kwargs)
+        self.add_request(_tmp)
         return _tmp
         
     def add_attrs(self, obj, reference, values):
@@ -112,7 +124,40 @@ class job_factory:
             if not reference[_attr].optional or (_attr in values and values[_attr]):
                 _value = _type(values[_attr]) if _type else values[_attr] 
             setattr(obj, _attr, _value)
-        
+    
+    def add_request(self, obj):
+        # Calculate only if it is not present
+        if not hasattr(obj, 'requested_nodes'):
+            _partition = 0 
+            for _res in self.system_resources:
+                _total_request = getattr(obj, _res)
+                assert(_total_request >= 0), 'The request for {} is no feasible ({}). Accepted values are equal or greater than 0. Job {} must be tweaked before re-run. See the example.'.format(_res, _total_request, obj.id)
+                _partition = max([_partition] + [round(getattr(obj, _res) / _resources[_res]) for _resources in self.group_resources.values()])
+            setattr(obj, 'requested_nodes', _partition)
+        if not hasattr(obj, 'requested_resources'):
+            _partition = getattr(obj, 'requested_nodes')
+            setattr(obj, 'requested_resources', {_res: getattr(obj, _res) // _partition for _res in self.system_resources})
+        # sys.exit()
+        #=======================================================================
+        # _partition = max([ max([round(getattr(obj, _res) / value) for _res, value in resources.items() ]) for group, resources in self.group_resources.items()])
+        # setattr(obj, 'requested_nodes', _partition)
+        # _request_bypartition = {}
+        # for _res in self.system_resources:
+        #     _total_request = getattr(obj, _res)
+        #     assert(_total_request >= 0), 'The request for {} is no feasible ({}). Accepted values are equal or greater than 0. Job {} must be tweked before re-run. See the example.'.format(_res, _total_request, obj.id) 
+        #     _request_bypartition[_res] = _total_request // _partition
+        # setattr(obj, 'requested_resources', _request_bypartition)
+        # print('{}: Request: Total Core {} Total Memory {}, Partition (node request): {} (Resources by node {})'.format(obj.id, obj.core, obj.mem, _partition, self.group_resources))
+        # print('{}: Request by node (total nodes {}) {}'.format(obj.id, _partition, _request_bypartition)) 
+        #=======================================================================
+        #=======================================================================
+        # _system_resources = self.resource_manager.resources.system_resource_types
+        # for _res in _system_resources:
+        #     _res_avl = self.resource_manager.groups_available_resource(_res)
+        #     _partition = [ getattr(obj, _res) // _r for _r in _res_avl.values()]
+        #     print(_partition)
+        #     print('{}: Requested {}: {} / {}'.format(obj.id, _res, getattr(obj, _res), _res_avl))
+        #=======================================================================        
             
 class event_mapper:
     """
@@ -309,4 +354,4 @@ class event_mapper:
         return self.resource_manager.resources.usage()
     
     def __str__(self):
-        return 'Loaded: %s\nQueued: %s\nRunning: %s\nExpected job finish: %s\nReal job finish on: %s,\nFinished: %s\nNext time events: %s' % (self.loaded, self.queued, self.running, None, self.real_ending, self.finished, self.time_points)  
+        return 'Loaded: %s\nQueued: %s\nRunning: %s\nExpected job finish: %s\nReal job finish on: %s,\nFinished: %s\nNext time events: %s' % (self.loaded, self.queued, self.running, None, self.real_ending, self.finished, self.time_points)
