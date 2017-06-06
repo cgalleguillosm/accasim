@@ -45,8 +45,9 @@ class workload_parser:
         return {k:self.reg_exp_dict[k][1](v) for k, v in _matches.groupdict().items()}
 
 class reader:
-    def __init__(self, filepath, parser):
+    def __init__(self, filepath, parser, max_lines=None):
         self.last_line = 0
+        self.max_lines = max_lines
         self.filepath = filepath
         self.parser = parser
         self.file = None
@@ -73,9 +74,9 @@ class reader:
                 lines.append(line[:-1])
                 self.last_line += 1
                 tmp_lines += 1
-                if tmp_lines == n_lines:
+                if tmp_lines == n_lines or (self.max_lines and self.max_lines == self.last_line):
                     break
-            if tmp_lines < n_lines:
+            if tmp_lines < n_lines or (self.max_lines and self.max_lines == self.last_line):
                 self.EOF = True
             if self.EOF and tmp_lines == 0:
                 return None 
@@ -96,4 +97,6 @@ class reader:
             _dict = self.parser.parse_line(line[0])
             if _dict:
                 _dicts.append(_dict)
+            elif self.max_lines:
+                self.max_lines += 1
         return None if not _dicts else _dicts 

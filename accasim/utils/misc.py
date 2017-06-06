@@ -656,6 +656,11 @@ class FrozenDict(Mapping):
             for pair in self.iteritems():
                 self._hash ^= hash(pair)
         return self._hash
+    
+def clean_results(*args):
+    for fp in args:
+        if os.path.isfile(fp) and os.path.exists(fp):
+            os.remove(fp)
             
 if __name__ == '__main__2':
     Resource = namedtuple('Resource', ['q', 'w'])

@@ -137,27 +137,6 @@ class job_factory:
         if not hasattr(obj, 'requested_resources'):
             _partition = getattr(obj, 'requested_nodes')
             setattr(obj, 'requested_resources', {_res: getattr(obj, _res) // _partition for _res in self.system_resources})
-        # sys.exit()
-        #=======================================================================
-        # _partition = max([ max([round(getattr(obj, _res) / value) for _res, value in resources.items() ]) for group, resources in self.group_resources.items()])
-        # setattr(obj, 'requested_nodes', _partition)
-        # _request_bypartition = {}
-        # for _res in self.system_resources:
-        #     _total_request = getattr(obj, _res)
-        #     assert(_total_request >= 0), 'The request for {} is no feasible ({}). Accepted values are equal or greater than 0. Job {} must be tweked before re-run. See the example.'.format(_res, _total_request, obj.id) 
-        #     _request_bypartition[_res] = _total_request // _partition
-        # setattr(obj, 'requested_resources', _request_bypartition)
-        # print('{}: Request: Total Core {} Total Memory {}, Partition (node request): {} (Resources by node {})'.format(obj.id, obj.core, obj.mem, _partition, self.group_resources))
-        # print('{}: Request by node (total nodes {}) {}'.format(obj.id, _partition, _request_bypartition)) 
-        #=======================================================================
-        #=======================================================================
-        # _system_resources = self.resource_manager.resources.system_resource_types
-        # for _res in _system_resources:
-        #     _res_avl = self.resource_manager.groups_available_resource(_res)
-        #     _partition = [ getattr(obj, _res) // _r for _r in _res_avl.values()]
-        #     print(_partition)
-        #     print('{}: Requested {}: {} / {}'.format(obj.id, _res, getattr(obj, _res), _res_avl))
-        #=======================================================================        
             
 class event_mapper:
     """
