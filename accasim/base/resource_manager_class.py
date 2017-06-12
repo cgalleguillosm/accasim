@@ -7,6 +7,9 @@ class resources_class:
         resources class: Stablish the resources, allocate and release their use.
         
     """
+    ON = 1
+    OFF = 0
+    
     def __init__(self, groups, resources, **kwargs):
         """
             :param groups: define the groups of resources. i.e: {'group_0': {'core': 4, 'mem': 10}, .. }
@@ -19,6 +22,7 @@ class resources_class:
         self.constants = CONSTANT()
         self.groups = {}
         self.resources = {}
+        self.resources_status = {}
         self.system_resource_types = []
         self.system_total_resources = None
         # self.resources_tree = resource_map(kwargs['groups'])
@@ -40,6 +44,7 @@ class resources_class:
                 _node_name = '%s%i' % (self.node_prefix, j + 1)
                 _attrs_values = self.groups[group_name]
                 self.resources[_node_name] = deepcopy(_attrs_values)
+                self.resources[_node_name] = self.ON
                 # self.resources_tree.add(_node_name, kwargs['groups'][group_name])
                 j += 1              
 
@@ -61,6 +66,7 @@ class resources_class:
     def allocate(self, node_name, **kwargs):
         # TODO: Update using self.system_resource_types
         assert(self.resources), 'The resources must be setted before jobs allocation'
+        assert(self.resources_status[node_name] == self.ON), 'The Node {} is {}, it is impossible to allocate any job'
         _resources = self.resources[node_name]
         _used = {}
         for k, v in kwargs.items():
@@ -73,6 +79,7 @@ class resources_class:
     def release(self, node_name, **kwargs):
         # TODO: Update using self.system_resource_types
         assert(self.resources), 'The resources must be setted before release resources'
+        assert(self.resources_status[node_name] == self.ON), 'The Node {} is {}.'
         _resources = self.resources[node_name]
         for k, v in kwargs.items():
             _resources['%s%s' % (self.used_prefix, k)] -= v
@@ -87,8 +94,11 @@ class resources_class:
         assert(self.resources)
         _a = {}
         for node, attrs in self.resources.items():
+            if self.resources_status[node] == self.OFF:
+                continue 
             _a[node] = {
-                attr: (attrs['%s%s' % (self.available_prefix, attr)] - attrs['%s%s' % (self.used_prefix, attr)]) for attr in set([attr.split('_')[1] for attr in attrs])
+                # attr: (attrs['%s%s' % (self.available_prefix, attr)] - attrs['%s%s' % (self.used_prefix, attr)]) for attr in set([attr.split('_')[1] for attr in attrs])
+                attr: (attrs['%s%s' % (self.available_prefix, attr)] - attrs['%s%s' % (self.used_prefix, attr)]) for attr in self.system_resource_types
             }
         return _a
 
@@ -100,7 +110,8 @@ class resources_class:
         for attrs in self.resources.values():
             for k, v in attrs.items():
                 usage[k] += v
-        for _attr in set([attr.split('_')[1] for attr in usage]):
+        # for _attr in set([attr.split('_')[1] for attr in usage]):
+        for _attr in self.system_resource_types:
             if usage['%s%s' % (self.available_prefix, _attr)] > 0:
                 _str_usage.append("%s: %.2f%%" % (_attr, usage['%s%s' % (self.used_prefix, _attr)] / usage['%s%s' % (self.available_prefix, _attr)] * 100))
         return (_str + ', '.join(_str_usage))
@@ -125,7 +136,8 @@ class resources_class:
         _str = "Resources:\n"
         for node, attrs in self.resources.items():
             formatted_attrs = ""
-            for attr in set([attr.split('_')[1] for attr in attrs]):
+            # for attr in set([attr.split('_')[1] for attr in attrs]):
+            for attr in self.system_resource_types:
                formatted_attrs += '%s: %i/%i, ' % (attr, attrs['%s%s' % (self.used_prefix, attr)], attrs['%s%s' % (self.available_prefix, attr)])
             _str += '- %s: %s\n' % (node, formatted_attrs)
         return _str
