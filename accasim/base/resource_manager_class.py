@@ -1,6 +1,7 @@
 import logging
 from copy import deepcopy
 from accasim.utils.misc import CONSTANT, FrozenDict
+import sys
 
 class resources_class:
     """
@@ -44,7 +45,7 @@ class resources_class:
                 _node_name = '%s%i' % (self.node_prefix, j + 1)
                 _attrs_values = self.groups[group_name]
                 self.resources[_node_name] = deepcopy(_attrs_values)
-                self.resources[_node_name] = self.ON
+                self.resources_status[_node_name] = self.ON
                 # self.resources_tree.add(_node_name, kwargs['groups'][group_name])
                 j += 1              
 
@@ -52,7 +53,13 @@ class resources_class:
         if self.system_total_resources:
             return self.system_total_resources
         avl_types = {_type: 0 for _type in self.system_resource_types}
-        for _node_values in self.resources.values():
+        #=======================================================================
+        # for _node_values in self.resources.values():
+        #     for _type in avl_types.keys():
+        #         print(_type, self.available_resource_key(_type), _node_values)
+        #         avl_types[_type] += _node_values[self.available_resource_key(_type)]
+        #=======================================================================
+        for _node, _node_values in self.resources.items():
             for _type in avl_types.keys():
                 avl_types[_type] += _node_values[self.available_resource_key(_type)]
         self.system_total_resources = FrozenDict(**avl_types)

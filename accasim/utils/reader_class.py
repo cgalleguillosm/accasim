@@ -98,5 +98,7 @@ class reader:
             if _dict:
                 _dicts.append(_dict)
             elif self.max_lines:
+                if self.max_lines == self.last_line:
+                    self.EOF = False
                 self.max_lines += 1
         return None if not _dicts else _dicts 
