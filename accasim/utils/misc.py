@@ -143,7 +143,8 @@ def workload_parser(workload_line, attrs=None, avoid_data_tokens=[';']):
     p = re.compile(reg_exp)
     _matches = p.match(workload_line)
     # value_func = lambda line, _dict, key: 
-    return {key:_dict[key][1](_matches.groupdict()[key]) for key in _sequence} 
+    _dict_line = _matches.groupdict()
+    return {key:_dict[key][1](_dict_line[key]) for key in _sequence} 
     
 
 def sort_file(input_filepath, lines=None, sort_function=default_sorting_function, avoid_data_tokens=[';'], output_filepath=None):
