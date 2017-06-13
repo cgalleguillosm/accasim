@@ -94,9 +94,8 @@ input_filepath = os.path.join('workloads/', input_filename)
 # sort_file(input_filepath)
 
 # Load the workload parser
-# The default_swf_parse_config contains the regular expressions reading SWF files
+# The default parser is loaded if any parser is given. It contains the regular expressions reading SWF files
 # By default lines starting with '$' are avoided  
-#wlp = reader_class.default_workload_parser()  # reader_class.default_workload_parser(*misc.default_swf_parse_config)
 # It is possible to test only the first N readable lines
 reader = reader_class.reader(input_filepath, max_lines=100)
 # Or ommit this value and read the entire file. 
