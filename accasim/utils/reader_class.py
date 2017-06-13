@@ -23,9 +23,18 @@ SOFTWARE.
 """
 import re
 from abc import abstractmethod, ABC
+from accasim.utils import misc
+import sys
 
-class workload_parser:
-    def __init__(self, reg_exp_dict, avoid_tokens=None):
+class workload_parser_base(ABC):
+    
+    @abstractmethod
+    def parse_line(self, line):
+        pass
+    
+class default_workload_parser(workload_parser_base):
+    def __init__(self):
+        workload_parser_base.__init__(self)
         """
             workloader_paser is a general class for parsing workload files.
             @param reg_exp: Dictionary where the name of the group is the key and the value
@@ -34,10 +43,13 @@ class workload_parser:
             @param avoid_token: List of reg_exp to avoid reading lines. The lines that are avoided 
                 won't be readed by the parser. 
         """
-        assert(isinstance(reg_exp_dict, dict)), 'The regular expressions must be passed as dictionary. Groupname: Regular Exp'
-        self.reg_exp_dict = reg_exp_dict
-        assert(isinstance(avoid_tokens, (list, tuple))), 'The tokens to avoid (also regular expressions) must be passed in a list'
-        self.avoid_tokens = avoid_tokens
+        self.reg_exp_dict, self.avoid_tokens = misc.default_swf_parse_config
+        #=======================================================================
+        # assert(isinstance(reg_exp_dict, dict)), 'The regular expressions must be passed as dictionary. Groupname: Regular Exp'
+        # self.reg_exp_dict = reg_exp_dict
+        # assert(isinstance(avoid_tokens, (list, tuple))), 'The tokens to avoid (also regular expressions) must be passed in a list'
+        # self.avoid_tokens = avoid_tokens
+        #=======================================================================
         
     def feasible_line(self, line):
         """
@@ -67,16 +79,20 @@ class workload_parser:
         return {k:self.reg_exp_dict[k][1](v) for k, v in _matches.groupdict().items()}
 
 class reader:
-    def __init__(self, filepath, parser, max_lines=None):
+    def __init__(self, filepath, parser=None, max_lines=None):
+        if parser:
+            assert(isinstance(parser, workload_parser_base)), 'Only default_workload_parser object can be used as parsers'
+            self.parser = parser
+        else:
+            self.parser = default_workload_parser()
         self.last_line = 0
         self.max_lines = max_lines
         self.filepath = filepath
-        self.parser = parser
         self.file = None
         self.EOF = True
         
     def __del__(self):
-        if self.file is not None:
+        if self.file:
             self.file.close()
             self.file = None   
             self.EOF = True 
