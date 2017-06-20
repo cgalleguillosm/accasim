@@ -102,7 +102,7 @@ class job_factory:
         @param _resource_manager: The resource manager of the simulator. It is required for creating the job requests.
         @param _class: The class to be created by the Factory. By default it uses the Event class, but any subclass of it can be used (modified versions). 
         @param attrs: The extra attributes (attribute_type class) (already job_id, queued_time and duration are mandatory) to be set in the JobEvent class
-        @param mapper: 
+        @param mapper: Rename the the old key to a new key (using the value of the mapper dictionary)
         """
         assert(isinstance(_resource_manager, resource_manager))
         assert(issubclass(_class, event)), 'Only subclasses of event class are accepted. Received: {} class'.format(_class.__name__)

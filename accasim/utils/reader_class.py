@@ -25,6 +25,7 @@ import re
 from abc import abstractmethod, ABC
 from accasim.utils import misc
 import sys
+from builtins import issubclass
 
 class workload_parser_base(ABC):
     
@@ -81,7 +82,7 @@ class default_workload_parser(workload_parser_base):
 class reader:
     def __init__(self, filepath, parser=None, max_lines=None):
         if parser:
-            assert(isinstance(parser, workload_parser_base)), 'Only default_workload_parser object can be used as parsers'
+            assert(issubclass(parser, workload_parser_base)), 'Only default_workload_parser object can be used as parsers'
             self.parser = parser
         else:
             self.parser = default_workload_parser()
