@@ -212,6 +212,8 @@ class hpc_simulator(simulator_base):
 		_time = None
 		while not self.reader.EOF and time_samples > 0:
 			_dicts = self.reader.next_dicts()
+			if not _dicts:
+				break
 			tmp_dict = {}
 			job_list = []
 			for _dict in _dicts:

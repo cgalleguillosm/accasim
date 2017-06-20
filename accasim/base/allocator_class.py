@@ -1,7 +1,7 @@
 """
 MIT License
 
-Copyright (c) 2017 cgalleguillosm
+Copyright (c) 2017 cgalleguillosm, AlessioNetti
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -193,7 +193,7 @@ class allocator_simple(allocator_base):
                 if backfilling_overlap and node in nodes_to_discard:
                     continue
                 # We compute the number of job units fitting in the current node, and update the assignment
-                fits = self._event_fits_node(resources, requested_resources)
+                fits = int(self._event_fits_node(resources, requested_resources))
                 if nodes_left <= fits:
                     assigned_nodes += [node] * nodes_left
                     nodes_left = 0
