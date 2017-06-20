@@ -82,8 +82,12 @@ class default_workload_parser(workload_parser_base):
 class reader:
     def __init__(self, filepath, parser=None, max_lines=None):
         if parser:
-            assert(issubclass(parser, workload_parser_base)), 'Only default_workload_parser object can be used as parsers'
-            self.parser = parser
+            if not isinstance(parser, workload_parser_base):
+                assert(issubclass(parser, workload_parser_base)), 'Only default_workload_parser class can be used as parsers'
+                self.parser = parser()
+            else:
+                assert(isinstance(parser, workload_parser_base)), 'Only default_workload_parser object can be used as parsers'
+                self.parser = parser                
         else:
             self.parser = default_workload_parser()
         self.last_line = 0
