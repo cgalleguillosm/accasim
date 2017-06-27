@@ -133,7 +133,7 @@ misc.clean_results(constant.sched_output_filepath, constant.pprint_output_filepa
  
 # Instancing the simulator object
 simulator = hpc_simulator(
-    rm, reader, jf, schldr
+    rm, reader, schldr
     #     daemon=daemons
 )
  

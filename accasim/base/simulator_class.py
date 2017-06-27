@@ -25,7 +25,7 @@ from time import clock as _clock
 from datetime import datetime
 from abc import abstractmethod, ABC
 from accasim.utils.reader_class import reader
-from accasim.utils.misc import CONSTANT
+from accasim.utils.misc import CONSTANT, default_swf_mapper
 from accasim.base.event_class import event, event_mapper
 from accasim.base.resource_manager_class import resource_manager 
 from accasim.base.scheduler_class import scheduler_base
@@ -67,7 +67,9 @@ class simulator_base(ABC):
 
 class hpc_simulator(simulator_base):
     
-	def __init__(self, _resource_manager, _reader, _job_factory, _scheduler, **kwargs):
+	def __init__(self, _resource_manager, _reader, _scheduler, _job_factory=None, **kwargs):
+		if _job_factory is None:
+			_job_factory = job_factory(_resource_manager, mapper=default_swf_mapper)
 		simulator_base.__init__(self, _resource_manager, _reader, _job_factory, _scheduler)
 		self.start_time = None
 		self.end_time = None

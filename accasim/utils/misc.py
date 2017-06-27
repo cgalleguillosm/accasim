@@ -28,7 +28,6 @@ import random
 import json
 from datetime import datetime
 import time
-from lib2to3.pgen2.tokenize import group
 from threading import Timer, Thread
 from inspect import getouterframes, currentframe
 import functools
@@ -39,7 +38,7 @@ from math import sqrt
 from bisect import bisect, bisect_left, bisect_right
 import socket
 from sys import platform as _platform, exit as _exit
-import threading, json
+import threading
 from abc import ABC, abstractmethod
 from _functools import reduce
 from itertools import islice

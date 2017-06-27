@@ -106,7 +106,10 @@ class job_factory:
         """
         assert(isinstance(_resource_manager, resource_manager))
         assert(issubclass(_class, event)), 'Only subclasses of event class are accepted. Received: {} class'.format(_class.__name__)
-        assert(isinstance(attrs, list) and all(isinstance(attr_type, attribute_type) for attr_type in attrs))
+        if attrs:
+            assert(isinstance(attrs, list) and all(isinstance(attr_type, attribute_type) for attr_type in attrs))
+        else:
+            attrs = self.default_job_description()
         # self.resource_manager = _resource_manager
         self.group_resources = _resource_manager.groups_available_resource()
         self.system_resources = _resource_manager.resources.system_resource_types
@@ -160,6 +163,23 @@ class job_factory:
         if not hasattr(obj, 'requested_resources'):
             _partition = getattr(obj, 'requested_nodes')
             setattr(obj, 'requested_resources', {_res: getattr(obj, _res) // _partition for _res in self.system_resources})
+    
+    def default_job_description(self):
+        # Attribute to identify the user
+        user_id = attribute_type('user_id', int)
+        
+        # New attributes required by the Dispatching methods.
+        expected_duration = attribute_type('expected_duration', int)
+        
+        # Default system resources: core and mem.
+        total_cores = attribute_type('core', int)
+        total_mem = attribute_type('mem', int)
+    
+        # This attributes are required to be set, if not by default are calculated. As in this example (explained in tweak_dict function) 
+        requested_nodes = attribute_type('requested_nodes', int)
+        requested_resources = attribute_type('requested_resources', dict)
+        
+        return [total_cores, total_mem, requested_nodes, requested_resources, expected_duration, user_id ]
             
 class event_mapper:
     """
