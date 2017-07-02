@@ -99,7 +99,8 @@ input_filepath = os.path.join('workloads/', input_filename)
 # The default parser is loaded if any parser is given. It contains the regular expressions reading SWF files
 # By default lines starting with '$' are avoided
 # It is possible to test only the first N readable lines
-reader = reader_class.reader(input_filepath, max_lines=100)
+#reader = reader_class.reader(input_filepath, max_lines=100)
+reader = reader_class.reader(input_filepath)
 # Or ommit this value and read the entire file.
 # reader = reader_class.reader(input_filepath, wlp)
 
@@ -120,7 +121,7 @@ schldr = simple_heuristic(_seed, rm, alloc, 'fifo')
 
 # constant.load_constant('start_time', time.clock())
 # Output files
-# Schedule
+# Schedule must loaded by default
 constant.load_constant('sched_output_filepath', os.path.join('results', 'sched-' + input_filename))
 # Pretty print schedule
 constant.load_constant('pprint_output_filepath', os.path.join('results', 'pprint-' + input_filename))
@@ -143,7 +144,7 @@ simulator = hpc_simulator(
 print('- The simulator will start... %s' % (input_filepath))
 
 # Starting the simulation
-simulator.start_simulation(_debug=True, tweak_function=tweak_dict)
+simulator.start_simulation(_debug=False, tweak_function=tweak_dict, watcher=True)
 # with open(constant.statistics_output_filepath) as f:
 #     print(f.read())
 msg = '- Simulation time: %0.2f secs' % (simulator.end_time - simulator.start_time)

@@ -134,7 +134,7 @@ class resources_class:
 
     def usage(self):
         # TODO: Update using self.system_resource_types
-        _str = "System usage:\n"
+        _str = "System usage: "
         _str_usage = []
         usage = {k: 0 for k in list(self.resources.values())[0]}
         for attrs in self.resources.values():

@@ -249,7 +249,7 @@ class watcher_demon:
     MAX_LENGTH = 2048
     PRINT_INTERVAL = 300
     
-    def __init__(self, port):
+    def __init__(self, port, functions):
         self.server_address = ('', port)
         af = socket.AF_INET
         self.sock = socket.socket(af, socket.SOCK_STREAM)
@@ -259,6 +259,7 @@ class watcher_demon:
         self.timedemon = None
         self.hastofinish = False
         self.const = CONSTANT()
+        self.functions = functions
 
 
     def start(self):
@@ -282,27 +283,34 @@ class watcher_demon:
                     data = json.loads(connection.recv(self.MAX_LENGTH).decode())
                     if isinstance(data, str):
                         response = {}
-                        if data == 'localprogress':
+                        response['actual_time'] = str(str_datetime(self.call_inner_function('current_time_function')))
+                        if data == 'progress':
                             response['input_filepath'] = self.const.input_filepath
-                            response['progress'] = os.path.getsize(self.const.output_filepath) / os.path.getsize(self.const.input_filepath)
+                            response['progress'] = os.path.getsize(self.const.sched_output_filepath) / os.path.getsize(self.const.input_filepath)
                             response['time'] = time.clock() - self.const.start_time
                         elif data == 'usage':
-                            rm = self.const.resource_manager_instance
-                            if rm is not None and rm.resources is not None:
-                                response['usage'] = rm.resources.usage()
-                            else:
-                                response['usage'] = ''
-                        elif data == 'globalprogress':
-                            response['number_testfile_now'] = self.const.number_testfile_now
-                            response['number_testfiles'] = self.const.number_testfiles
-                            response['number_testrun_now'] = self.const.number_testrun_now
-                            response['number_testruns'] = self.const.number_testruns
+                            response['simulation_status'] = self.call_inner_function('simulated_status_function')
+                            response['usage'] = self.call_inner_function('usage_function')
+                        elif data == 'all':
                             response['input_filepath'] = self.const.input_filepath
+                            response['progress'] = os.path.getsize(self.const.sched_output_filepath) / os.path.getsize(self.const.input_filepath)
+                            response['time'] = time.clock() - self.const.start_time
+                            response['simulation_status'] = self.call_inner_function('simulated_status_function')
+                            response['usage'] = self.call_inner_function('usage_function')
                         connection.sendall(json.dumps(response).encode())
                     connection.close()
             except socket.timeout:
                 pass
         self.sock.close()
+        
+    def call_inner_function(self, name):
+        if name in self.functions:
+            _func = self.functions[name]
+            if callable(_func):
+                return _func()
+            else:
+                return _func
+        raise Exception('{} was no defined'.format(name)) 
 
     def stop(self):
         self.hastofinish = True
@@ -368,6 +376,7 @@ class CONSTANT(Singleton):
             self.load_constant(k, v)
             
     def load_constant(self, k, v):
+        assert(not hasattr(self, k)), '{} already exists as constant ({}={}). Choose a new name.'.format(k, k, getattr(self, k))
         setattr(self, k, v)
 
     #===========================================================================

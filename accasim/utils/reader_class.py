@@ -23,7 +23,7 @@ SOFTWARE.
 """
 import re
 from abc import abstractmethod, ABC
-from accasim.utils import misc
+from accasim.utils.misc import CONSTANT, default_swf_parse_config
 import sys
 from builtins import issubclass
 
@@ -44,7 +44,7 @@ class default_workload_parser(workload_parser_base):
             @param avoid_token: List of reg_exp to avoid reading lines. The lines that are avoided 
                 won't be readed by the parser. 
         """
-        self.reg_exp_dict, self.avoid_tokens = misc.default_swf_parse_config
+        self.reg_exp_dict, self.avoid_tokens = default_swf_parse_config
         #=======================================================================
         # assert(isinstance(reg_exp_dict, dict)), 'The regular expressions must be passed as dictionary. Groupname: Regular Exp'
         # self.reg_exp_dict = reg_exp_dict
@@ -81,6 +81,7 @@ class default_workload_parser(workload_parser_base):
 
 class reader:
     def __init__(self, filepath, parser=None, max_lines=None):
+        self.const = CONSTANT()
         if parser:
             if not isinstance(parser, workload_parser_base):
                 assert(issubclass(parser, workload_parser_base)), 'Only default_workload_parser class can be used as parsers'
@@ -93,6 +94,7 @@ class reader:
         self.last_line = 0
         self.max_lines = max_lines
         self.filepath = filepath
+        self.const.load_constant('input_filepath', filepath)
         self.file = None
         self.EOF = True
         

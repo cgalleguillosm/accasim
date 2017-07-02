@@ -369,11 +369,17 @@ class event_mapper:
             event_dict.pop(_e)
         return _es
     
+    def simulated_status(self):
+        return ('Loaded {}, Queued {}, Running {}, and Finished {} Jobs'.format(len(self.loaded), len(self.queued), len(self.running), len(self.finished)))
+    
     def availability(self):
         return self.resource_manager.availability()
     
     def usage(self):
         return self.resource_manager.resources.usage()
+    
+    def simulated_current_time(self):
+        return self.current_time
     
     def __str__(self):
         return 'Loaded: %s\nQueued: %s\nRunning: %s\nExpected job finish: %s\nReal job finish on: %s,\nFinished: %s\nNext time events: %s' % (self.loaded, self.queued, self.running, None, self.real_ending, self.finished, self.time_points)

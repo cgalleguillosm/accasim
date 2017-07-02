@@ -25,13 +25,14 @@ from time import clock as _clock
 from datetime import datetime
 from abc import abstractmethod, ABC
 from accasim.utils.reader_class import reader
-from accasim.utils.misc import CONSTANT, default_swf_mapper
+from accasim.utils.misc import CONSTANT, default_swf_mapper, watcher_demon
 from accasim.base.event_class import event, event_mapper
 from accasim.base.resource_manager_class import resource_manager 
 from accasim.base.scheduler_class import scheduler_base
 from accasim.base.event_class import job_factory
-import sys
-import os, psutil
+from threading import Thread, Event as THEvent
+from os import getpid as _getpid
+from psutil import Process as _Process
 
 class simulator_base(ABC):
 
@@ -75,8 +76,7 @@ class hpc_simulator(simulator_base):
         self.start_time = None
         self.end_time = None
         self.max_sample = 2
-        if 'daemon' in kwargs:
-            self.daemons = kwargs['daemon']
+        self.daemons = {}
         self.loaded_jobs = 0
         self.benchFile = None
         
@@ -108,7 +108,7 @@ class hpc_simulator(simulator_base):
     #         self.daemons[_name]['object'].start()
     #===========================================================================
             
-    def start_simulation(self, *args, **kwargs):
+    def start_simulation(self, watcher=False, *args, **kwargs):
         # TODO Load dynamically as daemon_init.
         # The initial values could be set in the simulation call, but also the datasource for these variables could be setted in the call.
         # Obviously the monitor must load also dynamically.
@@ -133,6 +133,18 @@ class hpc_simulator(simulator_base):
         # [d['object'].stop() for d in self.daemons.values() if d['object']]
         # _stop.set()
         #=======================================================================
+        if watcher:
+            functions = {
+                'usage_function': self.mapper.usage,
+                'availability_function': self.mapper.availability,
+                'simulated_status_function': self.mapper.simulated_status,
+                'current_time_function': self.mapper.simulated_current_time
+            }
+            self.daemons['watcher'] = {
+                'class': watcher_demon,
+                'args': [self.constants.WATCH_PORT, functions],
+                'object': None
+            }
         self.reader.open_file()
         #=======================================================================
         # if 'tweak_function' in kwargs:
@@ -140,7 +152,14 @@ class hpc_simulator(simulator_base):
         # 	assert(callable(_func))
         # 	self.tweak_function = _func
         #=======================================================================
-        self.start_hpc_simulation(**kwargs)
+        # self.start_hpc_simulation(**kwargs)
+        simulation = Thread(target=self.start_hpc_simulation, args=args, kwargs=kwargs)
+        simulation.start()
+        # Starting the daemons
+        self.daemon_init()
+        simulation.join()
+        # Stopping the daemons    
+        [d['object'].stop() for d in self.daemons.values() if d['object']]
         
     def start_hpc_simulation(self, _debug=False, tweak_function=None):
         #=======================================================================
@@ -159,6 +178,7 @@ class hpc_simulator(simulator_base):
             self.benchFile = None
         event_dict = self.mapper.events
         self.start_time = _clock()
+        self.constants.load_constant('start_time', self.start_time)
         
         self.load_events(event_dict, self.mapper, _debug, self.max_sample, tweak_function)
         events = self.mapper.next_events()
@@ -211,7 +231,7 @@ class hpc_simulator(simulator_base):
                 benchMemUsage = self.memory_usage_psutil()
                 scheduleTime = schedEndTime - schedStartTime
                 dispatchTime = benchEndTime - benchStartTime - scheduleTime
-                self.write_to_benchmark(_actual_time, queuelen, benchEndTime-benchStartTime, scheduleTime, dispatchTime, benchMemUsage)
+                self.write_to_benchmark(_actual_time, queuelen, benchEndTime - benchStartTime, scheduleTime, dispatchTime, benchMemUsage)
 
         if self.benchFile is not None:
             self.benchFile.close()
@@ -292,6 +312,22 @@ class hpc_simulator(simulator_base):
 
     def memory_usage_psutil(self):
         # return the memory usage in MB
-        process = psutil.Process(os.getpid())
+        process = _Process(_getpid())
         memr = process.memory_info().rss / float(2 ** 20)
         return memr
+    
+    def daemon_init(self):         
+        _iter_func = lambda act, next: act.get(next) if isinstance(act, dict) else (getattr(act, next)() if callable(getattr(act, next)) else getattr(act, next))
+        for _name, d in self.daemons.items():
+            _class = d['class']
+            if not _class:
+                continue
+            _args = []
+            for _arg in d['args']:
+                if isinstance(_arg, tuple):
+                    res = reduce(_iter_func, _arg[1].split('.'), self if not _arg[0] else _arg[0])
+                    _args.append(res)
+                else:
+                    _args.append(_arg)
+            self.daemons[_name]['object'] = _class(*_args)
+            self.daemons[_name]['object'].start()
