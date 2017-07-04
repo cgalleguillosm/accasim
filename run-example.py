@@ -144,7 +144,7 @@ simulator = hpc_simulator(
 print('- The simulator will start... %s' % (input_filepath))
 
 # Starting the simulation
-simulator.start_simulation(_debug=False, tweak_function=tweak_dict, watcher=True)
+simulator.start_simulation(_debug=False, tweak_function=tweak_dict)
 # with open(constant.statistics_output_filepath) as f:
 #     print(f.read())
 msg = '- Simulation time: %0.2f secs' % (simulator.end_time - simulator.start_time)

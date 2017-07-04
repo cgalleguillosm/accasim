@@ -95,7 +95,7 @@ class event(ABC):
             if self.end_order == 1:
                 f.write(output_format.format(*_order) + '\n')
             f.write(output_format.format(*values) + '\n')
-            
+                        
 class job_factory:
     def __init__(self, _resource_manager, _class=event, attrs=[], mapper={}):
         """
