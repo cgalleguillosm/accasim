@@ -7,7 +7,7 @@ workload = 'workloads/workload.swf'
 sys_cfg = 'config/HPC2N.config'
 
 _seed = 'example'
-allocator = ffp_alloc(_seed)
-dispatcher = fifo_sched(_seed, allocator)
+allocator = ffp_alloc()
+dispatcher = fifo_sched(allocator)
 simulator = hpc_simulator(sys_cfg, workload, dispatcher, RESULTS_FOLDER_NAME='results', pprint_output=True, benchmark_output=True) 
 simulator.start_simulation(1027839845)

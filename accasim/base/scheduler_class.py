@@ -179,7 +179,7 @@ class fifo_sched(scheduler_base):
 
     name = 'FIFO'
 
-    def __init__(self, _seed, _allocator, _resource_manager=None, **kwargs):
+    def __init__(self, _allocator, _resource_manager=None, _seed=0, **kwargs):
         scheduler_base.__init__(self, _seed, _resource_manager, _allocator)
         
     def get_id(self):

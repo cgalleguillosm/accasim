@@ -122,7 +122,7 @@ class ffp_alloc(allocator_base):
      considered as they are given in input.
     """
 
-    def __init__(self, seed, _resource_manager=None, **kwargs):
+    def __init__(self, seed=0, _resource_manager=None, **kwargs):
         """
         Constructor for the class.
         
