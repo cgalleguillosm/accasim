@@ -43,7 +43,9 @@ from abc import ABC, abstractmethod
 from _functools import reduce
 from itertools import islice
 from builtins import int, str
+import ntpath
 import sys
+
 
 _swf_int_pattern = ('\s*(?P<{}>[-+]?\d+)', int)
 _swf_float_pattern = ('\s*(?P<{}>[-+]?\d+\.\d+|[-+]?\d+)', float)
@@ -693,6 +695,55 @@ def clean_results(*args):
     for fp in args:
         if os.path.isfile(fp) and os.path.exists(fp):
             os.remove(fp)
+            
+class DEFAULT_SIMULATION:
+    
+    parameters = {
+        "CONFIG_FOLDER_NAME": "config/",
+        "RESULTS_FOLDER_NAME": "results/",
+        "SCHEDULE_OUTPUT": {
+            "format": "{job_id};{user};{queue_time}__{assignations}__{start_time};{end_time};{total_nodes};{total_cpu};{total_mem};{expected_duration};",
+            "attributes": {
+                "job_id": ("id", "str"),
+                "user": ("user_id", "str"),
+                "queue_time": ("queued_time", "accasim.utils.misc.str_datetime"),
+                "start_time": ("start_time", "accasim.utils.misc.str_datetime"),
+                "end_time": ("end_time", "accasim.utils.misc.str_datetime"),
+                "assignations": ("assigned_nodes", "requested_resources", "accasim.utils.misc.str_resources"),
+                "total_nodes": ("requested_nodes", "int"),
+                "total_cpu": ("core", "int"),
+                "total_mem": ("mem", "int"),
+                "expected_duration": ("expected_duration", "int")      
+            }
+        },
+        "PPRINT_SCHEDULE_OUTPUT": {
+            "format": "{:>5} {:>15} {:^19} {:^19} {:>8} {:>8} {:>8} {:>5} {:>4} {:>10} {:<20}",
+            "order": ["n", "job_id", "start_time", "end_time", "wtime", "rtime", "slowdown", "nodes", "core", "mem", "assigned_nodes"],
+            "attributes":{
+                "n": ("end_order", "int"),
+                "job_id": ("id", "str"),
+                "start_time": ("start_time", "accasim.utils.misc.str_datetime"),
+                "end_time": ("end_time", "accasim.utils.misc.str_datetime"),
+                "wtime": ("waiting_time", "int"),
+                "rtime": ("running_time", "int"),
+                "slowdown": ("slowdown", "float"),
+                "nodes": ("requested_nodes", "int"),
+                "core": ("core", "int"),
+                "mem": ("mem", "int"),
+                "assigned_nodes": ("assigned_nodes", "accasim.utils.misc.str_nodes")
+            }
+        },
+        "SCHED_PREFIX": "sched-",
+        "PPRINT_PREFIX": "pprint-",
+        "STATISTICS_PREFIX": "stats-",
+        "BENCHMARK_PREFIX": "bench-",
+        "RESOURCE_ORDER": ["core", "mem"],
+        "WATCH_PORT": 8999
+    }
+    
+def path_leaf(path):
+    head, tail = ntpath.split(path)
+    return (head, tail or ntpath.basename(head))
             
 if __name__ == '__main__2':
     Resource = namedtuple('Resource', ['q', 'w'])

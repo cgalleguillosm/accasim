@@ -32,7 +32,7 @@ from builtins import str, filter
 from inspect import signature
 from _functools import reduce
 from types import MethodType
-from accasim.utils.misc import CONSTANT, sorted_list
+from accasim.utils.misc import CONSTANT, sorted_list, default_swf_mapper
 from accasim.base.resource_manager_class import resource_manager
 
 
@@ -73,52 +73,57 @@ class event(ABC):
         return getattr(obj, sp_attr[0])
     
     def schd_write_out(self):
-        _dict = self.constants.schedule_output
-        # _attrs = {a: locate(av[-1])(*self.subattr(self, av[:-1])) for a, av in _dict['attributes'].items()}
+        if not self.constants.SCHEDULING_OUTPUT:
+            return 
+        _dict = self.constants.SCHEDULE_OUTPUT
         _attrs = {}
         for a, av in _dict['attributes'].items():
             _attrs[a] = locate(av[-1])(*self.subattr(self, av[:-1])) 
         output_format = _dict['format']
         format_elements = re.findall('\{(\w+)\}', output_format)
         values = {k: v for k, v in _attrs.items() if k in format_elements}
-        with open(self.constants.sched_output_filepath, 'a') as f:
+        _filepath = os.path.join(self.constants.RESULTS_FOLDER_PATH, self.constants.SCHED_PREFIX + self.constants.WORKLOAD_FILENAME)
+        with open(_filepath, 'a') as f:
             f.write(output_format.format(**values) + '\n')
     
     def schd_pprint_write_out(self):
-        _dict = self.constants.pprint_schedule_output
+        if not self.constants.PPRINT_OUTPUT:
+            return 
+        _dict = self.constants.PPRINT_SCHEDULE_OUTPUT
         _order = _dict['order']
         _attrs = {a: locate(av[-1])(*self.subattr(self, av[:-1])) for a, av in _dict['attributes'].items() if a in _order}
         output_format = _dict['format']
         format_elements = re.findall('\{(\w+)\}', output_format)
         values = [_attrs[k] for k in _order]
-        with open(self.constants.pprint_output_filepath, 'a') as f:
+        _filepath = os.path.join(self.constants.RESULTS_FOLDER_PATH, self.constants.PPRINT_PREFIX + self.constants.WORKLOAD_FILENAME)
+        with open(_filepath, 'a') as f:
             if self.end_order == 1:
                 f.write(output_format.format(*_order) + '\n')
             f.write(output_format.format(*values) + '\n')
                         
 class job_factory:
-    def __init__(self, _resource_manager, _class=event, attrs=[], mapper={}):
+    def __init__(self, _resource_manager, job_class=event, job_attrs=[], job_mapper=default_swf_mapper):
         """
         @param _resource_manager: The resource manager of the simulator. It is required for creating the job requests.
-        @param _class: The class to be created by the Factory. By default it uses the Event class, but any subclass of it can be used (modified versions). 
-        @param attrs: The extra attributes (attribute_type class) (already job_id, queued_time and duration are mandatory) to be set in the JobEvent class
-        @param mapper: Rename the the old key to a new key (using the value of the mapper dictionary)
+        @param job_class: The class to be created by the Factory. By default it uses the Event class, but any subclass of it can be used (modified versions). 
+        @param job_attrs: The extra attributes (attribute_type class) (already job_id, queued_time and duration are mandatory) to be set in the JobEvent class
+        @param job_mapper: Rename the the old key to a new key (using the value of the mapper dictionary)
         """
         assert(isinstance(_resource_manager, resource_manager))
-        assert(issubclass(_class, event)), 'Only subclasses of event class are accepted. Received: {} class'.format(_class.__name__)
-        if attrs:
-            assert(isinstance(attrs, list) and all(isinstance(attr_type, attribute_type) for attr_type in attrs))
+        assert(issubclass(job_class, event)), 'Only subclasses of event class are accepted. Received: {} class'.format(_class.__name__)
+        if job_attrs:
+            assert(isinstance(job_attrs, list) and all(isinstance(attr_type, attribute_type) for attr_type in job_attrs))
         else:
             attrs = self.default_job_description()
         # self.resource_manager = _resource_manager
         self.group_resources = _resource_manager.groups_available_resource()
         self.system_resources = _resource_manager.resources.system_resource_types
-        self.obj_type = _class
+        self.obj_type = job_class
         self.obj_parameters = list(signature(self.obj_type).parameters)
         self.attrs_names = []
         self.mandatory_attrs = {}
         self.optional_attrs = {}
-        self.mapper = mapper
+        self.mapper = job_mapper
         
         for attr in attrs:
             _attr_name = attr.name
@@ -257,8 +262,6 @@ class event_mapper:
         self.finished.append(e.id)
         e.end_order = len(self.finished)
         asyncio.create_subprocess_exec([e.schd_write_out(), e.schd_pprint_write_out()])
-        # e.schd_write_out()
-        # e.schd_pprint_write_out()
    
     def dispatch_event(self, _e, time, time_diff, _nodes): 
         id = _e.id

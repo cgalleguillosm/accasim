@@ -34,7 +34,7 @@ class allocator_base(ABC):
     The base abstract interface all allocators must comply to.
     """
 
-    def __init__(self, seed, res_man, **kwargs):
+    def __init__(self, seed, _resource_manager=None, **kwargs):
         """
         Allocator constructor (based on scheduler)
 
@@ -46,8 +46,7 @@ class allocator_base(ABC):
         self._constants = CONSTANT()
         self._avl_resources = []
         self._sorted_keys = []
-        assert(isinstance(res_man, resource_manager))
-        self._resource_manager = res_man
+        self.set_resource_manager(_resource_manager)
 
     @abstractmethod
     def get_id(self):
@@ -77,7 +76,7 @@ class allocator_base(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def search_allocation(self, es, cur_time, skip=False, reserved_time=None, reserved_nodes=None, debug=False):
+    def allocating_method(self, es, cur_time, skip=False, reserved_time=None, reserved_nodes=None, debug=False):
         """
         This method tries to allocate the scheduled events contained in e. It will stop as soon as an event cannot
         be allocated, to avoid violations of the scheduler's priority rules, or proceed with other events depending
@@ -96,9 +95,25 @@ class allocator_base(ABC):
         list is in the format (time,event,nodes) where time can be either cur_time or None.
         """
         raise NotImplementedError
+    
+    def allocate(self, es, cur_time, skip=False, reserved_time=None, reserved_nodes=None, debug=False):
+        assert(self.resource_manager is not None), 'The resource manager is not defined. It must defined prior to run the simulation.'
+        if debug:
+            print('{}: {} queued jobs to be considered in the dispatching plan'.format(cur_time, len(es)))
+        return self.allocating_method(es, cur_time, debug)
+    
+    def set_resource_manager(self, _resource_manager):
+        if _resource_manager:
+            assert isinstance(_resource_manager, resource_manager), 'Resource Manager not valid for scheduler'
+            self.resource_manager = _resource_manager
+            self._base_availability = self.resource_manager.get_total_resources()
+        else:
+            self.resource_manager = None
 
+    def __str__(self):
+        return self.get_id()
 
-class allocator_simple(allocator_base):
+class ffp_alloc(allocator_base):
     """
     A simple allocator. Does not sort the resources.
         
@@ -107,7 +122,7 @@ class allocator_simple(allocator_base):
      considered as they are given in input.
     """
 
-    def __init__(self, seed, res_man, **kwargs):
+    def __init__(self, seed, _resource_manager=None, **kwargs):
         """
         Constructor for the class.
         
@@ -115,8 +130,9 @@ class allocator_simple(allocator_base):
         :param resource_manager: reference to the system resource manager
         :param kwargs: None at the moment
         """
-        allocator_base.__init__(self, seed, res_man)
-        self._base_availability = self._resource_manager.get_total_resources()  # self._resource_manager.get_base_resources()
+        allocator_base.__init__(self, seed, _resource_manager)
+        if self.resource_manager:
+            self._base_availability = self.resource_manager.get_total_resources()
 
     def get_id(self):
         return self.__class__.__name__
@@ -142,7 +158,7 @@ class allocator_simple(allocator_base):
         """
         pass
 
-    def search_allocation(self, es, cur_time, skip=False, reserved_time=None, reserved_nodes=None, debug=False):
+    def allocating_method(self, es, cur_time, skip=False, reserved_time=None, reserved_nodes=None, debug=False):
         """
         Given a job list es, this method searches for a suitable allocation for as many jobs as possible.
         

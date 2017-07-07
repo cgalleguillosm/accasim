@@ -30,7 +30,7 @@ from abc import abstractmethod, ABC
 
 
 class scheduler_base(ABC):
-    def __init__(self, _seed, _resource_manager, _allocator, **kwargs):
+    def __init__(self, _seed, _resource_manager, _allocator):
         """
         Construct a scheduler
             
@@ -41,15 +41,14 @@ class scheduler_base(ABC):
         """
         random.seed(_seed)
         self.constants = CONSTANT()
-        assert isinstance(_resource_manager, resource_manager), 'Resource Manager not valid for scheduler'
-        self.resource_manager = _resource_manager
         assert isinstance(_allocator, allocator_base), 'Allocator not valid for scheduler'
         self.allocator = _allocator
-    
+        self.set_resource_manager(_resource_manager)
+        
     @property
-    def POLICIES(self):
+    def name(self):
         """
-        A dictionary of the supported sorting policies for the events
+        Name of the schedulign method
         """
         raise NotImplementedError 
     
@@ -63,7 +62,7 @@ class scheduler_base(ABC):
         raise NotImplementedError
     
     @abstractmethod
-    def schedule(self, cur_time, es_dict, es):
+    def scheduling_method(self, cur_time, es_dict, es, debug=False):
         """
         This function must map the queued events to available nodes at the current time.
             
@@ -74,6 +73,23 @@ class scheduler_base(ABC):
         :return a list of tuples including (time to schedule, event id, list of assigned nodes)  
         """
         raise Exception('This function must be implemented!!')
+    
+    def set_resource_manager(self, _resource_manager):
+        if _resource_manager:
+            self.allocator.set_resource_manager(_resource_manager)
+            assert isinstance(_resource_manager, resource_manager), 'Resource Manager not valid for scheduler'
+            self.resource_manager = _resource_manager
+        else:
+            self.resource_manager = None
+            
+    def schedule(self, cur_time, es_dict, es, _debug=False):
+        assert(self.resource_manager is not None), 'The resource manager is not defined. It must defined prior to run the simulation.'
+        if _debug:
+            print('{}: {} queued jobs to be considered in the dispatching plan'.format(cur_time, len(es)))
+        return self.scheduling_method(cur_time, es_dict, es, _debug)
+    
+    def __str__(self):
+        return self.get_id()
     
 class simple_heuristic(scheduler_base):
     """
@@ -153,3 +169,65 @@ class simple_heuristic(scheduler_base):
         Method which returns the lambda corresponding to the chosen policy for sorting.
         """
         return {k: v for k, v in self.POLICIES[self.name].items()}
+    
+class fifo_sched(scheduler_base):
+    """
+        FIFO scheduling policy. The first come, first served (commonly called FIFO ‒ first in, first out) 
+        process scheduling algorithm is the simplest process scheduling algorithm. 
+        
+    """
+
+    name = 'FIFO'
+
+    def __init__(self, _seed, _allocator, _resource_manager=None, **kwargs):
+        scheduler_base.__init__(self, _seed, _resource_manager, _allocator)
+        
+    def get_id(self):
+        """
+        Returns the full ID of the scheduler, including policy and allocator.
+
+        :return: the scheduler's id.
+        """
+        return '-'.join([self.__class__.__name__, self.allocator.get_id()])
+
+    def scheduling_method(self, cur_time, es_dict, es, _debug=False):
+        """
+        This function must map the queued events to available nodes at the current time.
+        
+        :param cur_time: current time
+        :param es_dict: dictionary with full data of the events
+        :param es: events to be scheduled
+        :param _debug: Flag to debug
+        
+        :return a tuple of (time to schedule, event id, list of assigned nodes)  
+        """
+# ALLOCATOR LOGIC
+        avl_resources = self.resource_manager.availability()
+        self.allocator.set_resources(avl_resources)
+# ---------------
+        running_events = self.resource_manager.actual_events
+        logging.debug('---- %s ----' % cur_time)
+        logging.debug('Available res: \n%s' % '\n'.join(
+            ['%s: %s' % (k_1, ', '.join(['%s: %s' % (k_2, v_2) for k_2, v_2 in v_1.items()])) for k_1, v_1 in
+             avl_resources.items() if v_1['core'] > 0 and v_1['mem'] > 0]))
+        logging.debug('Running es: %s' % ''.join(['%s,' % r for r in running_events]))
+
+        # Building the jobs list from the ids, and sorting it
+        to_schedule_e = [es_dict[e] for e in es]
+        to_schedule_e.sort(**self._sorting_function())
+        _time = cur_time
+# ALLOCATOR LOGIC
+        # allocated_events = self.allocator.search_allocation(to_schedule_e, _time, skip=False, debug=_debug)
+        allocated_events = self.allocator.allocate(to_schedule_e, _time, skip=False, debug=_debug)
+# ---------------
+        return allocated_events
+
+    def _sorting_function(self):
+        """
+        Method which returns the lambda corresponding to the chosen policy for sorting.
+        """
+        # return {k: v for k, v in self.POLICIES[self.name].items()}
+        return {
+            'key': lambda x: getattr(x, 'queued_time'),
+            'reverse': False
+        }

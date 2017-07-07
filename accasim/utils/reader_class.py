@@ -94,7 +94,6 @@ class reader:
         self.last_line = 0
         self.max_lines = max_lines
         self.filepath = filepath
-        self.const.load_constant('input_filepath', filepath)
         self.file = None
         self.EOF = True
         
