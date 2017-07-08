@@ -1,7 +1,7 @@
 """
 MIT License
 
-Copyright (c) 2017 cgalleguillosm
+Copyright (c) 2017 cgalleguillosm, AlessioNetti
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -99,31 +99,10 @@ class simple_heuristic(scheduler_base):
     Sorting as name, sort funct parameters
     """
 
-    POLICIES = {
-        #=======================================================================
-        # 'fifo': {
-        #     'key': lambda x: eval('x.queued_time'),
-        #     'reverse': False
-        # },
-        #=======================================================================
-        'fifo':{
-            'key': lambda x: getattr(x, 'queued_time'),
-            'reverse': False
-        },
-        'longest_duration': {
-            'key': lambda x: eval('x.expected_duration'),
-            'reverse': True
-        },
-        'shortest_duration': {
-            'key': lambda x: eval('x.expected_duration'),
-            'reverse': False
-        },
-    }
-
-    def __init__(self, _seed, _resource_manager, _allocator, _name, **kwargs):
+    def __init__(self, _seed, _resource_manager, _allocator, _name, _sorting_parameters, **kwargs):
         scheduler_base.__init__(self, _seed, _resource_manager, _allocator)
-        assert (_name in self.POLICIES)
         self.name = _name
+        self.sorting_parameters = _sorting_parameters
 
     def get_id(self):
         """
@@ -132,63 +111,6 @@ class simple_heuristic(scheduler_base):
         :return: the scheduler's id.
         """
         return '-'.join([self.__class__.__name__, self.name, self.allocator.get_id()])
-
-    def schedule(self, cur_time, es_dict, es, _debug=False):
-        """
-        This function must map the queued events to available nodes at the current time.
-        
-        :param cur_time: current time
-        :param es_dict: dictionary with full data of the events
-        :param es: events to be scheduled
-        :param _debug: Flag to debug
-        
-        :return a tuple of (time to schedule, event id, list of assigned nodes)  
-        """
-# ALLOCATOR LOGIC
-        avl_resources = self.resource_manager.availability()
-        self.allocator.set_resources(avl_resources)
-# ---------------
-        running_events = self.resource_manager.actual_events
-        logging.debug('---- %s ----' % cur_time)
-        logging.debug('Available res: \n%s' % '\n'.join(
-            ['%s: %s' % (k_1, ', '.join(['%s: %s' % (k_2, v_2) for k_2, v_2 in v_1.items()])) for k_1, v_1 in
-             avl_resources.items() if v_1['core'] > 0 and v_1['mem'] > 0]))
-        logging.debug('Running es: %s' % ''.join(['%s,' % r for r in running_events]))
-
-        # Building the jobs list from the ids, and sorting it
-        to_schedule_e = [es_dict[e] for e in es]
-        to_schedule_e.sort(**self._sorting_function())
-        _time = cur_time
-# ALLOCATOR LOGIC
-        allocated_events = self.allocator.search_allocation(to_schedule_e, _time, skip=False, debug=_debug)
-# ---------------
-        return allocated_events
-
-    def _sorting_function(self):
-        """
-        Method which returns the lambda corresponding to the chosen policy for sorting.
-        """
-        return {k: v for k, v in self.POLICIES[self.name].items()}
-    
-class fifo_sched(scheduler_base):
-    """
-        FIFO scheduling policy. The first come, first served (commonly called FIFO ‒ first in, first out) 
-        process scheduling algorithm is the simplest process scheduling algorithm. 
-        
-    """
-
-    name = 'FIFO'
-
-    def __init__(self, _allocator, _resource_manager=None, _seed=0, **kwargs):
-        scheduler_base.__init__(self, _seed, _resource_manager, _allocator)
-        
-    def get_id(self):
-        """
-        Returns the full ID of the scheduler, including policy and allocator.
-
-        :return: the scheduler's id.
-        """
-        return '-'.join([self.__class__.__name__, self.allocator.get_id()])
 
     def scheduling_method(self, cur_time, es_dict, es, _debug=False):
         """
@@ -201,33 +123,302 @@ class fifo_sched(scheduler_base):
         
         :return a tuple of (time to schedule, event id, list of assigned nodes)  
         """
+
+        avl_resources = self.resource_manager.availability()
+        self.allocator.set_resources(avl_resources)
+
+        running_events = self.resource_manager.actual_events
+        #=======================================================================
+        # logging.debug('---- %s ----' % cur_time)
+        # logging.debug('Available res: \n%s' % '\n'.join(
+        #     ['%s: %s' % (k_1, ', '.join(['%s: %s' % (k_2, v_2) for k_2, v_2 in v_1.items()])) for k_1, v_1 in
+        #      avl_resources.items() if v_1['core'] > 0 and v_1['mem'] > 0]))
+        # logging.debug('Running es: %s' % ''.join(['%s,' % r for r in running_events]))
+        #=======================================================================
+
+        # Building the jobs list from the ids, and sorting it
+        to_schedule_e = [es_dict[e] for e in es]
+        to_schedule_e.sort(**self.sorting_parameters)
+        _time = cur_time
+
+        allocated_events = self.allocator.allocating_method(to_schedule_e, _time, skip=False, debug=_debug)
+
+        return allocated_events
+
+    
+class fifo_sched(simple_heuristic):
+    """
+        FIFO scheduling policy. The first come, first served (commonly called FIFO ‒ first in, first out) 
+        process scheduling algorithm is the simplest process scheduling algorithm. 
+        
+    """
+    name = 'FIFO'
+    sorting_arguments = {
+            'key': lambda x: x.queued_time,
+            'reverse': False
+        }
+
+    def __init__(self, _allocator, _resource_manager=None, _seed=0, **kwargs):
+        simple_heuristic.__init__(self, _seed, _resource_manager, _allocator, self.name, self.sorting_arguments, **kwargs)
+        
+class ljf_sched(simple_heuristic):
+    """
+        LJF scheduling policy. ... 
+        
+    """
+    name = 'LJF'
+    sorting_arguments = {
+            'key': lambda x: x.expected_duration,
+            'reverse': True
+        }
+
+    def __init__(self, _allocator, _resource_manager=None, _seed=0, **kwargs):
+        simple_heuristic.__init__(self, _seed, _resource_manager, _allocator, self.name, self.sorting_arguments, **kwargs)
+        
+class sjf_sched(simple_heuristic):
+    """
+        SJF scheduling policy. ...
+        
+    """
+    name = 'SJF'
+    sorting_arguments = {
+            'key': lambda x: x.expected_duration,
+            'reverse': False
+        }
+
+    def __init__(self, _allocator, _resource_manager=None, _seed=0, **kwargs):
+        simple_heuristic.__init__(self, _seed, _resource_manager, _allocator, self.name, self.sorting_arguments, **kwargs)
+
+class easybf_sched(scheduler_base):
+    """
+    EASY Backfilling scheduler. 
+    
+    Whenever a job cannot be allocated, a reservation is made for it. After this, the following jobs are used to
+    backfill the schedule, not allowing them to use the reserved nodes.
+    Sorting as name, sort funct parameters
+    """
+    name = 'EASY_Backfilling'
+    
+    def __init__(self, _allocator, _resource_manager=None, _seed=0, **kwargs):
+        scheduler_base.__init__(self, _seed, _resource_manager, _allocator)
+        self.blocked_job_id = None
+        self.reserved_slot = (None, [])
+        self.blocked_resources = False
+        
+    def get_id(self):
+        """
+        Returns the full ID of the scheduler, including policy and allocator.
+
+        :return: the scheduler's id.
+        """
+        return '-'.join([self.name, self.allocator.name])
+
+    def scheduling_method(self, cur_time, es_dict, es, _debug=False):
+        """
+            This function must map the queued events to available nodes at the current time.
+            
+            :param cur_time: current time
+            :param es_dict: dictionary with full data of the events
+            :param es: events to be scheduled
+            :param _debug: Flag to debug
+            
+            :return a tuple of (time to schedule, event id, list of assigned nodes)  
+        """
+
 # ALLOCATOR LOGIC
         avl_resources = self.resource_manager.availability()
         self.allocator.set_resources(avl_resources)
 # ---------------
+
+        if _debug:
+            print('---------%s---------' % (cur_time))
+        reserved_time = self.reserved_slot[0]
+        reserved_nodes = self.reserved_slot[1]
+        _jobs_allocated = []
+
+        # Trying to allocate the blocked job on the reserved resources
+        # if reserved_time is not None and (reserved_time == cur_time or self.blocked_resources):  # Continue waiting until it finishes, for a more stricted it must kill the jobs when ==
+        if (reserved_time is not None and (reserved_time == cur_time or reserved_time < cur_time and self.blocked_resources)):  # Continue waiting until it finishes, for a more stricted it must kill the jobs when ==
+            if _debug:
+                print(cur_time, ': Allocating the blocked node')
+            _e = es_dict[self.blocked_job_id]
+            blocked_job_allocation = self.allocator.search_allocation(_e, cur_time, skip=False)
+            if blocked_job_allocation[0] is not None:
+                _jobs_allocated.append(blocked_job_allocation)
+                assert(es[0] == self.blocked_job_id), '%s' % es
+                self.blocked_job_id = None
+                self.reserved_slot = (None, [])
+                self.blocked_resources = False
+                _removed_id = es.pop(0)
+                if _debug:
+                    print(cur_time, 'Removing the blocked job (%s) from the queue list ' % _removed_id)
+                    print('The resources were unblocked')
+            else:
+                if _debug:
+                    print(cur_time, ': Nodes ', reserved_nodes, ', are not already free for the blocked node.')
+                    for _node in reserved_nodes:
+                        print(cur_time, ': Resources ', avl_resources[_node])
+        
+        # This var stores the info for allocated jobs
+        _ready_dispatch = []
+        # If there is no blocked job, we execute the first part of the schedule, same as in the simple scheduler
+        if not self.blocked_resources:            
+            _tmp_jobs_allocated, _id_jobs_nallocated = self._job_allocation(cur_time, es, es_dict, _debug)
+            _jobs_allocated += [_j[0] for _j in _tmp_jobs_allocated]
+            _ready_dispatch += [_j[1] for _j in _tmp_jobs_allocated]
+            if _debug:
+                print('nallocated ', _id_jobs_nallocated)
+            if not _id_jobs_nallocated:
+                if _debug:
+                    print(cur_time, ': 1st return ', _jobs_allocated)
+                return  _jobs_allocated
+        else:
+            _id_jobs_nallocated = es
+        #=======================================================================
+        # Finding next available slot
+        # to_dispatch corresponds to the recently jobs to be dispatched and revent corresponds to actual running events
+        # The next avl slot is searched into a sorted list of expected ending times based on the walltime
+        #=======================================================================
+        if _debug:
+            print(cur_time, ': Blocked: ', self.blocked_job_id)
+            print('To dispatch: ', _jobs_allocated)
+
+        # We refresh the info on the blocked job and prepare the remaining ones for backfilling
+        self.blocked_job_id = _id_jobs_nallocated[0]
+        self.blocked_resources = True         
+        for_backfilling = _id_jobs_nallocated[1:]
         running_events = self.resource_manager.actual_events
-        logging.debug('---- %s ----' % cur_time)
-        logging.debug('Available res: \n%s' % '\n'.join(
-            ['%s: %s' % (k_1, ', '.join(['%s: %s' % (k_2, v_2) for k_2, v_2 in v_1.items()])) for k_1, v_1 in
-             avl_resources.items() if v_1['core'] > 0 and v_1['mem'] > 0]))
-        logging.debug('Running es: %s' % ''.join(['%s,' % r for r in running_events]))
 
-        # Building the jobs list from the ids, and sorting it
+        # If no reservation was already made for the blocked job, we make one
+        if reserved_time is None:
+            # All running events are computed, and the earliest slot in which the blocked job fits is computed.
+            revents = [(job_id, es_dict[job_id].start_time + es_dict[job_id].expected_duration, assigns) for job_id, assigns in running_events.items()]
+            future_endings = revents + _ready_dispatch
+            if _debug:
+                print('FE: ', future_endings)
+            # Sorting by soonest finishing
+            future_endings.sort(key=lambda x: x[1], reverse=False)
+            self.reserved_slot = self._search_slot(avl_resources, future_endings, es_dict[self.blocked_job_id], _debug)
+            reserved_time = self.reserved_slot[0]
+            reserved_nodes = self.reserved_slot[1]
+            
+        # Backfilling the schedule
+        # running_events is a dict with the job id as key. Its value corresponds to the assignation {node: {resource: value}}
+        if _debug:
+            print('Blocked node ', self.blocked_job_id, ', until ', self.reserved_slot)
+        
+        _jobs_allocated = [(None, self.blocked_job_id, []) ] + _jobs_allocated
+        
+        if not for_backfilling:
+            # If there are not jobs for backfilling return the allocated job plus the blocked one
+            if _debug:
+                print(cur_time, ': 2nd return ', _jobs_allocated)
+            return _jobs_allocated  
+        
+        if _debug:
+            print(cur_time, ': For BF', for_backfilling)
+
+        # Trying to backfill the remaining jobs in the queue
+        to_schedule_e_backfill = [es_dict[_id] for _id in for_backfilling]
+        backfill_allocation = self.allocator.search_allocation(to_schedule_e_backfill,
+                                                               cur_time,
+                                                               reserved_time=reserved_time,
+                                                               reserved_nodes=reserved_nodes,
+                                                               skip=True,
+                                                               debug=_debug)
+        _jobs_allocated += backfill_allocation
+
+        if _debug:
+            print(cur_time, ': 3rd return ', _jobs_allocated)
+        return _jobs_allocated
+
+    def _search_slot(self, avl_resources, future_endings, e, _debug):
+        """
+        Computes a reservation for the blocked job e, by simulating the release of the resources for the running
+        events, once they finish. The earliest slot in which e fits is chosen.
+        
+        :param avl_resources: Actual available resources
+        :param future_endings: List of tuples of runninng events + events to be dispatched. (id, expected_ending time, assigns{node: {used attr: used value}} )
+        :param e: Event to be fitted in the time slot
+            
+        :return a tuple of time of the slot and nodes
+        """
+        virtual_resources = deepcopy(avl_resources)
+        virtual_allocator = copy(self.allocator)
+
+        for fe in future_endings:
+            # print('FE: ', fe[0], fe[1], fe[2])
+            _time = fe[1]
+            for node, used_resources in fe[2].items():
+                for attr, attr_value in used_resources.items(): 
+                    virtual_resources[node][attr] += attr_value
+            # The algorithm first checks if the job fits on the new released virtual resources; if it does
+            # then it passes them to the allocator, which sorts them
+            if self._event_fits_resources(virtual_resources, e.requested_nodes, e.requested_resources):
+                virtual_allocator.set_resources(virtual_resources)
+                reservation = virtual_allocator.search_allocation(e, _time, skip=False, debug=_debug)
+                if reservation[0] is not None:
+                    return _time, reservation[2]
+        raise Exception('Can\'t find the slot.... no end? :(')
+
+    def _event_fits_resources(self, avl_resources, n_nodes, requested_resources):
+        nodes = 0
+        for node, resources in avl_resources.items():
+            nodes += self._event_fits_node(resources, requested_resources)
+        return nodes >= n_nodes
+
+    def _event_fits_node(self, resources, requested_resources):
+        # min_availability is the number of job units fitting in the node. It is initialized at +infty,
+        # since we must compute a minimum
+        min_availability = sys.maxsize
+        # if a job requests 0 resources, the request is deemed as not valid
+        valid_request = False
+        for k, v in requested_resources.items():
+            # for each resource type, we compute the number of job units fitting for it, and refresh the minimum
+            if v > 0 and min_availability > (resources[k] // v):
+                valid_request = True
+                min_availability = resources[k] // v
+                # if the minimum reaches 0 (no fit) we break from the cycle
+                if min_availability <= 0:
+                    min_availability = 0
+                    break
+        if valid_request:
+            return min_availability
+        else:
+            return 0
+
+    def _job_allocation(self, cur_time, es, es_dict, _debug):
+        """
+        This method tries to allocate as many jobs as possible in the first part of the scheduling scheme.
+        
+        As soon as one allocation fails, all subsequent jobs fail too. Then, the return tuple contains info about
+        the allocated jobs (assigned nodes and such) and also the ids about the non-allocated jobs, that can be used
+        for backfilling.
+        
+        :param cur_time: the current time
+        :param es: the list of events to be scheduled
+        :param es_dict: the dictionary of events
+        :param _debug: debug flag
+        :return: a tuple (ready_dispatch,idx_notdispatched), where ready_dispatch contains the assignment info on the
+            allocated jobs, and idx_notdispatched contains the ids of the jobs that could not be scheduled.
+        """
+        # Variables that keep the jobs to be dispatched 
+        ready_distpach = []
+        # Trying to allocate the jobs
         to_schedule_e = [es_dict[e] for e in es]
-        to_schedule_e.sort(**self._sorting_function())
-        _time = cur_time
-# ALLOCATOR LOGIC
-        # allocated_events = self.allocator.search_allocation(to_schedule_e, _time, skip=False, debug=_debug)
-        allocated_events = self.allocator.allocate(to_schedule_e, _time, skip=False, debug=_debug)
-# ---------------
-        return allocated_events
-
-    def _sorting_function(self):
-        """
-        Method which returns the lambda corresponding to the chosen policy for sorting.
-        """
-        # return {k: v for k, v in self.POLICIES[self.name].items()}
-        return {
-            'key': lambda x: getattr(x, 'queued_time'),
-            'reverse': False
-        }
+        allocation = self.allocator.allocating_method(to_schedule_e, cur_time, skip=False, debug=_debug)
+        # Computing the index of the first non-allocated job
+        _idx_notdispatched = next((idx for idx, al in enumerate(allocation) if al[0] is None), len(es))
+        # Building the ready_dispatch list for successful allocations, containing the assigned nodes info
+        for al in allocation[:_idx_notdispatched]:
+            _e = es_dict[al[1]]
+            requested_resources = _e.requested_resources
+            assigned_nodes = al[2]
+            ready_distpach.append(
+                (
+                    al,
+                    (_e.id, cur_time + _e.expected_duration, {node: requested_resources for node in assigned_nodes})
+                )
+            )
+        # ids of jobs that could be used to backfilling the schedule
+        return ready_distpach, es[_idx_notdispatched:] if _idx_notdispatched != len(es) else []

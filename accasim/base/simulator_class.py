@@ -1,7 +1,7 @@
 """
 MIT License
 
-Copyright (c) 2017 cgalleguillosm
+Copyright (c) 2017 cgalleguillosm, AlessioNetti
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -42,7 +42,7 @@ import asyncio
 
 class simulator_base(ABC):
 
-    def __init__(self, _resource_manager, _reader, _job_factory, _scheduler, config_file=None, **kwargs):
+    def __init__(self, _resource_manager, _reader, _job_factory, _dispatcher, config_file=None, **kwargs):
         self.constants = CONSTANT()
         self.define_default_constants(config_file, **kwargs)
         self.real_init_time = datetime.now()
@@ -53,8 +53,8 @@ class simulator_base(ABC):
         assert(isinstance(_job_factory, job_factory))
         assert(self.check_request(_job_factory.attrs_names)), 'System resources must be included in Job Factory descrpition.'
         self.job_factory = _job_factory
-        assert(isinstance(_scheduler, scheduler_base))
-        self.scheduler = _scheduler
+        assert(isinstance(_dispatcher, scheduler_base))
+        self.dispatcher = _dispatcher
 
         self.mapper = event_mapper(self.resource_manager)
         self.show_config()
@@ -138,7 +138,7 @@ class simulator_base(ABC):
 class hpc_simulator(simulator_base):
     
     def __init__(self, sys_config, workload, _scheduler, _resource_manager=None, _reader=None, _job_factory=None, _simulator_config=None, overwrite_previous=True,
-        scheduling_output=True, pprint_output=False, benchmark_output=False, statistics_output=True, **kwargs):
+        scheduling_output=True, pprint_output=False, benchmark_output=False, statistics_output=True, show_statistics=True, **kwargs):
         
         kwargs['OVERWRITE_PREVIOUS'] = overwrite_previous
         kwargs['SYS_CONFIG_FILEPATH'] = sys_config
@@ -147,6 +147,7 @@ class hpc_simulator(simulator_base):
         kwargs['PPRINT_OUTPUT'] = pprint_output
         kwargs['BENCHMARK_OUTPUT'] = benchmark_output
         kwargs['STATISTICS_OUTPUT'] = statistics_output
+        kwargs['SHOW_STATISTICS'] = show_statistics
 
         if not _resource_manager:
             _resource_manager = self.generate_enviroment(sys_config)
@@ -293,8 +294,8 @@ class hpc_simulator(simulator_base):
             if events:
                 if _debug:
                     print('{} DUR: To Schedule {}'.format(_actual_time, len(events)))
-                to_dispatch = self.scheduler.schedule(self.mapper.current_time, event_dict, events, _debug)
-                # to_dispatch = self.scheduler.schedule(self.mapper.current_time, event_dict, events, len(self.mapper.finished) > 15000)
+                to_dispatch = self.dispatcher.schedule(self.mapper.current_time, event_dict, events, _debug)
+                # to_dispatch = self.dispatcher.schedule(self.mapper.current_time, event_dict, events, len(self.mapper.finished) > 15000)
                 if _debug:
                     print('{} DUR: To Dispatch {}. {}'.format(_actual_time, len(to_dispatch), self.resource_manager.resources.usage()))
                 time_diff = 0
@@ -333,20 +334,32 @@ class hpc_simulator(simulator_base):
 
         self.end_time = _clock()
         assert(self.loaded_jobs == len(self.mapper.finished)), 'Loaded {} and Finished {}'.format(self.loaded_jobs, len(self.mapper.finished))
-        if self.constants.STATISTICS_OUTPUT:
-            self.statics_write_out()
+        self.statics_write_out(self.constants.SHOW_STATISTICS, self.constants.STATISTICS_OUTPUT)
+        print('Simulation process completed.')
         self.mapper.current_time = None
 
-    def statics_write_out(self):
+    def statics_write_out(self, show, save):
+        if not(show or save):
+            return
         wtimes = self.mapper.wtimes
         slds = self.mapper.slowdowns
-        _filepath = os.path.join(self.constants.RESULTS_FOLDER_PATH, self.constants.STATISTICS_PREFIX + self.constants.WORKLOAD_FILENAME)
-        with open(_filepath, 'a') as f:
-            f.write('Simulation time: {0:.2f} secs\n'.format(self.end_time - self.start_time))
-            f.write('Total jobs: {}\n' .format(self.loaded_jobs))
-            f.write('Makespan: {}\n'.format(self.mapper.last_run_time - self.mapper.first_time_dispatch))
-            f.write('Avg. waiting times: {}\n'.format(reduce(lambda x, y: x + y, wtimes) / float(len(wtimes))))
-            f.write('Avg. slowdown: {}\n' .format(reduce(lambda x, y: x + y, slds) / float(len(slds))))
+        sim_time_ = 'Simulation time: {0:.2f} secs\n'.format(self.end_time - self.start_time)
+        disp_method_ = 'Dispathing method: {}\n'.format(self.dispatcher)
+        total_jobs_ = 'Total jobs: {}\n'.format(self.loaded_jobs)
+        makespan_ = 'Makespan: {}\n'.format(self.mapper.last_run_time - self.mapper.first_time_dispatch)
+        avg_wtimes_ = 'Avg. waiting times: {}\n'.format(reduce(lambda x, y:x + y, wtimes) / float(len(wtimes)))
+        avg_slowdown_ = 'Avg. slowdown: {}\n'.format(reduce(lambda x, y:x + y, slds) / float(len(slds)))
+        if show:
+            print('\n\t' + '\t'.join([sim_time_, disp_method_, total_jobs_, makespan_, avg_wtimes_, avg_slowdown_]))
+        if save:
+            _filepath = os.path.join(self.constants.RESULTS_FOLDER_PATH, self.constants.STATISTICS_PREFIX + self.constants.WORKLOAD_FILENAME)
+            with open(_filepath, 'a') as f:
+                f.write(sim_time_)            
+                f.write(disp_method_)
+                f.write(total_jobs_)
+                f.write(makespan_)
+                f.write(avg_wtimes_)
+                f.write(avg_slowdown_)
 
     def write_to_benchmark(self, time, queueSize, stepTime, schedTime, simTime, memUsage):
         """

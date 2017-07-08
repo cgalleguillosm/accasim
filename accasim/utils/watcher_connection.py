@@ -1,7 +1,7 @@
 """
 MIT License
 
-Copyright (c) 2017 alessionetti, cgalleguillosm
+Copyright (c) 2017 AlessioNetti, cgalleguillosm
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

@@ -34,7 +34,7 @@ class allocator_base(ABC):
     The base abstract interface all allocators must comply to.
     """
 
-    def __init__(self, seed, _resource_manager=None, **kwargs):
+    def __init__(self, seed, resource_manager=None, **kwargs):
         """
         Allocator constructor (based on scheduler)
 
@@ -46,7 +46,7 @@ class allocator_base(ABC):
         self._constants = CONSTANT()
         self._avl_resources = []
         self._sorted_keys = []
-        self.set_resource_manager(_resource_manager)
+        self.set_resource_manager(resource_manager)
 
     @abstractmethod
     def get_id(self):
@@ -122,7 +122,9 @@ class ffp_alloc(allocator_base):
      considered as they are given in input.
     """
 
-    def __init__(self, seed=0, _resource_manager=None, **kwargs):
+    name = 'First_Fit'
+
+    def __init__(self, seed=0, resource_manager=None, **kwargs):
         """
         Constructor for the class.
         
@@ -130,7 +132,7 @@ class ffp_alloc(allocator_base):
         :param resource_manager: reference to the system resource manager
         :param kwargs: None at the moment
         """
-        allocator_base.__init__(self, seed, _resource_manager)
+        allocator_base.__init__(self, seed, resource_manager)
         if self.resource_manager:
             self._base_availability = self.resource_manager.get_total_resources()
 
@@ -342,3 +344,54 @@ class ffp_alloc(allocator_base):
             return min_availability
         else:
             return 0
+        
+class consolidate_alloc(ffp_alloc):
+    """
+        Consolidate Allocator
+    It is an allocator which sorts the nodes basing on the amount of free resources, trying to consolidate.
+        
+    The less the available resources, the higher the priority.
+    The allocator is based on allocator_simple, changing only the sort and adjust methods.   
+    """
+    
+    name = 'Consolidate'
+
+    def __init__(self, seed=0, resource_manager=None, **kwargs):
+        """
+        Constructor for the class.
+
+        :param seed: seed for random events (not used)
+        :param resource_manager: reference to the system resource manager
+        :param kwargs: None at the moment
+        """
+        ffp_alloc.__init__(self, seed, resource_manager)
+
+        self.ranking = lambda x: sum(self._avl_resources[x].values())
+        """
+            Defines the ranking operator for sorting. Must use the self._avl_resources argument
+            (the available resource dictionary). x represents a key.
+        """
+
+    def _sort_resources(self):
+        """
+        This method sorts the keys of the available resources dictionary, basing on the ranking operator.
+        
+        It is called after the resources are set in the allocator.
+        
+        :return: the list of sorted keys (node ids) for the resources
+        """
+        assert self._avl_resources is not None, 'The dictionary of available resources must be non-empty.'
+        return sorted(self._avl_resources.keys(), key=self.ranking, reverse=False)
+
+    def _adjust_resources(self, sorted_keys):
+        """
+        Adjusts the sorting of the resources after a successful allocation. 
+        
+        This method still uses python's sort method, because the Timsort implementation has O(n) complexity
+        on mostly sorted data. Even with a custom implementation, the average case would cost O(n) at best.
+        
+        :param sorted_keys: the list of keys, almost sorted, that needs to be adjusted
+        """
+        assert self._avl_resources is not None, 'The dictionary of available resources must be non-empty.'
+        assert sorted_keys is not None, 'The list of keys must be non-empty'
+        sorted_keys.sort(key=self.ranking, reverse=False)
