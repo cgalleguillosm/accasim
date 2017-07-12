@@ -9,7 +9,7 @@ package_name = 'accasim'
 with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
     long_description = f.read()
     
-with open(path.join(here, 'utils', 'version.py')) as f:
+with open(path.join(here, 'accasim', 'utils', 'version.py')) as f:
     data = f.readlines()[-1]
     mo = re.search('version = \'([\d.]+)\'', data)
     if mo:
@@ -44,5 +44,5 @@ setup(
 
     packages=find_packages(exclude=['contrib', 'docs', 'tests']),
 
-    install_requires=['matplotlib', 'json', 'psutils'],
+    install_requires=['matplotlib', 'psutil'],
 )
