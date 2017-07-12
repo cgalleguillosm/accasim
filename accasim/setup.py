@@ -28,7 +28,7 @@ setup(
 
     # See https://pypi.python.org/pypi?%3Aaction=list_classifiers
     classifiers=[
-        '5 - Production/Stable',
+        'Development Status :: 5 - Production/Stable',
         'Intended Audience :: Science/Research',
         'Topic :: Scientific/Engineering',
         'License :: OSI Approved :: MIT License',
