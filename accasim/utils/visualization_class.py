@@ -28,7 +28,7 @@ import matplotlib.cm as mplcm
 import matplotlib.colors as colors
 import time
 import matplotlib.animation as Animation
-from accasim.utils.misc import sorted_object_list
+from accasim.utils.misc import sorted_object_list, str_datetime
 from collections import namedtuple
 from threading import Thread
 
@@ -111,6 +111,7 @@ class scheduling_visualization:
             self.update_finished_jobs(current_time, _finished)
             
         # Create new Rectangles or update its position (By increasing consumption)
+        _stop_f = False
         for res in _resources:
             ax = self.axis_mapper[res]
             # Sorted by consumption
@@ -148,26 +149,28 @@ class scheduling_visualization:
                  
             self.modify_legend(ax, res)
             self.update_ylabel(ax, res, self.system_info[res]['used'])
+        plt.rcParams.update({'font.size': 16})
         self.figure.canvas.draw()
-        self.figure.canvas.flush_events()      
+        self.figure.canvas.flush_events()             
         
     def update_ylabel(self, _ax, _res, _used):
-        _ax.set_ylabel('{} {:.2%}'.format(_res, (_used / self.system_info[_res]['total'])), rotation=90, size='large')
+        _res_usage = _used / self.system_info[_res]['total']
+        _ax.set_ylabel('{} {:.2%}'.format(_res, _res_usage), rotation=90, size=20)
         
     def modify_legend(self, ax, res, legend_size=10):
         h, l = ax.get_legend_handles_labels()
         # L.get_texts()[0].set_text('make it short')
         if len(l) <= legend_size:
-            ax.legend(h, l, prop={'size':6}, loc='upper left')
+            ax.legend(h, l, prop={'size':10}, loc='upper right', title='Job id')
             return
         _generated_legend = {l: h for h, l  in zip(h, l)}
         _modified_legend = []
         for _idx, _job in enumerate(self.sorted_jobs[res].get_reversed_object_list()):
             if _idx == legend_size:
                 break
-            _modified_legend.append((_job.id, _generated_legend[_job.id]))
+            _modified_legend.append((str(_job.id), _generated_legend[str(_job.id)]))
         l, h = zip(*_modified_legend)
-        ax.legend(h, l, prop={'size':6}, loc='upper left')
+        ax.legend(h, l, prop={'size':12}, loc='upper left')
         
     def update_running_job(self, _patches, _res, _used):
         _patch = _patches[_res]
@@ -209,7 +212,7 @@ class scheduling_visualization:
         _text = self.last_line.pop('text', None)
         if _text is not None:
             _text.remove()
-        self.last_line['text'] = self.figure.text(0.7, 0.05, 'Actual time: {}'.format(actual_time), fontsize=12)
+        self.last_line['text'] = self.figure.text(0.62, 0.05, 'Actual time: {}'.format(str_datetime(actual_time)), fontsize=12, backgroundcolor='white')
         for name, ax in self.axis_mapper.items():
             _old = self.last_line.pop(name, None)
             if _old is not None:
@@ -222,21 +225,25 @@ class scheduling_visualization:
         for _k in sys_config:
             sys_config[_k]['used'] = 0
         types = len(sys_config)
-
-        self.figure, axis = plt.subplots(types, 1, sharex=True, sharey=True, figsize=(15, 10))
+        self.figure, axis = plt.subplots(types, 1, sharex=True, sharey=True, figsize=(10, 8))
         sys_plot = {}
         for (ax, _sys) in zip(axis, sys_config):
             self.xlimit(0, ax)
-            ax.set_ylabel(_sys, rotation=90, size='large')
+            ax.set_ylabel(_sys, rotation=90, size=12)  # , size='large')
             ax.grid()
             xticks = ax.yaxis.get_major_ticks() 
             xticks[0].label1.set_visible(False)
             xticks[-1].label1.set_visible(False)
             sys_plot[_sys] = ax            
+
+            for label in (ax.get_xticklabels() + ax.get_yticklabels()):
+                label.set_fontsize(16)
         self.axis_mapper = sys_plot
         self.figure.subplots_adjust(hspace=0)
         plt.setp([a.get_xticklabels() for a in self.figure.axes[:-1]], visible=False)
         self.animation = Animation.FuncAnimation(self.figure, self.job_draw, interval=1000)
+        
+        plt.rcParams.update({'font.size': 16})
         plt.show()
                     
     def xlimit(self, actual_time, ax=None):
@@ -251,6 +258,9 @@ class scheduling_visualization:
             return
         self.xlim = (actual_time - self.min_time, actual_time + self.max_time)
         ax.set_xlim(self.xlim)
+        labels = ['-600', '-{}'.format(actual_time % 600), '+600', '+1200', '+1800' ]
+        ax.set_xticklabels(labels)
+            
     
     def next_color(self):
         if self.color_pos is None: 
