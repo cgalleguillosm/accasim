@@ -50,23 +50,31 @@ class allocator_base(ABC):
 
     @abstractmethod
     def get_id(self):
+        """
+        Abstract method. Must be implemented by the subclass. 
+        Must return the identification of the allocator. 
+        
+        :return: Allocator identification (for instance its name).    
+        """
         raise NotImplementedError
 
     @abstractmethod
     def set_resources(self, res):
         """
+        Abstract method. Must be implemented by the subclass.
         This method sets the internal reference to the dictionary of available resources in the system.
         If the reference points to a list used also outside of this class, the object should be deepcopied.
         
         If necessary, the resources are also sorted.
             
-        :param res: the list of currently available resources in the system.
+        :param res: the list of currently available resources in the system.       
         """
         raise NotImplementedError
 
     @abstractmethod
     def set_attr(self, **kwargs):
         """
+        Abstract method. Must be implemented by the subclass.
         Method used to set internal parameters and meta-data for the allocator.
         
         Its behavior depends on the specific allocator that is being used, and some arguments may be discarded.
@@ -78,7 +86,8 @@ class allocator_base(ABC):
     @abstractmethod
     def allocating_method(self, es, cur_time, skip=False, reserved_time=None, reserved_nodes=None, debug=False):
         """
-        This method tries to allocate the scheduled events contained in e. It will stop as soon as an event cannot
+        Abstract method. Must be implemented by the subclass.
+        This method must try to allocate the scheduled events contained in es. It will stop as soon as an event cannot
         be allocated, to avoid violations of the scheduler's priority rules, or proceed with other events depending
         on the skip parameter.
         
@@ -90,6 +99,7 @@ class allocator_base(ABC):
         :param skip: determines if the allocator can skip jobs
         :param reserved_time: beginning of the next reservation slot (used for backfilling)
         :param reserved_nodes: nodes already reserved (used for backfilling)
+        :param debug: Debugging flag
 
         :return: a list of assigned nodes of length e.requested_nodes, for all events that could be allocated. The
         list is in the format (time,event,nodes) where time can be either cur_time or None.
@@ -97,12 +107,34 @@ class allocator_base(ABC):
         raise NotImplementedError
     
     def allocate(self, es, cur_time, skip=False, reserved_time=None, reserved_nodes=None, debug=False):
+        """
+        This is the method that is called by the Scheduler to allocate the scheduled jobs. First, It verifies the data consistency and availability, 
+        and then call to the implemented allocation policy.   
+        
+        
+        :param es: the event(s) to be allocated
+        :param cur_time: current time, needed to build the schedule list
+        :param skip: determines if the allocator can skip jobs
+        :param reserved_time: beginning of the next reservation slot (used for backfilling)
+        :param reserved_nodes: nodes already reserved (used for backfilling)
+        :param debug: Debugging flag
+        
+        :return: the return of the implemented allocation policy.
+
+        """
         assert(self.resource_manager is not None), 'The resource manager is not defined. It must defined prior to run the simulation.'
         if debug:
             print('{}: {} queued jobs to be considered in the dispatching plan'.format(cur_time, len(es)))
         return self.allocating_method(es, cur_time, debug)
     
     def set_resource_manager(self, _resource_manager):
+        """
+        Internally set the resource manager to deal with resource availability.
+        
+        :param _resource_manager: A resource manager instance or None. If a resource manager is already instantiated,
+             it's used for set internally set it and obtain the system capacity for dealing with the request verifications.
+             The dispathing process can't start without a resource manager. 
+        """
         if _resource_manager:
             assert isinstance(_resource_manager, resource_manager), 'Resource Manager not valid for scheduler'
             self.resource_manager = _resource_manager
@@ -111,6 +143,9 @@ class allocator_base(ABC):
             self.resource_manager = None
 
     def __str__(self):
+        """
+            Retrieves the identification of the allocator.
+        """
         return self.get_id()
 
 class ffp_alloc(allocator_base):
