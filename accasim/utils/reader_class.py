@@ -45,12 +45,6 @@ class default_workload_parser(workload_parser_base):
                 won't be readed by the parser. 
         """
         self.reg_exp_dict, self.avoid_tokens = default_swf_parse_config
-        #=======================================================================
-        # assert(isinstance(reg_exp_dict, dict)), 'The regular expressions must be passed as dictionary. Groupname: Regular Exp'
-        # self.reg_exp_dict = reg_exp_dict
-        # assert(isinstance(avoid_tokens, (list, tuple))), 'The tokens to avoid (also regular expressions) must be passed in a list'
-        # self.avoid_tokens = avoid_tokens
-        #=======================================================================
         
     def feasible_line(self, line):
         """

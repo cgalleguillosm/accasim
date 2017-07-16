@@ -44,9 +44,10 @@ from _functools import reduce
 from itertools import islice
 from builtins import int, str
 import ntpath
-import sys
 
-
+#===============================================================================
+# Patterns for SWF files
+#===============================================================================
 _swf_int_pattern = ('\s*(?P<{}>[-+]?\d+)', int)
 _swf_float_pattern = ('\s*(?P<{}>[-+]?\d+\.\d+|[-+]?\d+)', float)
 _swf_avoid_regexps = [r'^;.*']
@@ -78,13 +79,27 @@ default_swf_mapper = {
     'requested_time': 'expected_duration'
 }
 
-def default_sorting_function(obj1, obj2, avoid_data_tokens=[';']): 
+def default_sorting_function(obj1, obj2, avoid_data_tokens=[';']):
+    """
+    Function for sorting the swf files in ascending order. If one of the object belongs to avoid_data_tokens, the same order is maintained by returning 1.
+    @param obj1: Object 1
+    @param obj2: Object 2
+    @param avoid_data_tokens: Tokens to avoid
+    
+    @return: return a positive number for maintaing the order, or a negative one to change the order.
+    """ 
     if obj1[0] in avoid_data_tokens or obj2[0] in avoid_data_tokens:
         return 1
     return default_sorted_attribute(obj1) - default_sorted_attribute(obj2) 
 
 def default_sorted_attribute(workload_line, attr='submit_time', converter=None):
-    # print('wl: ', workload_line)
+    """
+    @param workload_line: A line readed from the file.
+    @param attr: Attribute of the line for sorting.
+    @param converter: Converter function to cast the attribute.   
+    
+    @return: Returns the attribute of the line. Casted if it's required. 
+    """
     value = workload_parser(workload_line, attr)[attr]
     if converter:
         return converter(value)
@@ -112,6 +127,12 @@ def workload_parser(workload_line, attrs=None, avoid_data_tokens=[';']):
         16. partition_number -- a natural number, between one and the number of different partitions in the systems. The nature of the system's partitions should be explained in a header comment. For example, it is possible to use partition numbers to identify which machine in a cluster was used.
         17. preceding_job_number -- this is the number of a previous job in the workload, such that the current job can only start after the termination of this preceding job. Together with the next field, this allows the workload to include feedback as described below.
         18. think_time_prejob -- this is the number of seconds that should elapse between the termination of the preceding job and the submittal of this one.
+        
+        @param workload_line: A Line of the workload file
+        @param attrs: List of attributes to be considered. Default None, all attributes will be considered.
+        @param avoid_data_tokens: List of tokens to avoid the line
+        
+        @return: A dictionary with all the attributes requested. If the line is returned it means that the line has the token to avoid.     
     """ 
     if workload_line[0] in avoid_data_tokens:
         return workload_line
@@ -143,7 +164,6 @@ def workload_parser(workload_line, attrs=None, avoid_data_tokens=[';']):
         reg_exp += _dict[_key][0].format(_key)
     p = re.compile(reg_exp)
     _matches = p.match(workload_line)
-    # value_func = lambda line, _dict, key: 
     _dict_line = _matches.groupdict()
     return {key:_dict[key][1](_dict_line[key]) for key in _sequence} 
     
@@ -189,7 +209,10 @@ def sort_file(input_filepath, lines=None, sort_function=default_sorting_function
     return queued_times.get_list()  
     
 def cmp_to_key(mycmp):
-    'Convert a cmp= function into a key= function'
+    """
+    Convert a cmp= function into a key= function
+    
+    """
     class k(object):
         def __init__(self, obj, *args):
             self.obj = obj
@@ -207,71 +230,54 @@ def cmp_to_key(mycmp):
             return mycmp(self.obj, other.obj) != 0
     return k    
 
-def from_isodatetime_2_timestamp(timestamp):
-        p = re.compile(r'(\d{4})-(\d{2})-(\d{2})\s(\d{2}):(\d{2}):(\d{2})')
-        m = p.search(timestamp).groups()
-        # year, month, day, hour, minute, second, microsecond
-        t = datetime(year=int(m[0]), month=int(m[1]), day=int(m[2]), hour=int(m[3]), minute=int(m[4]), second=int(m[5]))
-        return int(t.timestamp())
-
-def sorted_attr(line, reg_exp=(r'\d+\.\w+;.+;\w+@\w+\.eurora\.cineca\.it;\w+;(?P<queue_time>\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2})__'), group_name='queue_time'):
-    p = re.compile(reg_exp)
-    return p.match(line).groupdict()[group_name]
-
-def sort_job_function(x, y):
-    return from_isodatetime_2_timestamp(sorted_attr(x)) - from_isodatetime_2_timestamp(sorted_attr(y))      
-
-class time_demon:
-    def __init__(self, interval, function, *args, **kwargs):
-        self._timer = None
-        self.interval = interval
-        self.function = function
-        self.args = args
-        self.kwargs = kwargs
-        self.is_running = False
-        self.start()
-
-    def _run(self):
-        self.is_running = False
-        self.start()
-        self.function(*self.args, **self.kwargs)
-
-    def start(self):
-        if not self.is_running:
-            self._timer = Timer(self.interval, self._run)
-            self._timer.start()
-            self.is_running = True
-
-    def stop(self):
-        self._timer.cancel()
-        self.is_running = False
+def from_isodatetime_2_timestamp(dtime):
+    """
+    Converts a ISO datetime to Unix Timestamp
+    @param dtime: Datetime in YYYY-MM-DD HH:MM:SS format
+    @return: Timestamp of the dtime 
+    """
+    p = re.compile(r'(\d{4})-(\d{2})-(\d{2})\s(\d{2}):(\d{2}):(\d{2})')
+    m = p.search(dtime).groups()
+    # year, month, day, hour, minute, second, microsecond
+    t = datetime(year=int(m[0]), month=int(m[1]), day=int(m[2]), hour=int(m[3]), minute=int(m[4]), second=int(m[5]))
+    return int(t.timestamp())
         
-class watcher_demon:
-
+class watcher_daemon:
+    """
+    Wathcer Daemon allows to track the simulation process through command line querying.
+    """
     MAX_LENGTH = 2048
-    PRINT_INTERVAL = 300
     
     def __init__(self, port, functions):
+        """
+        Watcher daemon constructor
+        
+        @param port: Port of the watcher   
+        @param functions: Available functions to call for data.
+        """
         self.server_address = ('', port)
         af = socket.AF_INET
         self.sock = socket.socket(af, socket.SOCK_STREAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.settimeout(1)
         self.thread = None
-        self.timedemon = None
         self.hastofinish = False
         self.const = CONSTANT()
         self.functions = functions
 
 
     def start(self):
+        """
+        Start the daemon
+        """
         self.thread = threading.Thread(target=self.listenForRequests)
         self.hastofinish = False
-        self.timedemon = time_demon(self.PRINT_INTERVAL, self.resourceusageprint)
         self.thread.start()
-        self.timedemon.start()
 
     def listenForRequests(self):
+        """
+        Listening for requests
+        """
         # Listen for incoming connections
         # Reusing
         self.sock.bind(self.server_address)
@@ -306,6 +312,10 @@ class watcher_demon:
         self.sock.close()
         
     def call_inner_function(self, name):
+        """
+        Call a function and retrives it results
+        @param name: name of the function 
+        """
         if name in self.functions:
             _func = self.functions[name]
             if callable(_func):
@@ -315,39 +325,51 @@ class watcher_demon:
         raise Exception('{} was no defined'.format(name)) 
 
     def stop(self):
+        """
+        Stop the daemon
+        """
         self.hastofinish = True
         self.timedemon.stop()
 
-    def resourceusageprint(self):
-        rm = self.const.resource_manager_instance
-        if rm is not None and rm.resources is not None:
-            print('- ' + rm.resources.usage())
-
-
 def generate_config(config_fp, **kwargs):
+    """
+    Creates a config file.
+    
+    @param config_fp: Filepath to the config
+    @param **kwargs: Source for the config data  
+    """
     _local = {}
     for k, v in kwargs.items():
-        print(k, v)
         _local[k] = v
     with open(config_fp, 'w') as c:
         json.dump(_local, c, indent=2)
 
 def hinted_tuple_hook(obj):
+    """
+    Decoder for specific object of json files, for preserving the type of the object.
+    It's used with the json.load function.
+    """
     if '__tuple__' in obj:
         return tuple(obj['items'])
     else:
         return obj
 
 def load_config(config_fp):
+    """
+    Loads an specific config file in json format
+    @param config_fp: Filepath of the config file.
+    
+    @return: Dictionary with the configuration. 
+    """
     _dict = None
     with open(config_fp) as c:
         _dict = json.load(c, object_hook=hinted_tuple_hook)
     return _dict
-
-def simulate_event(min_time, max_time):
-    time.sleep(random.randint(min_time, max_time))
     
 class Singleton(object):
+    """
+    Singleton class
+    """
     _instances = {}
 
     def __new__(class_, *args, **kwargs):
@@ -374,19 +396,26 @@ class CONSTANT(Singleton):
         New attrs could be passed as dict (load_constants) or simply with (attr, value) (load_constant)
     """    
     def load_constants(self, _dict):
+        """
+        Loads an entire dictionary into the singleton.
+        
+        @param _dict: Dictionary with the new parameters to load. 
+        """
         for k, v in _dict.items():
             self.load_constant(k, v)
             
     def load_constant(self, k, v):
+        """
+        Load an specific parameter.
+        @param k: Name of the parameter
+        @param v: Value of the parameter
+        """
         assert(not hasattr(self, k)), '{} already exists as constant ({}={}). Choose a new name.'.format(k, k, getattr(self, k))
         setattr(self, k, v)
 
-    #===========================================================================
-    # An idea for improving the config is use the class name of parameters, ths could be controlled with the following method, but how??  
-    # def __getattribute__(self, *args, **kwargs):
-    #     return object.__getattribute__(self, *args, **kwargs)
-    #===========================================================================
-
+#===============================================================================
+# Utils Types for the hinted tuple 
+#===============================================================================
 
 class str_:
     def __init__(self, text):
@@ -428,11 +457,6 @@ class str_resources:
             self.order = list (self.resources.keys())
         
     def __str__(self):
-        #=======================================================================
-        # r = self.resources
-        # print(self.nodes, r)
-        # return '#'.join([';'.join([node.split('_')[1], str(r.core), str(r.gpu), str(r.mic), str(r.mem)]) for node in self.nodes]) + '#'
-        #=======================================================================
         return '#'.join([';'.join([node.split('_')[1]] + [str(self.resources[_k]) for _k in self.order]) for node in self.nodes]) + '#'
 
 class str_nodes:
@@ -446,10 +470,18 @@ class str_nodes:
     def __str__(self):
         return ','.join([node.split('_')[1] for node in self.nodes])
 
-
-
 class sorted_object_list():
-    def __init__(self, sorting_priority, class_obj=None, _list=[]):
+    """
+    Sorted Object list, with two elements for comparison, the main and the tie breaker. Each object must have an id for identification
+    """
+    
+    def __init__(self, sorting_priority, _list=[]):
+        """
+        Sorted object list constructor. 
+        
+        @param sorting_priority: Dictionary with the 'main' and 'break_tie' keys for selecting the attributes for sorting. The value of the key corresponds to the object attribute.
+        @param _list: Optional. Initial list  
+        """
         assert(isinstance(sorting_priority, dict) and set(['main', 'break_tie']) <= set(sorting_priority.keys()))
 
         self.main_sort = sorting_priority['main']
@@ -468,14 +500,18 @@ class sorted_object_list():
         if _list:
             self.add(*_list)
             
-    # @abstractmethod
     def add(self, *args):
+        """
+        Add new elements to the list
+        
+        @param *args: List of new elements 
+        """
         for arg in args:
             _id = getattr(arg, 'id')
             if _id in self.map['id']:
                 continue
             self.objects[_id] = arg
-            _main = reduce(self._iter_func, self.main_sort.split('.'), arg)  # getattr(arg, self.main_sort)
+            _main = reduce(self._iter_func, self.main_sort.split('.'), arg)
             _sec = reduce(self._iter_func, self.break_tie_sort.split('.'), arg)
             _pos = bisect_left(self.main, _main)
             main_pos_r = bisect_right(self.main, _main)
@@ -490,16 +526,15 @@ class sorted_object_list():
                 self.secondary.insert(_pos, _sec)
             self.map_insert(self.map['id'], self.map['pos'], _pos, _id)
     
-    def _get_value(self, arg, attr):
-        
-        if isinstance(self.break_tie_sort, tuple):
-            _sec = arg
-            for _attr in self.break_tie_sort:
-                _sec = getattr(_sec, _attr)
-        else:
-            _sec = getattr(arg, self.break_tie_sort)
     
     def map_insert(self, ids_, poss_, new_pos, new_id):
+        """
+        Maps the new element to maintain the sorted list.
+        @param ids_: Current id of the object
+        @param poss_: Current position of the object
+        @param new_pos: New position
+        @param new_id: New id
+        """
         n_items = len(ids_)
         if n_items > 0:
             if not(new_pos in poss_):
@@ -511,8 +546,10 @@ class sorted_object_list():
             ids_[new_id] = new_pos
             poss_[new_pos] = new_id
     
-    # Improve this
-    def make_map(self, ids_, poss_, new_pos=0, debug=False):    
+    def make_map(self, ids_, poss_, new_pos=0, debug=False):
+        """
+        After a removal of a element the map must be reconstructed.
+        """    
         for _idx, _id in enumerate(self.list[new_pos:]):
             ids_[_id] = _idx + new_pos
             poss_[_idx + new_pos] = _id
@@ -523,13 +560,20 @@ class sorted_object_list():
                 del poss_[p] 
         
     def remove(self, *args, **kwargs):
+        """
+        Removal of an element
+        @param *args: List of elements
+        """
         for id in args:
             assert(id in self.objects)
             del self.objects[id]            
             self._remove(self.map['id'][id], **kwargs)
-            print(self.map)
             
     def _remove(self, _pos, **kwargs):
+        """
+        Removal of an element
+        @param *args: List of elements
+        """
         del self.list[_pos]
         del self.secondary[_pos]
         del self.main[_pos]
@@ -540,15 +584,32 @@ class sorted_object_list():
 
                 
     def get(self, pos):
+        """
+        Return an element in a specific position
+        
+        @param pos: Position of the object 
+        @return: Object in the specified position
+        """
         return self.list[pos]
 
     def get_object(self, id):
+        """
+        Return an element with a specific id.
+        @param id: Id of the object 
+        @return: Obect with the specific id
+        """        
         return self.objects[id]
      
     def get_list(self):
+        """
+        @return: The sorted list of ids of elements
+        """
         return self.list
     
     def get_object_list(self):
+        """
+        @return: The sorted list of objects
+        """
         return [self.objects[_id] for _id in self.list] 
                 
     def __len__(self):
@@ -556,6 +617,14 @@ class sorted_object_list():
     
     # Return None if there is no coincidence
     def pop(self, id=None, pos=None):
+        """
+        Pop an element of the sorted list. 
+        
+        @param id: id to be poped
+        @param pos: pos to be poped
+        
+        @return: Object
+        """
         assert(not all([id, pos])), 'Pop only accepts one or zero arguments'
         if not self.list:
             return None
@@ -593,15 +662,25 @@ class sorted_object_list():
             raise StopIteration
     
     def get_reversed_list(self):
+        """
+        @return:  Reversed list of ids
+        """
         return list(reversed(self.list))
     
     def get_reversed_object_list(self):
+        """
+        @return: Reversed list of objects
+        """
         return [ self.objects[_id] for _id in reversed(self.list)]
     
     def __str__(self):
         return str(self.list)
     
 class sorted_list:
+    """
+    Sorted list for single comparable objects (int, float, etc)
+     
+    """    
     def __init__(self, _list=[]):
         assert(isinstance(_list, (list)))
         self.list = []
@@ -609,39 +688,63 @@ class sorted_list:
             self.add(*_list)
     
     def add(self, *args):
+        """
+        Add elements to the sorted list
+        
+        @param *args: Array of elements 
+        """
         for arg in args:
             if len(self.list) == 0:
                 self.list.append(arg)
             else:
                 _num = arg
                 pos = bisect(self.list, _num)
-                #===============================================================
-                # mid = int(len(self.list) // 2)
-                # if self.list[mid] > _num:
-                #     pos = bisect(self.list, _num, hi=mid)
-                # else:
-                #     pos = bisect(self.list, _num, hi=mid)
-                #===============================================================
                 if self.list[pos - 1] != _num:
                     self.list.insert(pos, _num)
                     
     def get_list(self):
+        """
+        @return: Return the sorted list
+        """        
         return self.list
    
     def find(self, _num):
+        """
+        Find the position of the element in the list
+        
+        @return: Position in the list
+        """
         return bisect(self.list, _num) - 1
     
     def remove(self, *args):
+        """
+        Removes the elements from the list
+        
+        @param *args: List of elements 
+        """
         for arg in args:
             self.list.remove(arg)
                 
     def get(self, pos):
+        """
+        @return: Return a element in a specific position.
+        """
         return self.list[pos]
                 
     def __len__(self):
+        """
+        List's size
+        
+        @return: Size of the sorted list
+        """
         return len(self.list)
     
     def pop(self):
+        """
+        Pop the first element of the list
+        
+        @return: Return the first element of the list. None if it's empy.
+        """
         if self.list:
             return self.list.pop(0)
         return None
@@ -661,7 +764,9 @@ class sorted_list:
         return str(self.list)
     
     def _check_sort(self):
-        
+        """
+        Verifies the consistency of the list 
+        """
         for i in range(len(self.list) - 1):
             if self.list[i] >= self.list[i + 1]:
                 self.list[0:i + 1]
@@ -692,12 +797,28 @@ class FrozenDict(Mapping):
         return self._hash
     
 def clean_results(*args):
+    """
+    Removes the filepaths passed as argument
+    @param *args: List of filepaths 
+    """
     for fp in args:
         if os.path.isfile(fp) and os.path.exists(fp):
             os.remove(fp)
             
 class DEFAULT_SIMULATION:
-    
+    """
+    Default and base simulation parameters
+        CONFIG_FOLDER_NAME: Folder of the config files
+        RESULTS_FOLDER_NAME: Folder for the result files  
+        SCHEDULE_OUTPUT: Format of the dispatching plan file 
+        PPRINT_SCHEDULE_OUTPUT: Format of the dispatching plan file in pretty print version
+        SCHED_PREFIX: Prefix of the dispatching plan file
+        PPRINT_PREFIX: Prefix of the pprint file
+        STATISTICS_PREFIX: Prefix of the statistic file
+        BENCHMARK_PREFIX: Prefix of the benchmark file
+        RESOURCE_ORDER: How resource are sorted for printing purposes
+        WATCH_PORT: Port used for the watcher daemon.
+    """
     parameters = {
         "CONFIG_FOLDER_NAME": "config/",
         "RESULTS_FOLDER_NAME": "results/",
@@ -742,93 +863,11 @@ class DEFAULT_SIMULATION:
     }
     
 def path_leaf(path):
+    """
+    Extract path and filename
+    @param path: Entire filepath
+    
+    @return: Return a tuple that contains the (path, filename) 
+    """
     head, tail = ntpath.split(path)
     return (head, tail or ntpath.basename(head))
-            
-if __name__ == '__main__2':
-    Resource = namedtuple('Resource', ['q', 'w'])
-    Job = namedtuple('Job', ['id', 'resources', 'vars'])
-    lista = [
-        Job(**{'id': 'job.1', 'resources': Resource(**{'q': '5', 'w':'2'}), 'vars': {'w': 2} }),
-        Job(**{'id': 'job.2', 'resources': Resource(**{'q': '5', 'w':'1'}), 'vars': {'w': 1} }),
-        Job(**{'id': 'job.3', 'resources': Resource(**{'q': '3', 'w':'1'}), 'vars': {'w': 1} }),
-        Job(**{'id': 'job.4', 'resources': Resource(**{'q': '1', 'w':'10'}), 'vars': {'w': 10} }),
-        Job(**{'id': 'job.5', 'resources': Resource(**{'q': '1', 'w':'1'}), 'vars': {'w': 1} }),
-        Job(**{'id': 'job.6', 'resources': Resource(**{'q': '6', 'w':'1'}), 'vars': {'w': 1} }),
-        Job(**{'id': 'job.7', 'resources': Resource(**{'q': '6', 'w':'7'}), 'vars': {'w': 7} }),
-        Job(**{'id': 'job.8', 'resources': Resource(**{'q': '4', 'w':'2'}), 'vars': {'w': 2} }),
-        Job(**{'id': 'job.9', 'resources': Resource(**{'q': '4', 'w':'1'}), 'vars': {'w': 1} }),
-        ]
-    sorting_priority = {'main': 'resources.q', 'break_tie': 'vars.w'}
-    s_obj = Job
-    slist = sorted_object_list(sorting_priority, s_obj)
-    slist.add(*lista)
-    print('All elements: ', slist)
-    print('Inverse List: ', slist.get_reversed_list())
-    _pop = slist.pop()
-    print('Pop : ', _pop, '. Remaining list: ', slist)
-    _pop = slist.pop(pos=1)
-    print('Pop : ', _pop, '. Remaining list: ', slist)
-    _pop = slist.pop(id='job.2')
-    print('Pop : ', _pop, '. Remaining list: ', slist)
-    _id = 'job.1'
-    slist.remove(_id, debug=True)
-    print('Removing : ', _id, '. Remaining list: ', slist)
-    while slist.pop():
-        print(slist)
-            
-if __name__ == '__main__2':
-    Job = namedtuple('Job', ['id', 'q', 'w'])
-    lista = [
-        Job(**{'id': 'job.1', 'q': '5', 'w':'2'}),
-        Job(**{'id': 'job.2', 'q': '5', 'w':'1'}),
-        Job(**{'id': 'job.3', 'q': '3', 'w':'1'}),
-        Job(**{'id': 'job.4', 'q': '1', 'w':'10'}),
-        Job(**{'id': 'job.5', 'q': '1', 'w':'1'}),
-        Job(**{'id': 'job.6', 'q': '6', 'w':'1'}),
-        Job(**{'id': 'job.7', 'q': '6', 'w':'7'}),
-        Job(**{'id': 'job.8', 'q': '4', 'w':'2'}),
-        Job(**{'id': 'job.9', 'q': '4', 'w':'1'}),
-        ]
-    sorting_priority = {'main': 'q', 'break_tie':'w'}
-    s_obj = Job
-    slist = sorted_object_list(sorting_priority, s_obj)
-    slist.add(*lista)
-    print(slist)
-    print(slist.reverse())
-    if 'job.8' in slist:
-        print('si')
-    slist.remove(*['job.8'])
-    print(slist)
-    if 'job.8' not in slist:
-        print('no')
-    
-if __name__ == '__main__':
-    random.seed(0)
-    lista = sorted_list([])
-    
-    max_val = 10000
-    values = random.sample(range(1, max_val * 2), max_val)
-    random.shuffle(values)
-    print('Adding new elements and resorting everytime')
-    i_time = time.clock()
-    for _v in values:
-        lista.add(_v)
-    print('Custom sorting time: ', time.clock() - i_time, len(lista.get_list()))
-    
-    i_time = time.clock()
-    inc_list = []
-    for i in values:
-        inc_list.append(i)
-        sorted(inc_list)
-    print('Sorting time: ', time.clock() - i_time, len(values))
-    
-    print('Full list sorting')
-    lista = sorted_list([])
-    i_time = time.clock()
-    lista.add(*values)
-    print('Custom sorting time: ', time.clock() - i_time, len(lista.get_list()))
-    
-    i_time = time.clock()
-    sorted(values)
-    print('Sorting time: ', time.clock() - i_time, len(values))

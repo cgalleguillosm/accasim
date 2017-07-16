@@ -25,7 +25,7 @@ from time import clock as _clock, sleep as _sleep
 from datetime import datetime
 from abc import abstractmethod, ABC
 from accasim.utils.reader_class import reader
-from accasim.utils.misc import CONSTANT, watcher_demon, DEFAULT_SIMULATION, load_config, path_leaf, clean_results
+from accasim.utils.misc import CONSTANT, watcher_daemon, DEFAULT_SIMULATION, load_config, path_leaf, clean_results
 from accasim.utils.visualization_class import scheduling_visualization
 from accasim.base.event_class import event_mapper
 from accasim.base.resource_manager_class import resources_class, resource_manager
@@ -300,7 +300,7 @@ class hpc_simulator(simulator_base):
                 'current_time_function': self.mapper.simulated_current_time
             }
             self.daemons['watcher'] = {
-                'class': watcher_demon,
+                'class': watcher_daemon,
                 'args': [self.constants.WATCH_PORT, functions],
                 'object': None
             }

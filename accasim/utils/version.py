@@ -21,4 +21,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-version = '0.0.4'
+# Version of the simulator
+# PyPi uses this value to set the version of the package 
+version = '0.0.5'
