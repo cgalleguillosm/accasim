@@ -24,7 +24,6 @@ SOFTWARE.
 import logging
 from copy import deepcopy
 from accasim.utils.misc import CONSTANT, FrozenDict
-import sys
 
 class resources_class:
     """
@@ -49,8 +48,6 @@ class resources_class:
         self.resources_status = {}
         self.system_resource_types = []
         self.system_total_resources = None
-        # self.resources_tree = resource_map(kwargs['groups'])
-        # self.allocated = {}
         self.node_prefix = kwargs['node_prefix'] if 'node_prefix' in kwargs else 'node_' 
         self.available_prefix = kwargs['available_prefix'] if 'available_prefix' in kwargs else 'a_'
         self.used_prefix = kwargs['used_prefix'] if 'available_prefix' in kwargs else 'u_'
@@ -69,19 +66,17 @@ class resources_class:
                 _attrs_values = self.groups[group_name]
                 self.resources[_node_name] = deepcopy(_attrs_values)
                 self.resources_status[_node_name] = self.ON
-                # self.resources_tree.add(_node_name, kwargs['groups'][group_name])
                 j += 1              
 
     def total_resources(self):
+        """
+            Total system resources
+            
+            @return: A dictionary with the resources and its values.
+        """
         if self.system_total_resources:
             return self.system_total_resources
         avl_types = {_type: 0 for _type in self.system_resource_types}
-        #=======================================================================
-        # for _node_values in self.resources.values():
-        #     for _type in avl_types.keys():
-        #         print(_type, self.available_resource_key(_type), _node_values)
-        #         avl_types[_type] += _node_values[self.available_resource_key(_type)]
-        #=======================================================================
         for _node, _node_values in self.resources.items():
             for _type in avl_types.keys():
                 avl_types[_type] += _node_values[self.available_resource_key(_type)]
@@ -89,11 +84,23 @@ class resources_class:
         return avl_types
 
     def define_group(self, name, group):
+        """
+         Internal method for defining groups of resources.
+         
+         @param name: Name of the group
+         @param group: Values of the group. As defined in the system config.  
+        """
         assert(isinstance(group, dict))
         assert(name not in self.groups), ('Repreated name group: %s. Select another one.' % (name))
         self.groups[name] = group
 
     def allocate(self, node_name, **kwargs):
+        """
+        Method for job allocation. It receives the node name and the resources to be used.
+        
+        @param node_name: Name of the node to be updated.
+        @param ****kwargs: Dictionary of the system resources and its values to be used. 
+        """
         # TODO: Update using self.system_resource_types
         assert(self.resources), 'The resources must be setted before jobs allocation'
         assert(self.resources_status[node_name] == self.ON), 'The Node {} is {}, it is impossible to allocate any job'
@@ -104,9 +111,14 @@ class resources_class:
             assert(v <= _rem_attr), 'The event was request {} {}, but there is only {} available.'.format(v, k, _rem_attr)
             _resources['%s%s' % (self.used_prefix, k)] += v
             _used[k] = _rem_attr - v
-        # self.resources_tree.update(node_name, _used)
 
     def release(self, node_name, **kwargs):
+        """
+        Method for allocation release. It receives the node name and the resources to be released.
+        
+        @param node_name: Name of the node to be updated.
+        @param ****kwargs: Dictionary of the system resources and its values to be released. 
+        """
         # TODO: Update using self.system_resource_types
         assert(self.resources), 'The resources must be setted before release resources'
         assert(self.resources_status[node_name] == self.ON), 'The Node {} is {}.'
@@ -114,12 +126,12 @@ class resources_class:
         for k, v in kwargs.items():
             _resources['%s%s' % (self.used_prefix, k)] -= v
             assert(_resources['%s%s' % (self.used_prefix, k)] >= 0), 'The event was request to release %i %s, but there is only %i available. It is impossible less than 0 resources' % (v, k, _resources['%s%s' % (self.used_prefix, k)])
-        #=======================================================================
-        # self.resources_tree.update(node_name, {
-        #     attr: (_resources['%s_%s' % (self.available_prefix, attr)] - _resources['%s_%s' % (self.used_prefix, attr)]) for attr in set([attr.split('_')[1] for attr in _resources.keys()])})
-        #=======================================================================
 
     def availability(self):
+        """
+        System availablity calculation
+        @return: Return a dictionary with the system availability. In terms of {node: {resource: value}}
+        """
         # TODO: Update using self.system_resource_types
         assert(self.resources)
         _a = {}
@@ -133,6 +145,10 @@ class resources_class:
         return _a
 
     def usage(self):
+        """
+        System usage calculation
+        @return: Return a string of the system usage 
+        """
         # TODO: Update using self.system_resource_types
         _str = "System usage: "
         _str_usage = []
@@ -147,6 +163,9 @@ class resources_class:
         return (_str + ', '.join(_str_usage))
 
     def system_capacity(self):
+        """
+        @return: Return total system capacity 
+        """
         _capacity = {
             r: {'total':
                 sum([attrs[self.available_prefix + r] for _, attrs in self.resources.items()]) 
@@ -156,9 +175,19 @@ class resources_class:
         return _capacity
     
     def resource_manager(self):
+        """
+            Instantiation of the resource manager object
+            @return: Resource manager object. 
+        """
         return resource_manager(self)
     
     def available_resource_key(self, _key):
+        """
+            Generate the resource key names
+            @param _key: Name of the resource
+            
+            @return: Return the Resource key name. 
+        """
         assert(_key in self.system_resource_types), '{} is not a resource type'.format(_key)
         return '{}{}'.format(self.available_prefix, _key)        
 
@@ -175,11 +204,23 @@ class resources_class:
 class resource_manager:
 
     def __init__(self, _resource):
+        """
+        Constructor for Resource Manager.
+        This class handles the resources through Allocation and Release methods.
+        
+        @param _resource: An instance of the resources class. It defines the system capacity.  
+        """
         assert(isinstance(_resource, resources_class)), ('Only %s class is acepted for resources' % resources_class.__name__)
         self.resources = _resource
         self.actual_events = {}
 
     def allocate_event(self, event, node_names):
+        """
+        Method for job allocation. It uses the event request to determine the resources to be allocated.
+        
+        @param event: Job event object.
+        @param node_names: List of nodes where the job will be allocated.  
+        """
         logging.debug('Allocating %s event in nodes %s' % (event.id, ', '.join([node for node in node_names])))
         _resources = event.requested_resources
         _attrs = event.requested_resources.keys()
@@ -193,27 +234,48 @@ class resource_manager:
             self.resources.allocate(node_name, **values)
 
     def remove_event(self, id):
+        """
+        Method for job release. It release the allocated resources on the specific nodes.
+        
+        @param id: Job Id 
+        """
         for node_name, values in self.actual_events.pop(id).items():
             self.resources.release(node_name, **values)
 
     def node_resources(self, *args):
+        """
+        @param *args: list of node names 
+        
+        Print nodes and its resources 
+        """
         for arg in args:
             print(arg, self.resources.resources[arg])
 
     def availability(self):
+        """
+        @return: Return system availability
+        """        
         return self.resources.availability()
 
     def resource_types(self):
+        """
+        @return: Return resource types of the system
+        """
         return self.resources.system_resource_types
 
     def get_nodes(self):
+        """
+        @return: Return node names
+        """
         return list(self.resources.resources.keys())
     
     def get_total_resources(self, *args):
         """
             Return the total system resource for the required argument. The resource have to exist in the system. 
             If no arguments is proportioned all resources are returned.
-            @param *args: Depends on the system configuration. But at least it must have ('core', 'mem') resources          
+            @param *args: Depends on the system configuration. But at least it must have ('core', 'mem') resources.
+            
+            @return: Dictionary of the resources and its values.          
         """
         _resources = self.resources.total_resources()
         if not args or len(args) == 0:
@@ -225,6 +287,11 @@ class resource_manager:
         return avl_types
 
     def groups_available_resource(self, _key=None):
+        """
+        @param _key: None for values of all types for all groups. Giving a specific key will return the resource for the specific type
+        
+        @return: Dictionary of {group{type: value}}   
+        """
         if not _key:
             _group = {}
             for k, v in self.resources.groups.items():
@@ -232,13 +299,3 @@ class resource_manager:
             return _group
         _group_key = self.resources.available_resource_key(_key)
         return {_group:_v[_group_key]  for _group, _v in self.resources.groups.items()} 
-
-    #===========================================================================
-    # def get_used_resources(self):
-    #     prf = 'u'
-    #     used = {}
-    #     for k in self.resource_types():
-    #         s = '_'.join([prf, k])
-    #         used[k] = sum([attrs[s] for attrs in self.resources.resources.values()])
-    #     return used
-    #===========================================================================

@@ -24,9 +24,9 @@ SOFTWARE.
 from accasim.base.resource_manager_class import resource_manager
 from accasim.base.allocator_class import allocator_base
 from accasim.utils.misc import CONSTANT
+from abc import abstractmethod, ABC
 import random
 import logging
-from abc import abstractmethod, ABC
 
 
 class scheduler_base(ABC):
@@ -75,6 +75,11 @@ class scheduler_base(ABC):
         raise Exception('This function must be implemented!!')
     
     def set_resource_manager(self, _resource_manager):
+        """
+            Set a resource manager
+            
+            @param _resource_manager: An instantiation of a resource_manager class or None 
+        """        
         if _resource_manager:
             self.allocator.set_resource_manager(_resource_manager)
             assert isinstance(_resource_manager, resource_manager), 'Resource Manager not valid for scheduler'
@@ -83,6 +88,15 @@ class scheduler_base(ABC):
             self.resource_manager = None
             
     def schedule(self, cur_time, es_dict, es, _debug=False):
+        """
+        Method for schedule. It call the specific scheduling method.
+        :param cur_time: current time
+        :param es_dict: dictionary with full data of the events
+        :param es: events to be scheduled
+        :param _debug: Flag to debug
+        
+        :return a tuple of (time to schedule, event id, list of assigned nodes)
+        """
         assert(self.resource_manager is not None), 'The resource manager is not defined. It must defined prior to run the simulation.'
         if _debug:
             print('{}: {} queued jobs to be considered in the dispatching plan'.format(cur_time, len(es)))
@@ -128,13 +142,6 @@ class simple_heuristic(scheduler_base):
         self.allocator.set_resources(avl_resources)
 
         running_events = self.resource_manager.actual_events
-        #=======================================================================
-        # logging.debug('---- %s ----' % cur_time)
-        # logging.debug('Available res: \n%s' % '\n'.join(
-        #     ['%s: %s' % (k_1, ', '.join(['%s: %s' % (k_2, v_2) for k_2, v_2 in v_1.items()])) for k_1, v_1 in
-        #      avl_resources.items() if v_1['core'] > 0 and v_1['mem'] > 0]))
-        # logging.debug('Running es: %s' % ''.join(['%s,' % r for r in running_events]))
-        #=======================================================================
 
         # Building the jobs list from the ids, and sorting it
         to_schedule_e = [es_dict[e] for e in es]
@@ -159,6 +166,9 @@ class fifo_sched(simple_heuristic):
         }
 
     def __init__(self, _allocator, _resource_manager=None, _seed=0, **kwargs):
+        """
+        FIFO Constructor
+        """
         simple_heuristic.__init__(self, _seed, _resource_manager, _allocator, self.name, self.sorting_arguments, **kwargs)
         
 class ljf_sched(simple_heuristic):
@@ -173,6 +183,9 @@ class ljf_sched(simple_heuristic):
         }
 
     def __init__(self, _allocator, _resource_manager=None, _seed=0, **kwargs):
+        """
+        LJF Constructor
+        """
         simple_heuristic.__init__(self, _seed, _resource_manager, _allocator, self.name, self.sorting_arguments, **kwargs)
         
 class sjf_sched(simple_heuristic):
@@ -187,6 +200,9 @@ class sjf_sched(simple_heuristic):
         }
 
     def __init__(self, _allocator, _resource_manager=None, _seed=0, **kwargs):
+        """
+        SJF Constructor
+        """
         simple_heuristic.__init__(self, _seed, _resource_manager, _allocator, self.name, self.sorting_arguments, **kwargs)
 
 class easybf_sched(scheduler_base):
@@ -200,6 +216,9 @@ class easybf_sched(scheduler_base):
     name = 'EASY_Backfilling'
     
     def __init__(self, _allocator, _resource_manager=None, _seed=0, **kwargs):
+        """
+        Easy BackFilling Constructor
+        """
         scheduler_base.__init__(self, _seed, _resource_manager, _allocator)
         self.blocked_job_id = None
         self.reserved_slot = (None, [])
@@ -225,10 +244,8 @@ class easybf_sched(scheduler_base):
             :return a tuple of (time to schedule, event id, list of assigned nodes)  
         """
 
-# ALLOCATOR LOGIC
         avl_resources = self.resource_manager.availability()
         self.allocator.set_resources(avl_resources)
-# ---------------
 
         if _debug:
             print('---------%s---------' % (cur_time))

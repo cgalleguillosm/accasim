@@ -39,7 +39,7 @@ class allocator_base(ABC):
         Allocator constructor (based on scheduler)
 
         :param seed: Seed if there is any random event
-        :param res_man: resource manager for the system
+        :param res_man: resource manager for the system.
         :param kwargs: Nothing for the moment         
         """
         random.seed(seed)
