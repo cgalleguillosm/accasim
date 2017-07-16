@@ -139,4 +139,7 @@ class reader:
                 if self.max_lines == self.last_line:
                     self.EOF = False
                 self.max_lines += 1
-        return None if not _dicts else _dicts 
+        return None if not _dicts else _dicts
+    
+class default_reader(reader):
+    pass 

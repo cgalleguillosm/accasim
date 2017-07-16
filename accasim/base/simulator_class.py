@@ -31,6 +31,7 @@ from accasim.base.event_class import event_mapper
 from accasim.base.resource_manager_class import resources_class, resource_manager
 from accasim.base.scheduler_class import scheduler_base
 from accasim.base.event_class import job_factory
+from accasim.base.additional_data import additional_data
 from threading import Thread, Event as THEvent
 from os import getpid as _getpid, path as _path, makedirs as _makedirs
 from psutil import Process as _Process
@@ -40,7 +41,7 @@ import asyncio
 
 class simulator_base(ABC):
 
-    def __init__(self, _resource_manager, _reader, _job_factory, _dispatcher, config_file=None, **kwargs):
+    def __init__(self, _resource_manager, _reader, _job_factory, _dispatcher, _additional_data, config_file=None, **kwargs):
         """
         Simulator base constructor
         @param _resource_manager: Resource manager class instantiation
@@ -64,6 +65,8 @@ class simulator_base(ABC):
         self.dispatcher = _dispatcher
 
         self.mapper = event_mapper(self.resource_manager)
+        self.additional_data = self.additional_data_init(_additional_data)
+        
         self.show_config()
         if self.constants.OVERWRITE_PREVIOUS:
             self.remove_previous()
@@ -81,6 +84,23 @@ class simulator_base(ABC):
         Method that loads the job from a datasource. Check the default implementation in the hpc_simulator class.
         """
         raise NotImplementedError('Must be implemented!')
+    
+    def additional_data_init(self, _additional_data):
+        """
+        Initializes the additional_data classes or set the event manager in the objects  
+        @param _additional_data: A list of additional_data objects or classes
+        @return: Return a list with all the additional_data objects ready to be executed
+        """
+        _ad = []
+        for ad in _additional_data:
+            if isinstance(ad, additional_data):
+                ad.set_event_manager(self.mapper)
+                _ad.append(ad)
+            elif issubclass(ad, additional_data):
+                _ad.append(ad(self.mapper))
+            else:
+                raise('Additional data class must be a subclass of the additional_data class')
+        return _ad
 
     def check_request(self, attrs_names):
         """
@@ -203,16 +223,17 @@ class hpc_simulator(simulator_base):
     """
     Default implementation of the simulator_base class.    
     """
-    def __init__(self, sys_config, workload, _scheduler, _resource_manager=None, _reader=None, _job_factory=None, _simulator_config=None, overwrite_previous=True,
+    def __init__(self, sys_config, _scheduler, workload=None, _resource_manager=None, _reader=None, _job_factory=None, _additional_data=[], _simulator_config=None, overwrite_previous=True,
         scheduling_output=True, pprint_output=False, benchmark_output=False, statistics_output=True, show_statistics=True, **kwargs):
         """
         Constructor of the HPC Simulator class.
         @param sys_config: Filepath to the synthetic system configuration. Used by the resource manager to create the system.
-        @param workload: Filepath to the workload. Used by the reader.
         @param _scheduler: Dispatching method
+        @param workload: Filepath to the workload, it is used by the reader. If a reader is not given, the default one is used.
         @param _resource_manager: Optional. Instantiation of the resource_manager class.
         @param _reader: Optional. Instantiation of the reader class.
         @param _job_factory: Optional. Instantiation of the job_factory class.
+        @param _additional_data: Optional. Array of Objects or Classes of additional_data class.  
         @param _simulator_config: Optional. Filepath to the simulator config. For replacing the misc.DEFAULT_SIMULATION parameters.
         @param overwrite_previous: Default True. Overwrite previous results. 
         @param scheduling_output: Default True. Dispatching plan output. Format modificable in DEFAULT_SIMULATION  
@@ -240,13 +261,17 @@ class hpc_simulator(simulator_base):
             _job_factory = job_factory(_resource_manager, **args)
         if 'tweak_function' not in kwargs:
             kwargs['tweak_function'] = self.default_tweak_function
-        if not _reader:
+        if workload and not _reader:
             _reader_arguments = ['max_lines']
             args = self.prepare_arguments(_reader_arguments, kwargs)
             _reader = self.set_workload_input(workload, **args)
+        if not isinstance(_additional_data, list):
+            assert(isinstance(_additional_data, additional_data) or issubclass(_additional_data, additional_data)), 'Only subclasses of additional_data class are acepted as _additional_data argument '
+            _additional_data = [_additional_data]
+            
         _scheduler.set_resource_manager(_resource_manager)
         
-        simulator_base.__init__(self, _resource_manager, _reader, _job_factory, _scheduler, config_file=_simulator_config, **kwargs)
+        simulator_base.__init__(self, _resource_manager, _reader, _job_factory, _scheduler, _additional_data, config_file=_simulator_config, **kwargs)
         
         self.start_time = None
         self.end_time = None
@@ -386,7 +411,12 @@ class hpc_simulator(simulator_base):
             if _debug:
                 print('{} INI: Loaded {}, Queued {}, Running {}, Finished {}'.format(_actual_time, len(self.mapper.loaded), len(self.mapper.queued), len(self.mapper.running), len(self.mapper.finished)))
             self.mapper.release_ended_events(event_dict)
-
+            
+            #===================================================================
+            # External behavior
+            #===================================================================
+            self.execute_additional_data()
+            
             queuelen = len(events)
             schedStartTime = _clock() * 1000
             schedEndTime = schedStartTime
@@ -562,3 +592,7 @@ class hpc_simulator(simulator_base):
                     _args.append(_arg)
             self.daemons[_name]['object'] = _class(*_args)
             self.daemons[_name]['object'].start()
+            
+    def execute_additional_data(self):
+        for ad in self.additional_data:
+            ad.execute()            
