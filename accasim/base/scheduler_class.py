@@ -148,7 +148,7 @@ class simple_heuristic(scheduler_base):
         to_schedule_e.sort(**self.sorting_parameters)
         _time = cur_time
 
-        allocated_events = self.allocator.allocating_method(to_schedule_e, _time, skip=False, debug=_debug)
+        allocated_events = self.allocator.allocate(to_schedule_e, _time, skip=False, debug=_debug)
 
         return allocated_events
 

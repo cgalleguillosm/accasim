@@ -30,5 +30,5 @@ sys_cfg = 'config/HPC2N.config'
 
 allocator = ffp_alloc()
 dispatcher = fifo_sched(allocator)
-simulator = hpc_simulator(sys_cfg, dispatcher, workload, _additional_data=example_class, RESULTS_FOLDER_NAME='results') 
+simulator = hpc_simulator(sys_cfg, dispatcher, workload, RESULTS_FOLDER_NAME='results') 
 simulator.start_simulation(1027839845, visualization=False, watcher=False)
