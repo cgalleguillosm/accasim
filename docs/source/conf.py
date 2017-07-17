@@ -19,7 +19,7 @@
 #
 import os
 import sys
-sys.path.insert(0, os.path.abspath('D:\\Programas\\git\\accasim'))
+sys.path.insert(0, '../../accasim')
 
 
 # -- General configuration ------------------------------------------------
