@@ -81,12 +81,15 @@ default_swf_mapper = {
 
 def default_sorting_function(obj1, obj2, avoid_data_tokens=[';']):
     """
-    Function for sorting the swf files in ascending order. If one of the object belongs to avoid_data_tokens, the same order is maintained by returning 1.
-    @param obj1: Object 1
-    @param obj2: Object 2
-    @param avoid_data_tokens: Tokens to avoid
     
-    @return: return a positive number for maintaing the order, or a negative one to change the order.
+    Function for sorting the swf files in ascending order. If one of the object belongs to avoid_data_tokens, the same order is maintained by returning 1.
+    
+    :param obj1: Object 1
+    :param obj2: Object 2
+    :param avoid_data_tokens: Tokens to avoid
+    
+    :return: return a positive number for maintaing the order, or a negative one to change the order.
+    
     """ 
     if obj1[0] in avoid_data_tokens or obj2[0] in avoid_data_tokens:
         return 1
@@ -94,11 +97,13 @@ def default_sorting_function(obj1, obj2, avoid_data_tokens=[';']):
 
 def default_sorted_attribute(workload_line, attr='submit_time', converter=None):
     """
-    @param workload_line: A line readed from the file.
-    @param attr: Attribute of the line for sorting.
-    @param converter: Converter function to cast the attribute.   
     
-    @return: Returns the attribute of the line. Casted if it's required. 
+    :param workload_line: A line readed from the file.
+    :param attr: Attribute of the line for sorting.
+    :param converter: Converter function to cast the attribute.   
+    
+    :return: Returns the attribute of the line. Casted if it's required. 
+    
     """
     value = workload_parser(workload_line, attr)[attr]
     if converter:
@@ -107,6 +112,7 @@ def default_sorted_attribute(workload_line, attr='submit_time', converter=None):
 
 def workload_parser(workload_line, attrs=None, avoid_data_tokens=[';']):
     """ 
+    
         Attributes of each workload line in a SWF format (separated by space):
         
         1. job_number -- a counter field, starting from 1.
@@ -128,11 +134,12 @@ def workload_parser(workload_line, attrs=None, avoid_data_tokens=[';']):
         17. preceding_job_number -- this is the number of a previous job in the workload, such that the current job can only start after the termination of this preceding job. Together with the next field, this allows the workload to include feedback as described below.
         18. think_time_prejob -- this is the number of seconds that should elapse between the termination of the preceding job and the submittal of this one.
         
-        @param workload_line: A Line of the workload file
-        @param attrs: List of attributes to be considered. Default None, all attributes will be considered.
-        @param avoid_data_tokens: List of tokens to avoid the line
+        :param workload_line: A Line of the workload file
+        :param attrs: List of attributes to be considered. Default None, all attributes will be considered.
+        :param avoid_data_tokens: List of tokens to avoid the line
         
-        @return: A dictionary with all the attributes requested. If the line is returned it means that the line has the token to avoid.     
+        :return: A dictionary with all the attributes requested. If the line is returned it means that the line has the token to avoid.     
+    
     """ 
     if workload_line[0] in avoid_data_tokens:
         return workload_line
@@ -170,19 +177,18 @@ def workload_parser(workload_line, attrs=None, avoid_data_tokens=[';']):
 
 def sort_file(input_filepath, lines=None, sort_function=default_sorting_function, avoid_data_tokens=[';'], output_filepath=None):
     """
-        The input file for the simulator must be sorted by submit time. It modifies the file input file, 
-        or also can be saved to a new one if the output_filepath arg is defined.
-          
-        :param input_filepath: Input workload file
-        :param lines: Number of lines to be read. It includes all lines from the begining of the file. 
-        :param sort_function: (Optional) The function that sorts the file by submit time. The user is responsable 
-                to define the correct function. If a workload with SWF format is used, by default 
-                default_sorting_function (SWF workload) is used.
-        :param avoid_data_tokens: (Optional) By default avoid to modify comment lines of SWF workload.      
-        :param output_filepath: (Optional) The sorted data is saves into another file (this filepath). 
-                It will not content the lines that begin with tokens of the avoid_data_tokens var.
-        
-        :return: A list of queued time points.  
+    
+    The input file for the simulator must be sorted by submit time. It modifies the file input file, 
+    or also can be saved to a new one if the output_filepath arg is defined.
+      
+    :param input_filepath: Input workload file
+    :param lines: Number of lines to be read. It includes all lines from the begining of the file. 
+    :param sort_function: (Optional) The function that sorts the file by submit time. The user is responsable to define the correct function. If a workload with SWF format is used, by default default_sorting_function (SWF workload) is used.
+    :param avoid_data_tokens: (Optional) By default avoid to modify comment lines of SWF workload.      
+    :param output_filepath: (Optional) The sorted data is saves into another file (this filepath). It will not content the lines that begin with tokens of the avoid_data_tokens var.
+    
+    :return: A list of queued time points.  
+
     """
     assert(callable(sort_function))
     logging.debug('Sorting File: %s ' % (input_filepath))
@@ -210,6 +216,7 @@ def sort_file(input_filepath, lines=None, sort_function=default_sorting_function
     
 def cmp_to_key(mycmp):
     """
+    
     Convert a cmp= function into a key= function
     
     """
@@ -232,9 +239,12 @@ def cmp_to_key(mycmp):
 
 def from_isodatetime_2_timestamp(dtime):
     """
+    
     Converts a ISO datetime to Unix Timestamp
-    @param dtime: Datetime in YYYY-MM-DD HH:MM:SS format
-    @return: Timestamp of the dtime 
+    :param dtime: Datetime in YYYY-MM-DD HH:MM:SS format
+    
+    :return: Timestamp of the dtime 
+    
     """
     p = re.compile(r'(\d{4})-(\d{2})-(\d{2})\s(\d{2}):(\d{2}):(\d{2})')
     m = p.search(dtime).groups()
@@ -244,16 +254,20 @@ def from_isodatetime_2_timestamp(dtime):
         
 class watcher_daemon:
     """
+    
     Wathcer Daemon allows to track the simulation process through command line querying.
+    
     """
     MAX_LENGTH = 2048
     
     def __init__(self, port, functions):
         """
+    
         Watcher daemon constructor
         
-        @param port: Port of the watcher   
-        @param functions: Available functions to call for data.
+        :param port: Port of the watcher   
+        :param functions: Available functions to call for data.
+    
         """
         self.server_address = ('', port)
         af = socket.AF_INET
@@ -268,7 +282,9 @@ class watcher_daemon:
 
     def start(self):
         """
+    
         Start the daemon
+    
         """
         self.thread = threading.Thread(target=self.listenForRequests)
         self.hastofinish = False
@@ -276,7 +292,9 @@ class watcher_daemon:
 
     def listenForRequests(self):
         """
+    
         Listening for requests
+    
         """
         # Listen for incoming connections
         # Reusing
@@ -313,8 +331,11 @@ class watcher_daemon:
         
     def call_inner_function(self, name):
         """
+    
         Call a function and retrives it results
-        @param name: name of the function 
+    
+        :param name: name of the function 
+    
         """
         if name in self.functions:
             _func = self.functions[name]
@@ -326,17 +347,21 @@ class watcher_daemon:
 
     def stop(self):
         """
+    
         Stop the daemon
+    
         """
         self.hastofinish = True
         self.timedemon.stop()
 
 def generate_config(config_fp, **kwargs):
     """
+    
     Creates a config file.
     
-    @param config_fp: Filepath to the config
-    @param **kwargs: Source for the config data  
+    :param config_fp: Filepath to the config
+    :param \*\*kwargs: Source for the config data  
+    
     """
     _local = {}
     for k, v in kwargs.items():
@@ -346,8 +371,10 @@ def generate_config(config_fp, **kwargs):
 
 def hinted_tuple_hook(obj):
     """
+    
     Decoder for specific object of json files, for preserving the type of the object.
     It's used with the json.load function.
+    
     """
     if '__tuple__' in obj:
         return tuple(obj['items'])
@@ -356,10 +383,13 @@ def hinted_tuple_hook(obj):
 
 def load_config(config_fp):
     """
-    Loads an specific config file in json format
-    @param config_fp: Filepath of the config file.
     
-    @return: Dictionary with the configuration. 
+    Loads an specific config file in json format
+    
+    :param config_fp: Filepath of the config file.
+    
+    :return: Dictionary with the configuration. 
+    
     """
     _dict = None
     with open(config_fp) as c:
@@ -368,7 +398,9 @@ def load_config(config_fp):
     
 class Singleton(object):
     """
+    
     Singleton class
+    
     """
     _instances = {}
 
@@ -379,10 +411,13 @@ class Singleton(object):
 
 class CONSTANT(Singleton):
     """
-        This class allows to load all config into the Singleton Object called CONSTANT. 
-        For accessing to all the parameters, it will be possible only calling the parameters as its attribute.
     
-        I.e:
+    This class allows to load all config into the Singleton Object called CONSTANT. 
+    For accessing to all the parameters, it will be possible only calling the parameters as its attribute.
+
+    
+    Example
+    
         Config:
         PATH = '/path/to/'
         
@@ -391,24 +426,33 @@ class CONSTANT(Singleton):
         print(c.PATH)
         
         >> /path/to/
+
+    Note
     
         It's loaded into all base class by default!
-        New attrs could be passed as dict (load_constants) or simply with (attr, value) (load_constant)
+    
+    New attrs could be passed as dict (load_constants) or simply with (attr, value) (load_constant)
+    
     """    
     def load_constants(self, _dict):
         """
+        
         Loads an entire dictionary into the singleton.
         
-        @param _dict: Dictionary with the new parameters to load. 
+        :param _dict: Dictionary with the new parameters to load. 
+        
         """
         for k, v in _dict.items():
             self.load_constant(k, v)
             
     def load_constant(self, k, v):
         """
+        
         Load an specific parameter.
-        @param k: Name of the parameter
-        @param v: Value of the parameter
+        
+        :param k: Name of the parameter
+        :param v: Value of the parameter
+        
         """
         assert(not hasattr(self, k)), '{} already exists as constant ({}={}). Choose a new name.'.format(k, k, getattr(self, k))
         setattr(self, k, v)
@@ -472,15 +516,19 @@ class str_nodes:
 
 class sorted_object_list():
     """
+    
     Sorted Object list, with two elements for comparison, the main and the tie breaker. Each object must have an id for identification
+    
     """
     
     def __init__(self, sorting_priority, _list=[]):
         """
+    
         Sorted object list constructor. 
         
-        @param sorting_priority: Dictionary with the 'main' and 'break_tie' keys for selecting the attributes for sorting. The value of the key corresponds to the object attribute.
-        @param _list: Optional. Initial list  
+        :param sorting_priority: Dictionary with the 'main' and 'break_tie' keys for selecting the attributes for sorting. The value of the key corresponds to the object attribute.
+        :param _list: Optional. Initial list  
+    
         """
         assert(isinstance(sorting_priority, dict) and set(['main', 'break_tie']) <= set(sorting_priority.keys()))
 
@@ -502,9 +550,11 @@ class sorted_object_list():
             
     def add(self, *args):
         """
+    
         Add new elements to the list
         
-        @param *args: List of new elements 
+        :param \*args: List of new elements 
+    
         """
         for arg in args:
             _id = getattr(arg, 'id')
@@ -529,11 +579,14 @@ class sorted_object_list():
     
     def map_insert(self, ids_, poss_, new_pos, new_id):
         """
+    
         Maps the new element to maintain the sorted list.
-        @param ids_: Current id of the object
-        @param poss_: Current position of the object
-        @param new_pos: New position
-        @param new_id: New id
+    
+        :param ids_: Current id of the object
+        :param poss_: Current position of the object
+        :param new_pos: New position
+        :param new_id: New id
+    
         """
         n_items = len(ids_)
         if n_items > 0:
@@ -548,7 +601,9 @@ class sorted_object_list():
     
     def make_map(self, ids_, poss_, new_pos=0, debug=False):
         """
+    
         After a removal of a element the map must be reconstructed.
+    
         """    
         for _idx, _id in enumerate(self.list[new_pos:]):
             ids_[_id] = _idx + new_pos
@@ -561,8 +616,11 @@ class sorted_object_list():
         
     def remove(self, *args, **kwargs):
         """
+    
         Removal of an element
-        @param *args: List of elements
+    
+        :param \*args: List of elements
+    
         """
         for id in args:
             assert(id in self.objects)
@@ -571,8 +629,11 @@ class sorted_object_list():
             
     def _remove(self, _pos, **kwargs):
         """
+        
         Removal of an element
-        @param *args: List of elements
+        
+        :param \*args: List of elements
+        
         """
         del self.list[_pos]
         del self.secondary[_pos]
@@ -585,30 +646,41 @@ class sorted_object_list():
                 
     def get(self, pos):
         """
+        
         Return an element in a specific position
         
-        @param pos: Position of the object 
-        @return: Object in the specified position
+        :param pos: Position of the object 
+        
+        :return: Object in the specified position
+        
         """
         return self.list[pos]
 
     def get_object(self, id):
         """
+        
         Return an element with a specific id.
-        @param id: Id of the object 
-        @return: Obect with the specific id
+        
+        :param id: Id of the object 
+        
+        :return: Obect with the specific id
+        
         """        
         return self.objects[id]
      
     def get_list(self):
         """
-        @return: The sorted list of ids of elements
+        
+        :return: The sorted list of ids of elements
+        
         """
         return self.list
     
     def get_object_list(self):
         """
-        @return: The sorted list of objects
+        
+        :return: The sorted list of objects
+        
         """
         return [self.objects[_id] for _id in self.list] 
                 
@@ -618,12 +690,14 @@ class sorted_object_list():
     # Return None if there is no coincidence
     def pop(self, id=None, pos=None):
         """
+        
         Pop an element of the sorted list. 
         
-        @param id: id to be poped
-        @param pos: pos to be poped
+        :param id: id to be poped
+        :param pos: pos to be poped
         
-        @return: Object
+        :return: Object
+        
         """
         assert(not all([id, pos])), 'Pop only accepts one or zero arguments'
         if not self.list:
@@ -663,13 +737,17 @@ class sorted_object_list():
     
     def get_reversed_list(self):
         """
-        @return:  Reversed list of ids
+        
+        :return:  Reversed list of ids
+        
         """
         return list(reversed(self.list))
     
     def get_reversed_object_list(self):
         """
-        @return: Reversed list of objects
+        
+        :return: Reversed list of objects
+        
         """
         return [ self.objects[_id] for _id in reversed(self.list)]
     
@@ -678,6 +756,7 @@ class sorted_object_list():
     
 class sorted_list:
     """
+    
     Sorted list for single comparable objects (int, float, etc)
      
     """    
@@ -689,9 +768,11 @@ class sorted_list:
     
     def add(self, *args):
         """
+    
         Add elements to the sorted list
         
-        @param *args: Array of elements 
+        :param \*args: Array of elements 
+    
         """
         for arg in args:
             if len(self.list) == 0:
@@ -704,46 +785,58 @@ class sorted_list:
                     
     def get_list(self):
         """
-        @return: Return the sorted list
+    
+        :return: Return the sorted list
+    
         """        
         return self.list
    
     def find(self, _num):
         """
+    
         Find the position of the element in the list
         
-        @return: Position in the list
+        :return: Position in the list
+    
         """
         return bisect(self.list, _num) - 1
     
     def remove(self, *args):
         """
+    
         Removes the elements from the list
         
-        @param *args: List of elements 
+        :param \*args: List of elements 
+    
         """
         for arg in args:
             self.list.remove(arg)
                 
     def get(self, pos):
         """
-        @return: Return a element in a specific position.
+        
+        :return: Return a element in a specific position.
+        
         """
         return self.list[pos]
                 
     def __len__(self):
         """
+        
         List's size
         
-        @return: Size of the sorted list
+        :return: Size of the sorted list
+        
         """
         return len(self.list)
     
     def pop(self):
         """
+
         Pop the first element of the list
         
-        @return: Return the first element of the list. None if it's empy.
+        :return: Return the first element of the list. None if it's empy.
+
         """
         if self.list:
             return self.list.pop(0)
@@ -765,7 +858,9 @@ class sorted_list:
     
     def _check_sort(self):
         """
+
         Verifies the consistency of the list 
+
         """
         for i in range(len(self.list) - 1):
             if self.list[i] >= self.list[i + 1]:
@@ -774,7 +869,9 @@ class sorted_list:
             
 class FrozenDict(Mapping):
     """
-        Inmutable dictionary useful for storing parameter that are dinamycally loaded
+
+    Inmutable dictionary useful for storing parameter that are dinamycally loaded
+
     """
     def __init__(self, *args, **kwargs):
         self._d = dict(*args, **kwargs)
@@ -798,8 +895,11 @@ class FrozenDict(Mapping):
     
 def clean_results(*args):
     """
+
     Removes the filepaths passed as argument
-    @param *args: List of filepaths 
+
+    :param \*args: List of filepaths 
+
     """
     for fp in args:
         if os.path.isfile(fp) and os.path.exists(fp):
@@ -807,7 +907,10 @@ def clean_results(*args):
             
 class DEFAULT_SIMULATION:
     """
+    
     Default and base simulation parameters
+    
+    Note
         CONFIG_FOLDER_NAME: Folder of the config files
         RESULTS_FOLDER_NAME: Folder for the result files  
         SCHEDULE_OUTPUT: Format of the dispatching plan file 
@@ -818,6 +921,7 @@ class DEFAULT_SIMULATION:
         BENCHMARK_PREFIX: Prefix of the benchmark file
         RESOURCE_ORDER: How resource are sorted for printing purposes
         WATCH_PORT: Port used for the watcher daemon.
+    
     """
     parameters = {
         "CONFIG_FOLDER_NAME": "config/",
@@ -864,10 +968,13 @@ class DEFAULT_SIMULATION:
     
 def path_leaf(path):
     """
-    Extract path and filename
-    @param path: Entire filepath
     
-    @return: Return a tuple that contains the (path, filename) 
+    Extract path and filename
+    
+    :param path: Entire filepath
+    
+    :return: Return a tuple that contains the (path, filename) 
+    
     """
     head, tail = ntpath.split(path)
     return (head, tail or ntpath.basename(head))

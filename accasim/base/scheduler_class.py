@@ -32,6 +32,7 @@ import logging
 class scheduler_base(ABC):
     def __init__(self, _seed, _resource_manager, _allocator):
         """
+        
         Construct a scheduler
             
         :param _seed: Seed for the random state
@@ -48,37 +49,46 @@ class scheduler_base(ABC):
     @property
     def name(self):
         """
+        
         Name of the schedulign method
+        
         """
         raise NotImplementedError 
     
     @abstractmethod
     def get_id(self):
         """
+        
         Must return the full ID of the scheduler, including policy and allocator.
         
         :return: the scheduler's id.
+        
         """
         raise NotImplementedError
     
     @abstractmethod
     def scheduling_method(self, cur_time, es_dict, es, debug=False):
         """
+        
         This function must map the queued events to available nodes at the current time.
             
         :param cur_time: current time
         :param es_dict: dictionary with full data of the job events
-        :param events to be scheduled
+        :param es: events to be scheduled
+        :param debug: Debugging flag
             
         :return a list of tuples including (time to schedule, event id, list of assigned nodes)  
+        
         """
         raise Exception('This function must be implemented!!')
     
     def set_resource_manager(self, _resource_manager):
         """
-            Set a resource manager
-            
-            @param _resource_manager: An instantiation of a resource_manager class or None 
+        
+        Set a resource manager
+
+        :param _resource_manager: An instantiation of a resource_manager class or None 
+        
         """        
         if _resource_manager:
             self.allocator.set_resource_manager(_resource_manager)
@@ -89,13 +99,16 @@ class scheduler_base(ABC):
             
     def schedule(self, cur_time, es_dict, es, _debug=False):
         """
+        
         Method for schedule. It call the specific scheduling method.
+        
         :param cur_time: current time
         :param es_dict: dictionary with full data of the events
         :param es: events to be scheduled
         :param _debug: Flag to debug
         
         :return a tuple of (time to schedule, event id, list of assigned nodes)
+        
         """
         assert(self.resource_manager is not None), 'The resource manager is not defined. It must defined prior to run the simulation.'
         if _debug:
@@ -107,10 +120,12 @@ class scheduler_base(ABC):
     
 class simple_heuristic(scheduler_base):
     """
+    
     Simple scheduler, sorts the event depending on the chosen policy.
     
     If a single job allocation fails, all subsequent jobs fail too.
     Sorting as name, sort funct parameters
+    
     """
 
     def __init__(self, _seed, _resource_manager, _allocator, _name, _sorting_parameters, **kwargs):
@@ -120,14 +135,17 @@ class simple_heuristic(scheduler_base):
 
     def get_id(self):
         """
+        
         Returns the full ID of the scheduler, including policy and allocator.
 
         :return: the scheduler's id.
+        
         """
         return '-'.join([self.__class__.__name__, self.name, self.allocator.get_id()])
 
     def scheduling_method(self, cur_time, es_dict, es, _debug=False):
         """
+        
         This function must map the queued events to available nodes at the current time.
         
         :param cur_time: current time
@@ -136,6 +154,7 @@ class simple_heuristic(scheduler_base):
         :param _debug: Flag to debug
         
         :return a tuple of (time to schedule, event id, list of assigned nodes)  
+        
         """
 
         avl_resources = self.resource_manager.availability()
@@ -155,8 +174,9 @@ class simple_heuristic(scheduler_base):
     
 class fifo_sched(simple_heuristic):
     """
-        FIFO scheduling policy. The first come, first served (commonly called FIFO ‒ first in, first out) 
-        process scheduling algorithm is the simplest process scheduling algorithm. 
+
+    FIFO scheduling policy. The first come, first served (commonly called FIFO ‒ first in, first out) 
+    process scheduling algorithm is the simplest process scheduling algorithm. 
         
     """
     name = 'FIFO'
@@ -173,7 +193,8 @@ class fifo_sched(simple_heuristic):
         
 class ljf_sched(simple_heuristic):
     """
-        LJF scheduling policy. ... 
+    
+    LJF scheduling policy.  
         
     """
     name = 'LJF'
@@ -184,13 +205,16 @@ class ljf_sched(simple_heuristic):
 
     def __init__(self, _allocator, _resource_manager=None, _seed=0, **kwargs):
         """
+        
         LJF Constructor
+        
         """
         simple_heuristic.__init__(self, _seed, _resource_manager, _allocator, self.name, self.sorting_arguments, **kwargs)
         
 class sjf_sched(simple_heuristic):
     """
-        SJF scheduling policy. ...
+    
+    SJF scheduling policy. ...
         
     """
     name = 'SJF'
@@ -201,23 +225,29 @@ class sjf_sched(simple_heuristic):
 
     def __init__(self, _allocator, _resource_manager=None, _seed=0, **kwargs):
         """
+    
         SJF Constructor
+    
         """
         simple_heuristic.__init__(self, _seed, _resource_manager, _allocator, self.name, self.sorting_arguments, **kwargs)
 
 class easybf_sched(scheduler_base):
     """
+    
     EASY Backfilling scheduler. 
     
     Whenever a job cannot be allocated, a reservation is made for it. After this, the following jobs are used to
     backfill the schedule, not allowing them to use the reserved nodes.
     Sorting as name, sort funct parameters
+    
     """
     name = 'EASY_Backfilling'
     
     def __init__(self, _allocator, _resource_manager=None, _seed=0, **kwargs):
         """
+    
         Easy BackFilling Constructor
+    
         """
         scheduler_base.__init__(self, _seed, _resource_manager, _allocator)
         self.blocked_job_id = None
@@ -226,22 +256,26 @@ class easybf_sched(scheduler_base):
         
     def get_id(self):
         """
+    
         Returns the full ID of the scheduler, including policy and allocator.
 
         :return: the scheduler's id.
+    
         """
         return '-'.join([self.name, self.allocator.name])
 
     def scheduling_method(self, cur_time, es_dict, es, _debug=False):
         """
-            This function must map the queued events to available nodes at the current time.
-            
-            :param cur_time: current time
-            :param es_dict: dictionary with full data of the events
-            :param es: events to be scheduled
-            :param _debug: Flag to debug
-            
-            :return a tuple of (time to schedule, event id, list of assigned nodes)  
+
+        This function must map the queued events to available nodes at the current time.
+        
+        :param cur_time: current time
+        :param es_dict: dictionary with full data of the events
+        :param es: events to be scheduled
+        :param _debug: Flag to debug
+        
+        :return a tuple of (time to schedule, event id, list of assigned nodes)  
+
         """
 
         avl_resources = self.resource_manager.availability()
@@ -351,6 +385,7 @@ class easybf_sched(scheduler_base):
 
     def _search_slot(self, avl_resources, future_endings, e, _debug):
         """
+
         Computes a reservation for the blocked job e, by simulating the release of the resources for the running
         events, once they finish. The earliest slot in which e fits is chosen.
         
@@ -359,6 +394,7 @@ class easybf_sched(scheduler_base):
         :param e: Event to be fitted in the time slot
             
         :return a tuple of time of the slot and nodes
+
         """
         virtual_resources = deepcopy(avl_resources)
         virtual_allocator = copy(self.allocator)
@@ -406,6 +442,7 @@ class easybf_sched(scheduler_base):
 
     def _job_allocation(self, cur_time, es, es_dict, _debug):
         """
+
         This method tries to allocate as many jobs as possible in the first part of the scheduling scheme.
         
         As soon as one allocation fails, all subsequent jobs fail too. Then, the return tuple contains info about
@@ -416,8 +453,9 @@ class easybf_sched(scheduler_base):
         :param es: the list of events to be scheduled
         :param es_dict: the dictionary of events
         :param _debug: debug flag
-        :return: a tuple (ready_dispatch,idx_notdispatched), where ready_dispatch contains the assignment info on the
-            allocated jobs, and idx_notdispatched contains the ids of the jobs that could not be scheduled.
+        
+        :return: a tuple (ready_dispatch,idx_notdispatched), where ready_dispatch contains the assignment info on the allocated jobs, and idx_notdispatched contains the ids of the jobs that could not be scheduled.
+
         """
         # Variables that keep the jobs to be dispatched 
         ready_distpach = []

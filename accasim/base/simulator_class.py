@@ -43,13 +43,15 @@ class simulator_base(ABC):
 
     def __init__(self, _resource_manager, _reader, _job_factory, _dispatcher, _additional_data, config_file=None, **kwargs):
         """
+        
         Simulator base constructor
-        @param _resource_manager: Resource manager class instantiation
-        @param _reader: Reader class instantiation
-        @param _job_factory: Job Factory instantiation
-        @param _dispatcher: Dispatcher instantiation
-        @param config_file: Path to the config file in json format.
-        @param ****kwargs: Dictionary of key:value parameters to be used in the simulator. It overwrites the current parameters. All parameters will be available on the constant variable    
+        :param _resource_manager: Resource manager class instantiation
+        :param _reader: Reader class instantiation
+        :param _job_factory: Job Factory instantiation
+        :param _dispatcher: Dispatcher instantiation
+        :param config_file: Path to the config file in json format.
+        :param \*\*kwargs: Dictionary of key:value parameters to be used in the simulator. It overwrites the current parameters. All parameters will be available on the constant variable    
+        
         """
         self.constants = CONSTANT()
         self.define_default_constants(config_file, **kwargs)
@@ -74,22 +76,30 @@ class simulator_base(ABC):
     @abstractmethod
     def start_simulation(self):
         """
+        
         Simulation initialization
+        
         """
         raise NotImplementedError('Must be implemented!')
 
     @abstractmethod
     def load_events(self):
         """
+        
         Method that loads the job from a datasource. Check the default implementation in the hpc_simulator class.
+        
         """
         raise NotImplementedError('Must be implemented!')
     
     def additional_data_init(self, _additional_data):
         """
+        
         Initializes the additional_data classes or set the event manager in the objects  
-        @param _additional_data: A list of additional_data objects or classes
-        @return: Return a list with all the additional_data objects ready to be executed
+        
+        :param _additional_data: A list of additional_data objects or classes
+        
+        :return: Return a list with all the additional_data objects ready to be executed
+        
         """
         _ad = []
         for ad in _additional_data:
@@ -104,9 +114,10 @@ class simulator_base(ABC):
 
     def check_request(self, attrs_names):
         """
+        
         Verifies that the job factory attributes can be supported by the system resurces.
         
-        @return: True if attributes are supported, False otherwise.
+        :return: True if attributes are supported, False otherwise.
           
         """
         _system_resources = self.resource_manager.resources.system_resource_types
@@ -117,11 +128,13 @@ class simulator_base(ABC):
     
     def generate_enviroment(self, config_path):
         """
+        
         Generated the syntethic system from the config file
         
-        @param config_path: Path the config file
+        :param config_path: Path the config file
         
-        @return: resource manager object.  
+        :return: resource manager object.  
+        
         """        
         config = load_config(config_path)
         resources = resources_class(**config)
@@ -129,7 +142,9 @@ class simulator_base(ABC):
     
     def define_filepaths(self, **kwargs):
         """
+        
         Add to the kwargs useful filepaths. 
+        
         """
         kwargs['WORKLOAD_FILENAME'] = path_leaf(kwargs['WORKLOAD_FILEPATH'])[1]
         if 'RESULTS_FOLDER_PATH' not in kwargs:
@@ -141,10 +156,13 @@ class simulator_base(ABC):
         
     def create_folder(self, path):
         """
+        
         Create folder if it does not exists. Pass to misc
         
-        @param path: Name of the folder
-        @return: Path of the created folder 
+        :param path: Name of the folder
+        
+        :return: Path of the created folder 
+        
         """
         if not _path.exists(path):
             _makedirs(path)
@@ -152,27 +170,41 @@ class simulator_base(ABC):
     
     def set_workload_input(self, workload_path, **kwargs):
         """
-        Create the reader object
-        @param workload_path: Path to the workload
-        @param ****kwargs: extra arguments
         
-        @return: A reader object         
+        Create the reader object
+        
+        :param workload_path: Path to the workload
+        :param \*\*kwargs: extra arguments
+        
+        :return: A reader object         
+        
         """
         return reader(workload_path, **kwargs)
     
     def prepare_arguments(self, possible_arguments, arguments):
         """
-        Verifies arguments for a specific instantation and create the dictionary. *Move to misc
-        @param possible_arguments: Required arguments.
-        @param arguments: Available arguments.  
+        
+        Verifies arguments for a specific instantation and create the dictionary. 
+        
+        Note
+        
+        Move to misc
+        
+        :param possible_arguments: Required arguments.
+        :param arguments: Available arguments.  
+
+        :return: Dictionary with the corresponding arguments.
+        
         """
         return {k:v for k, v in arguments.items() if k in possible_arguments}
     
     def define_default_constants(self, config_filepath, **kwargs):
         """
+        
         Defines the default constants of the simulator, and update if the user gives new values.
         
-        @param config_filepath: Path to the config file in json format 
+        :param config_filepath: Path to the config file in json format 
+        
         """
         config = DEFAULT_SIMULATION.parameters
         for k, v in config.items():
@@ -186,7 +218,9 @@ class simulator_base(ABC):
         
     def show_config(self):
         """
-            Shows the current simulator config
+        
+        Shows the current simulator config
+        
         """
         print('Initializing the simulator')
         print('Settings: ')
@@ -201,16 +235,20 @@ class simulator_base(ABC):
         
     def on_off(self, state):
         """
+        
         True: ON, False: OFF
         Just for visualization purposes.
         
-        @param state: State of a constant. True or False 
+        :param state: State of a constant. True or False 
+        
         """
         return 'ON' if state else 'OFF'
     
     def remove_previous(self):
         """
+        
         To clean the previous results.
+        
         """
         _wouts = [(self.constants.SCHEDULING_OUTPUT, self.constants.SCHED_PREFIX), (self.constants.STATISTICS_OUTPUT, self.constants.STATISTICS_PREFIX),
             (self.constants.PPRINT_OUTPUT, self.constants.PPRINT_PREFIX), (self.constants.BENCHMARK_OUTPUT, self.constants.BENCHMARK_PREFIX)]
@@ -221,27 +259,31 @@ class simulator_base(ABC):
 
 class hpc_simulator(simulator_base):
     """
+    
     Default implementation of the simulator_base class.    
+    
     """
     def __init__(self, sys_config, _scheduler, workload=None, _resource_manager=None, _reader=None, _job_factory=None, _additional_data=[], _simulator_config=None, overwrite_previous=True,
         scheduling_output=True, pprint_output=False, benchmark_output=False, statistics_output=True, show_statistics=True, **kwargs):
         """
+    
         Constructor of the HPC Simulator class.
-        @param sys_config: Filepath to the synthetic system configuration. Used by the resource manager to create the system.
-        @param _scheduler: Dispatching method
-        @param workload: Filepath to the workload, it is used by the reader. If a reader is not given, the default one is used.
-        @param _resource_manager: Optional. Instantiation of the resource_manager class.
-        @param _reader: Optional. Instantiation of the reader class.
-        @param _job_factory: Optional. Instantiation of the job_factory class.
-        @param _additional_data: Optional. Array of Objects or Classes of additional_data class.  
-        @param _simulator_config: Optional. Filepath to the simulator config. For replacing the misc.DEFAULT_SIMULATION parameters.
-        @param overwrite_previous: Default True. Overwrite previous results. 
-        @param scheduling_output: Default True. Dispatching plan output. Format modificable in DEFAULT_SIMULATION  
-        @param pprint_output: Default False. Dispatching plan output in pretty print version. Format modificable in DEFAULT_SIMULATION
-        @param benchmark_output: Default False. Measurement of the simulator and dispatcher performance.
-        @param statistics_output: Default True. Statistic of the simulation.
-        @param show_statistics: Default True. Show Statistic after finishing the simulation.
-        @param **kwargs: Optional parameters to be included in the Constants.
+    
+        :param sys_config: Filepath to the synthetic system configuration. Used by the resource manager to create the system.
+        :param _scheduler: Dispatching method
+        :param workload: Filepath to the workload, it is used by the reader. If a reader is not given, the default one is used.
+        :param _resource_manager: Optional. Instantiation of the resource_manager class.
+        :param _reader: Optional. Instantiation of the reader class.
+        :param _job_factory: Optional. Instantiation of the job_factory class.
+        :param _additional_data: Optional. Array of Objects or Classes of additional_data class.  
+        :param _simulator_config: Optional. Filepath to the simulator config. For replacing the misc.DEFAULT_SIMULATION parameters.
+        :param overwrite_previous: Default True. Overwrite previous results. 
+        :param scheduling_output: Default True. Dispatching plan output. Format modificable in DEFAULT_SIMULATION  
+        :param pprint_output: Default False. Dispatching plan output in pretty print version. Format modificable in DEFAULT_SIMULATION
+        :param benchmark_output: Default False. Measurement of the simulator and dispatcher performance.
+        :param statistics_output: Default True. Statistic of the simulation.
+        :param show_statistics: Default True. Show Statistic after finishing the simulation.
+        :param \*\*kwargs: Optional parameters to be included in the Constants.
         
         """
         kwargs['OVERWRITE_PREVIOUS'] = overwrite_previous
@@ -280,11 +322,14 @@ class hpc_simulator(simulator_base):
         self.loaded_jobs = 0
                
     def monitor_datasource(self, _stop):
-        '''
+        """
+        
         runs continuously and updates the global data
         Useful for daemons
-        @param _stop: Signal for stop 
-        '''
+        
+        :param _stop: Signal for stop 
+        
+        """
         while (not _stop.is_set()):
             self.constants.running_at['current_time'] = self.mapper.current_time
             self.constants.running_at['running_jobs'] = {x: self.mapper.events[x] for x in self.mapper.running}
@@ -292,11 +337,13 @@ class hpc_simulator(simulator_base):
     
     def start_simulation(self, init_unix_time, watcher=False, visualization=False, **kwargs):
         """
+        
         Initializes the simulation
-        @param init_unix_time: Adjustement for job timings. If the first job corresponds to 0, the init_unix_time must corresponds to the real submit time of the workload. Otherwise, if the job contains the real submit time, init_unix_time is 0.
-        @param watcher: Initializes the watcher. 
-        @param visualization: Initializes the running jobs visualization using matplotlib.
-        @param **kwargs: a 'tweak_function' to deal with the workloads.
+        
+        :param init_unix_time: Adjustement for job timings. If the first job corresponds to 0, the init_unix_time must corresponds to the real submit time of the workload. Otherwise, if the job contains the real submit time, init_unix_time is 0.
+        :param watcher: Initializes the watcher. 
+        :param visualization: Initializes the running jobs visualization using matplotlib.
+        :param \*\*kwargs: a 'tweak_function' to deal with the workloads.
          
         """
         if visualization:
@@ -346,7 +393,9 @@ class hpc_simulator(simulator_base):
         
     def default_tweak_function(self, _dict, init_unix_time):
         """
-            Function will disappear. It will be part of the default SWF reader
+        
+        Function will disappear. It will be part of the default SWF reader
+        
         """
         # At this point, where this function is called, the _dict object have the assignation from the log data.
         # As in the SWF workload logs the numbers of cores are not expressed, just the number of requested processors, we have to tweak this information
@@ -375,8 +424,10 @@ class hpc_simulator(simulator_base):
         
     def start_hpc_simulation(self, _debug=False, tweak_function=None, init_unix_time=0):
         """
-            Initializes the simulation in a new thread. It is called by the start_timulation using its arguments.
-            @param _debug: Debugging flag
+        
+        Initializes the simulation in a new thread. It is called by the start_timulation using its arguments.
+        :param _debug: Debugging flag
+        
         """
         
         # TODO move to the default swf reader
@@ -468,9 +519,12 @@ class hpc_simulator(simulator_base):
 
     def statics_write_out(self, show, save):
         """
+        
         Write the statistic output file
-        @param show: True for showing the statistics, False otherwise.
-        @param save: True for saving the statistics, False otherwise.
+        
+        :param show: True for showing the statistics, False otherwise.
+        :param save: True for saving the statistics, False otherwise.
+        
         """
         if not(show or save):
             return
@@ -496,10 +550,11 @@ class hpc_simulator(simulator_base):
 
     def write_to_benchmark(self, time, queueSize, stepTime, schedTime, simTime, memUsage):
         """
-            Writes to an output file the resource usage string related to the current simulation step.
 
-            The output string contains 6 fields, corresponding to the input arguments, separated by ":", and can
-            be easily parsed by any Python program.
+        Writes to an output file the resource usage string related to the current simulation step.
+
+        The output string contains 6 fields, corresponding to the input arguments, separated by ":", and can
+        be easily parsed by any Python program.
 
         :param time: the timestamp relative to the simulation step
         :param queueSize: the size of the queue at the simulation step (before scheduling)
@@ -507,6 +562,7 @@ class hpc_simulator(simulator_base):
         :param schedTime: the time related to the scheduling procedure
         :param simTime: the remaining time used in the step, related to the simulation process
         :param memUsage: memory usage (expressed in MB) at the simulation step
+
         """
         bvalues = [time, queueSize, stepTime, schedTime, simTime, memUsage]
         sep_token = ';' 
@@ -518,11 +574,13 @@ class hpc_simulator(simulator_base):
 
     def load_events(self, jobs_dict, mapper, _debug=False, time_samples=2):
         """
-            Incremental loading. Load the new jobs into the 
-            @param jobs_dict: Dictionary of the current load, queued and running jobs
-            @param mapper: Job event mapper object
-            @param _debug: Debug flag
-            @param time_samples: Default 2. It load the next two time steps. 
+
+        Incremental loading. Load the new jobs into the 
+        :param jobs_dict: Dictionary of the current load, queued and running jobs
+        :param mapper: Job event mapper object
+        :param _debug: Debug flag
+        :param time_samples: Default 2. It load the next two time steps. 
+
         """
         _time = None
         while not self.reader.EOF and time_samples > 0:
@@ -549,10 +607,13 @@ class hpc_simulator(simulator_base):
 
     def checkJobValidity(self, job):
         """
-            Simple method that checks if the loaded job violates the system's resource constraints.
+        
+        Simple method that checks if the loaded job violates the system's resource constraints.
 
         :param job: Job object 
+        
         :return: True if the job is valid, false otherwise
+        
         """
         resGroups = self.resource_manager.groups_available_resource()
         validGroups = 0
@@ -568,7 +629,9 @@ class hpc_simulator(simulator_base):
 
     def memory_usage_psutil(self):
         """
-            Returns the memory usage in MB
+   
+        Returns the memory usage in MB
+   
         """
         process = _Process(_getpid())
         memr = process.memory_info().rss / float(2 ** 20)
@@ -576,7 +639,9 @@ class hpc_simulator(simulator_base):
     
     def daemon_init(self):         
         """
-            Initialization of the simulation daemons. I.e. visualization or watcher
+
+        Initialization of the simulation daemons. I.e. visualization or watcher
+
         """
         _iter_func = lambda act, next: act.get(next) if isinstance(act, dict) else (getattr(act, next)() if callable(getattr(act, next)) else getattr(act, next))
         for _name, d in self.daemons.items():
@@ -594,5 +659,10 @@ class hpc_simulator(simulator_base):
             self.daemons[_name]['object'].start()
             
     def execute_additional_data(self):
+        """
+        
+        Executes all additional_data implementations
+                
+        """
         for ad in self.additional_data:
             ad.execute()            

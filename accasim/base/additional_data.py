@@ -34,7 +34,7 @@ class additional_data_type:
 
     def get(self):
         """
-        @return: Returns the internal value
+        :return: Returns the internal value
         
         """
         return self.value
@@ -42,7 +42,7 @@ class additional_data_type:
     def update(self, value):
         """
         Updates the internal value
-        @param value: New value 
+        :param value: New value 
         """
         self.data = value
         
@@ -68,9 +68,11 @@ class additional_data(ABC):
     
     def add_timepoint(self, timepoint):
         """
+        
         Add a new time point for the events that activate the simulation steps.
         
-        @param timepoint: New time point, it must be equal or later than the current time.         
+        :param timepoint: New time point, it must be equal or later than the current time.         
+        
         """
         assert(isinstance(timepoint, int)), 'The time point must be an int'
         current_time = self.event_mapper.current_time
@@ -79,6 +81,15 @@ class additional_data(ABC):
             tpoints.add(timepoint)     
         
     def add_data(self, name, value):
+        """
+        
+        Adds a new attribute and the respective value to the event manager.
+        The new variable corresponds to a :class:`.additional_data_type`. If the variable already exists, it is updated through its update method.
+        
+        :param name: The name of the new attribute
+        :param value: The value for the new attribute
+        
+        """
         if hasattr(self.event_mapper, name):
             var = getattr(self.event_mapper, name)
             assert(isinstance(var, additional_data_type)), 'Only additional_data_type class can be modified. Ensure that the {} is not already used.'.format(name)
@@ -91,7 +102,7 @@ class additional_data(ABC):
         """
             Set the system event manager
             
-            @param event_manager: An instantiation of a event_mapper class or None 
+            :param event_manager: An instantiation of a event_mapper class or None 
         """       
         if self.event_mapper:
             return

@@ -38,11 +38,13 @@ class attribute_type:
     
     def __init__(self, name, type_class=None, optional=False):
         """
+        
         Constructor for defining a new attribute type.
         
         @param name: Attribute name
         @param type_class: Class type of attribute (str, int, float, etc.) for casting. If value  is already casted it is not necesary.
         @param optional: False by default. If it is True, the default value will be None and it is not required to give any value to this.  
+        
         """
         assert(isinstance(name, str))
         self.name = name
@@ -53,11 +55,13 @@ class event(ABC):
     
     def __init__(self, job_id, queued_time, duration):
         """
-            Constructor of the basic job event. 
+        
+        Constructor of the basic job event. 
             
-            @param job_id: Identification of the job.
-            @param queued_time: Corresponding time to the submission time to the system in unix timestamp.
-            @param duration: Real duration of the job in unix timestamp.
+        @param job_id: Identification of the job.
+        @param queued_time: Corresponding time to the submission time to the system in unix timestamp.
+        @param duration: Real duration of the job in unix timestamp.
+        
         """
         self.constants = CONSTANT()
         self.id = job_id
@@ -69,12 +73,15 @@ class event(ABC):
     
     def subattr(self, obj, attrs):
         """
-            Internal method that reads a description, and extract the value from the object itself and return it. It is used
-            for genereting the output logs. (This method is candidate to be moved into utils package.)
-            @param obj: Object to be analyzed
-            @param attrs: Attributes to be extracted from the object
+        
+        Internal method that reads a description, and extract the value from the object itself and return it. It is used
+        for genereting the output logs. (This method is candidate to be moved into utils package.)
+        
+        @param obj: Object to be analyzed
+        @param attrs: Attributes to be extracted from the object
             
-            @return: Value of the object.   
+        @return: Value of the object.   
+        
         """ 
         if isinstance(attrs, tuple):
             values = []
@@ -89,7 +96,9 @@ class event(ABC):
     
     def schd_write_out(self):
         """
+        
         Method for writting the dispathing plan. It uses the format specified in the SCHEDULE_OUTPUT constant.  
+        
         """
         if not self.constants.SCHEDULING_OUTPUT:
             return 
@@ -106,7 +115,9 @@ class event(ABC):
     
     def schd_pprint_write_out(self):
         """
+        
         Method for writting the dispathing plan in pprint (user readeable) format. It uses the format specified in the PPRINT_SCHEDULE_OUTPUT constant.  
+        
         """
         if not self.constants.PPRINT_OUTPUT:
             return 
@@ -125,10 +136,12 @@ class event(ABC):
 class job_factory:
     def __init__(self, _resource_manager, job_class=event, job_attrs=[], job_mapper=default_swf_mapper):
         """
+        
         @param _resource_manager: The resource manager of the simulator. It is required for creating the job requests.
         @param job_class: The class to be created by the Factory. By default it uses the Event class, but any subclass of it can be used (modified versions). 
         @param job_attrs: The extra attributes (attribute_type class) (already job_id, queued_time and duration are mandatory) to be set in the JobEvent class
         @param job_mapper: Rename the the old key to a new key (using the value of the mapper dictionary)
+        
         """
         assert(isinstance(_resource_manager, resource_manager))
         assert(issubclass(job_class, event)), 'Only subclasses of event class are accepted. Received: {} class'.format(_class.__name__)
@@ -158,11 +171,16 @@ class job_factory:
                  
     def factory(self, **kwargs):
         """
-            Creates a job instance with the dictionary received as argument. It verifies that all attributes has been included in the kwargs.
-            @param **kwargs: Dictionary with the job attributes.
-            
-            @return: Returns a job instantiation.  
+        
+        Creates a job instance with the dictionary received as argument. It verifies that all attributes has been included in the kwargs.
+        
+        @param \*\*kwargs: Dictionary with the job attributes.
+        
+        @return: Returns a job instantiation.  
+
         """
+        
+        
         for _old, _new in self.mapper.items():
             value = kwargs.pop(_old)
             kwargs[_new] = value
@@ -177,10 +195,11 @@ class job_factory:
         
     def add_attrs(self, obj, reference, values):
         """
-            Sets the attributes to the job object.
-            @param obj: Object to be updated
-            @param reference: Attribute type of reference. It contains the name, optionality and type for casting.
-            @param values: Values to be added to the object
+        
+        Sets the attributes to the job object.
+        @param obj: Object to be updated
+        @param reference: Attribute type of reference. It contains the name, optionality and type for casting.
+        @param values: Values to be added to the object
                
         """
         for _attr in reference:
@@ -192,8 +211,11 @@ class job_factory:
     
     def add_request(self, obj):
         """
+
         This method sets the request of the job, it uses the resources available of the system to define it.  
+
         @param obj: Job object
+
         """
         # Calculate only if it is not present
         if not hasattr(obj, 'requested_nodes'):
@@ -209,9 +231,11 @@ class job_factory:
     
     def default_job_description(self):
         """
+
         Method that returns the minimal attributes of a job. Default values: ID, Expected Duration, CORE and MEM.
         
         @return: Array of Attributes
+
         """
         # Attribute to identify the user
         user_id = attribute_type('user_id', int)
@@ -233,9 +257,11 @@ class event_mapper:
     
     def __init__(self, _resource_manager, **kwargs):
         """
+
         This class coordinates events submission, queueing and ending. 
         @param _resource_manager: Resource manager instance
-        @param **kwargs: nothing for the moment. 
+        @param \*\*kwargs: nothing for the moment. 
+
         """
         assert(isinstance(_resource_manager, resource_manager)), 'Wrong type for the resource_manager argument.'
         self.resource_manager = _resource_manager
@@ -258,8 +284,11 @@ class event_mapper:
             
     def load_events(self, es):
         """
-            Jobs are loaded to the system. This is the first step for a job simulation.
-            @param es: List of jobs. Jobs must be subclass of event class. 
+        
+        Jobs are loaded to the system. This is the first step for a job simulation.
+        
+        @param es: List of jobs. Jobs must be subclass of event class. 
+        
         """
         if isinstance(es, list):
             for e in es:
@@ -271,9 +300,11 @@ class event_mapper:
                     
     def load_event(self, e):
         """
-            Internal method for job submission.
+        
+        Internal method for job submission.
             
-            @param e: Single job (event subclass).  
+        @param e: Single job (event subclass).
+          
         """
         assert(isinstance(e, event)), 'Using %s, expecting a single %s' % (e.__class__, event.__name__)
         if self.current_time == e.queued_time:
@@ -289,12 +320,14 @@ class event_mapper:
 
     def move_to_finished(self, events_dict):
         """
-            There are two time points for a job could ends, the expected one and the real one. 
-            The job must run until the real one is reached, then if a job is waiting to finish but is less than the
-            real ending time, this value must be updated with the real one.
-            
-            @param events_dict: Actual Loaded, queued and running jobs in a dictionary {id: job object}
-            @return: Array of completed jobs         
+        
+        There are two time points for a job could ends, the expected one and the real one. 
+        The job must run until the real one is reached, then if a job is waiting to finish but is less than the
+        real ending time, this value must be updated with the real one.
+        
+        @param events_dict: Actual Loaded, queued and running jobs in a dictionary {id: job object}
+        @return: Array of completed jobs         
+    
         """
         _es = []
         for e_id in self.real_ending.pop(self.current_time, []):
@@ -308,9 +341,11 @@ class event_mapper:
 
     def finish_event(self, e):
         """
-            Internal method for Job's completion. This method sets the ending time, and make some standard calculations for statistics, such as slowdown, waiting time. 
-            Finally it calls the methods for output.
-            @param e: Job to be completed.
+
+        Internal method for Job's completion. This method sets the ending time, and make some standard calculations for statistics, such as slowdown, waiting time. 
+        Finally it calls the methods for output.
+        @param e: Job to be completed.
+
         """
         e.end_time = self.current_time
         e.running_time = e.end_time - e.start_time
@@ -324,13 +359,15 @@ class event_mapper:
    
     def dispatch_event(self, _job, _time, _time_diff, _nodes):
         """
-            Internal method for Job's dispatching. This method updates the related attributes for allocation of the job. 
-            @param _job: Job object
-            @param _time: Time of dispatching
-            @param _time_diff: Time used if dispatching processing _time must be considered.
-            @param _nodes: Nodes to be allocated.
-            
-            @return: True if the allocation must be performed, false otherwise. False for jobs that have duration equal to 0
+
+        Internal method for Job's dispatching. This method updates the related attributes for allocation of the job. 
+        @param _job: Job object
+        @param _time: Time of dispatching
+        @param _time_diff: Time used if dispatching processing _time must be considered.
+        @param _nodes: Nodes to be allocated.
+        
+        @return: True if the allocation must be performed, false otherwise. False for jobs that have duration equal to 0
+
         """ 
         id = _job.id
         start_time = _time + _time_diff
@@ -370,15 +407,19 @@ class event_mapper:
         
     def submit_event(self, e_id):
         """
+
         Internal method for Job's queueing.
+
         """
         self.queued.append(e_id)
     
     def next_events(self):
         """
+
         Return the jobs that belongs to the next time point.
         
         @return: Array of jobs recently submitted + queued available at current time. 
+
         """
         self.current_time = self.time_points.pop()
         if self.current_time is None:
@@ -391,17 +432,22 @@ class event_mapper:
         
     def has_events(self):
         """
+
         @return: True if are loaded, queued or running jobs. False otherwise.
+
         """
         return (self.loaded or self.queued or self.running)  
  
     def dispatch_events(self, event_dict, to_dispatch, time_diff, _debug=False):
         """
+
         Internal method for processing the job's dispatching. Jobs are started if start time is equals to current time.
+
         @param event_dict: Actual Loaded, queued and running jobs in a dictionary {id: job object}
         @param to_dispatch: A tuple which contains the (start time, job id, nodes)
         @param time_diff: Time which takes the dispatching processing time. Default 0. 
         @param _debug: Debug flag    
+
         """
         for (_time, _id, _nodes) in to_dispatch:
             assert(_time is None or _time >= self.current_time), 'Receiving wrong schedules.'
@@ -426,10 +472,12 @@ class event_mapper:
                 
     def release_ended_events(self, event_dict):
         """
+
         Internal method for completed jobs. Removes from the dictionary finished jobs.
         @param event_dict: Actual Loaded, queued and running jobs in a dictionary {id: job object}
         
         @return: return Array list of jobs objects.
+
         """
         _es = self.move_to_finished(event_dict)
         for _e in _es:
@@ -440,40 +488,50 @@ class event_mapper:
     
     def simulated_status(self):
         """
-            Show the current state of the system in terms of loaded, queued, running and finished jobs.
+
+        Show the current state of the system in terms of loaded, queued, running and finished jobs.
             
-            @return: String including the system info.
+        @return: String including the system info.
+
         """
         return ('Loaded {}, Queued {}, Running {}, and Finished {} Jobs'.format(len(self.loaded), len(self.queued), len(self.running), len(self.finished)))
     
     def availability(self):
         """
+
         Current availability of the system.
         
         @return: Return the availability of the system.
+
         """
         return self.resource_manager.availability()
     
     def usage(self):
         """
+
         Current usage of the system
         
         @return: Return the usage of the system
+
         """
         return self.resource_manager.resources.usage()
     
     def simulated_current_time(self):
         """
+
         Current time
         
         @return: Return the current simulated time
+
         """
         return self.current_time
     
     def __str__(self):
         """
+
         Str representation of the event mapper
         
         @return: Return the current system info.
+
         """
         return 'Loaded: %s\nQueued: %s\nRunning: %s\nExpected job finish: %s\nReal job finish on: %s,\nFinished: %s\nNext time events: %s' % (self.loaded, self.queued, self.running, None, self.real_ending, self.finished, self.time_points)

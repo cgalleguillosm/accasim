@@ -31,16 +31,20 @@ from accasim.base.resource_manager_class import resource_manager
 
 class allocator_base(ABC):
     """
+    
     The base abstract interface all allocators must comply to.
+    
     """
 
     def __init__(self, seed, resource_manager=None, **kwargs):
         """
+    
         Allocator constructor (based on scheduler)
 
         :param seed: Seed if there is any random event
         :param res_man: resource manager for the system.
-        :param kwargs: Nothing for the moment         
+        :param kwargs: Nothing for the moment
+                 
         """
         random.seed(seed)
         self._constants = CONSTANT()
@@ -51,16 +55,19 @@ class allocator_base(ABC):
     @abstractmethod
     def get_id(self):
         """
+    
         Abstract method. Must be implemented by the subclass. 
         Must return the identification of the allocator. 
         
         :return: Allocator identification (for instance its name).    
+    
         """
         raise NotImplementedError
 
     @abstractmethod
     def set_resources(self, res):
         """
+    
         Abstract method. Must be implemented by the subclass.
         This method sets the internal reference to the dictionary of available resources in the system.
         If the reference points to a list used also outside of this class, the object should be deepcopied.
@@ -68,24 +75,28 @@ class allocator_base(ABC):
         If necessary, the resources are also sorted.
             
         :param res: the list of currently available resources in the system.       
+    
         """
         raise NotImplementedError
 
     @abstractmethod
     def set_attr(self, **kwargs):
         """
+    
         Abstract method. Must be implemented by the subclass.
         Method used to set internal parameters and meta-data for the allocator.
         
         Its behavior depends on the specific allocator that is being used, and some arguments may be discarded.
         
         :param kwargs: the internal parameters to be set, depending on the allocator
+    
         """
         raise NotImplementedError
 
     @abstractmethod
     def allocating_method(self, es, cur_time, skip=False, reserved_time=None, reserved_nodes=None, debug=False):
         """
+    
         Abstract method. Must be implemented by the subclass.
         This method must try to allocate the scheduled events contained in es. It will stop as soon as an event cannot
         be allocated, to avoid violations of the scheduler's priority rules, or proceed with other events depending
@@ -101,13 +112,14 @@ class allocator_base(ABC):
         :param reserved_nodes: nodes already reserved (used for backfilling)
         :param debug: Debugging flag
 
-        :return: a list of assigned nodes of length e.requested_nodes, for all events that could be allocated. The
-        list is in the format (time,event,nodes) where time can be either cur_time or None.
+        :return: a list of assigned nodes of length e.requested_nodes, for all events that could be allocated. The list is in the format (time,event,nodes) where time can be either cur_time or None.
+        
         """
         raise NotImplementedError
     
     def allocate(self, es, cur_time, skip=False, reserved_time=None, reserved_nodes=None, debug=False):
         """
+    
         This is the method that is called by the Scheduler to allocate the scheduled jobs. First, It verifies the data consistency and availability, 
         and then call to the implemented allocation policy.   
         
@@ -144,28 +156,34 @@ class allocator_base(ABC):
 
     def __str__(self):
         """
+        
             Retrieves the identification of the allocator.
+        
         """
         return self.get_id()
 
 class ffp_alloc(allocator_base):
     """
+    
     A simple allocator. Does not sort the resources.
         
     This allocator supports both single events and lists of events. It also
      supports backfilling. No sorting of the resources is done, so they are
      considered as they are given in input.
+    
     """
 
     name = 'First_Fit'
 
     def __init__(self, seed=0, resource_manager=None, **kwargs):
         """
+    
         Constructor for the class.
         
         :param seed: seed for random events (not used)
         :param resource_manager: reference to the system resource manager
         :param kwargs: None at the moment
+    
         """
         allocator_base.__init__(self, seed, resource_manager)
         if self.resource_manager:
@@ -176,27 +194,32 @@ class ffp_alloc(allocator_base):
 
     def set_resources(self, res):
         """
+    
         Sets in the internal variable avl_resources the current available resources for the system. It also sorts
         them, if the sort_resources method is implemented.
         
         :param res: the list of currently available resources for the system
+    
         """
         self._avl_resources = res
         self._sorted_keys = self._sort_resources()
 
     def set_attr(self, **kwargs):
         """
+    
         Method used to set internal parameters and meta-data for the allocator.
 
         Its behavior depends on the specific allocator that is being used, and some arguments may be discarded.
         It is not actively used in this simple allocator (for the moment).
 
         :param kwargs: None for the moment
+    
         """
         pass
 
     def allocating_method(self, es, cur_time, skip=False, reserved_time=None, reserved_nodes=None, debug=False):
         """
+    
         Given a job list es, this method searches for a suitable allocation for as many jobs as possible.
         
         In normal allocation, the method stops as soon as an event in the list cannot be allocated. In this case,
@@ -214,8 +237,8 @@ class ffp_alloc(allocator_base):
         :param reserved_time: beginning of the next reservation slot (used for backfilling)
         :param reserved_nodes: nodes already reserved (used for backfilling)
 
-        :return: a list of assigned nodes of length e.requested_nodes, for all events that could be allocated. The
-        list is in the format (time,event,nodes) where time can be either cur_time or None.
+        :return: a list of assigned nodes of length e.requested_nodes, for all events that could be allocated. The list is in the format (time,event,nodes) where time can be either cur_time or None.
+    
         """
         if not isinstance(es, (list, tuple)):
             listAsInput = False
@@ -291,6 +314,7 @@ class ffp_alloc(allocator_base):
 
     def _compute_reservation_overlaps(self, e, cur_time, reserved_time, reserved_nodes, debug=False):
         """
+    
         This method considers an event e, the current time, and a list of reservation start times with relative
         reserved nodes, and returns the list of reserved nodes that cannot be accessed by event e because of overlap.
         
@@ -300,6 +324,7 @@ class ffp_alloc(allocator_base):
         :param reserved_nodes: the list of lists (or single list) of reserved nodes for each reservation
         :param debug: the debug flag
         :return: the list of nodes that cannot be used by event e
+    
         """
         if reserved_time is None or reserved_nodes is None:
             return []
@@ -322,10 +347,12 @@ class ffp_alloc(allocator_base):
 
     def _update_resources(self, reserved_nodes, requested_resources):
         """
+    
         Updates the internal avl_resources list after a successful allocation.
         
         :param reserved_nodes: the list of nodes assigned to the allocated job
         :param requested_resources: the list of resources requested by the job per each node
+    
         """
         for node in reserved_nodes:
             resource = self._avl_resources[node]
@@ -335,31 +362,37 @@ class ffp_alloc(allocator_base):
 
     def _sort_resources(self):
         """
+    
         Method which sorts the available resources dict. Not used in this class, but can be overridden by extended
         classes.
 
         :return: the sorted list of node keys (in this case, identical to the original)
+    
         """
         return self._avl_resources.keys()
 
     def _adjust_resources(self, sorted_keys):
         """
+    
         Method which restores the resources' sorting after a successful allocation. Not used in this class, has
         to be overridden.
 
         :param sorted_keys: the list of keys that needs to be adjusted
         :return: none
+    
         """
         pass
 
     def _event_fits_node(self, resources, requested_resources):
         """
+    
         Checks if the job with requested_resources fits the node with resources available. Returns the number
         of job units that fit the node
         
         :param resources: the node's available resources
         :param requested_resources: the job's requested resources
         :return: the number of job units fitting in the node
+    
         """
         # min_availability is the number of job units fitting in the node. It is initialized at +infty,
         # since we must compute a minimum
@@ -382,50 +415,60 @@ class ffp_alloc(allocator_base):
         
 class consolidate_alloc(ffp_alloc):
     """
-        Consolidate Allocator
+    
+    Consolidate Allocator
     It is an allocator which sorts the nodes basing on the amount of free resources, trying to consolidate.
         
     The less the available resources, the higher the priority.
     The allocator is based on allocator_simple, changing only the sort and adjust methods.   
+    
     """
     
     name = 'Consolidate'
 
     def __init__(self, seed=0, resource_manager=None, **kwargs):
         """
+        
         Constructor for the class.
 
         :param seed: seed for random events (not used)
         :param resource_manager: reference to the system resource manager
         :param kwargs: None at the moment
+        
         """
         ffp_alloc.__init__(self, seed, resource_manager)
 
         self.ranking = lambda x: sum(self._avl_resources[x].values())
         """
+        
             Defines the ranking operator for sorting. Must use the self._avl_resources argument
             (the available resource dictionary). x represents a key.
+        
         """
 
     def _sort_resources(self):
         """
+        
         This method sorts the keys of the available resources dictionary, basing on the ranking operator.
         
         It is called after the resources are set in the allocator.
         
         :return: the list of sorted keys (node ids) for the resources
+        
         """
         assert self._avl_resources is not None, 'The dictionary of available resources must be non-empty.'
         return sorted(self._avl_resources.keys(), key=self.ranking, reverse=False)
 
     def _adjust_resources(self, sorted_keys):
         """
+        
         Adjusts the sorting of the resources after a successful allocation. 
         
         This method still uses python's sort method, because the Timsort implementation has O(n) complexity
         on mostly sorted data. Even with a custom implementation, the average case would cost O(n) at best.
         
         :param sorted_keys: the list of keys, almost sorted, that needs to be adjusted
+        
         """
         assert self._avl_resources is not None, 'The dictionary of available resources must be non-empty.'
         assert sorted_keys is not None, 'The list of keys must be non-empty'
