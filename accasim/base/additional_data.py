@@ -27,7 +27,9 @@ from builtins import int
 
 class additional_data_type:
     """
+    
     Specific object type for variables added through additional data implementations 
+    
     """
     def __init__(self, value):
         self.value = value
@@ -49,12 +51,17 @@ class additional_data_type:
 class additional_data(ABC):
     """
     Additional data class enables to add new behavior to the system, by executing a custom process which can use the current state of the system to create new data
-    The current state of the system is maintained in the event_mapper object, which is  
+    The current state of the system is maintained in the :class:`accasim.base.event_class.event_mapper` object.  
     """
     
     def __init__(self, event_manager=None):
         """
-        Additional data constructor. The event mapper must be defined at the instantiation or later, but it is mandatory for working.
+        
+        Constructor. 
+        The event mapper (:class:`accasim.base.event_class.event_mapper`) must be defined at the instantiation or later, but it is mandatory for working.
+        
+        :param event_manager: Event manager object.
+        
         """
         self.event_mapper = event_manager
     
@@ -102,7 +109,7 @@ class additional_data(ABC):
         """
             Set the system event manager
             
-            :param event_manager: An instantiation of a event_mapper class or None 
+            :param event_manager: An instantiation of a :class:`accasim.base.event_class.event_mapper` class or None 
         """       
         if self.event_mapper:
             return

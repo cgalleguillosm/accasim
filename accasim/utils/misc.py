@@ -54,7 +54,7 @@ _swf_avoid_regexps = [r'^;.*']
 default_swf_parse_config = (
     {
         'job_number': _swf_int_pattern,
-        'submit_time': _swf_int_pattern,
+        'queued_time': _swf_int_pattern,
         'wait_time': _swf_int_pattern,
         'duration': _swf_int_pattern,
         'allocated_processors': _swf_int_pattern,
@@ -75,7 +75,6 @@ default_swf_parse_config = (
 
 default_swf_mapper = {
     'job_number': 'job_id',
-    'submit_time': 'queued_time',
     'requested_time': 'expected_duration'
 }
 

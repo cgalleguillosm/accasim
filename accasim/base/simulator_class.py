@@ -24,7 +24,7 @@ SOFTWARE.
 from time import clock as _clock, sleep as _sleep
 from datetime import datetime
 from abc import abstractmethod, ABC
-from accasim.utils.reader_class import reader
+from accasim.utils.reader_class import default_reader_class, reader_class
 from accasim.utils.misc import CONSTANT, watcher_daemon, DEFAULT_SIMULATION, load_config, path_leaf, clean_results
 from accasim.utils.visualization_class import scheduling_visualization
 from accasim.base.event_class import event_mapper
@@ -56,7 +56,7 @@ class simulator_base(ABC):
         self.constants = CONSTANT()
         self.define_default_constants(config_file, **kwargs)
         self.real_init_time = datetime.now()
-        assert(isinstance(_reader, reader))
+        assert(isinstance(_reader, reader_class))
         self.reader = _reader
         assert(isinstance(_resource_manager, resource_manager))
         self.resource_manager = _resource_manager
@@ -137,8 +137,10 @@ class simulator_base(ABC):
         
         """        
         config = load_config(config_path)
+        equiv = config.pop('equivalence', {})
+        start_time = config.pop('start_time', 0)
         resources = resources_class(**config)
-        return resources.resource_manager()
+        return resources.resource_manager(), equiv, start_time
     
     def define_filepaths(self, **kwargs):
         """
@@ -171,7 +173,7 @@ class simulator_base(ABC):
     def set_workload_input(self, workload_path, **kwargs):
         """
         
-        Create the reader object
+        Creates a default reader object
         
         :param workload_path: Path to the workload
         :param \*\*kwargs: extra arguments
@@ -179,16 +181,16 @@ class simulator_base(ABC):
         :return: A reader object         
         
         """
-        return reader(workload_path, **kwargs)
+        return default_reader_class(workload_path, **kwargs)
     
     def prepare_arguments(self, possible_arguments, arguments):
         """
         
         Verifies arguments for a specific instantation and create the dictionary. 
         
-        Note
+        Note:
         
-        Move to misc
+            this method will be moved to misc
         
         :param possible_arguments: Required arguments.
         :param arguments: Available arguments.  
@@ -295,24 +297,35 @@ class hpc_simulator(simulator_base):
         kwargs['STATISTICS_OUTPUT'] = statistics_output
         kwargs['SHOW_STATISTICS'] = show_statistics
 
+        _uargs = []
+
         if not _resource_manager:
-            _resource_manager = self.generate_enviroment(sys_config)
+            _resource_manager, equiv, start_time = self.generate_enviroment(sys_config)
+            kwargs['equivalence'] = equiv
+            kwargs['start_time'] = start_time
         if not _job_factory:
             _jf_arguments = ['job_class', 'job_attrs', 'job_mapper']
             args = self.prepare_arguments(_jf_arguments, kwargs)
+            _uargs += _jf_arguments
             _job_factory = job_factory(_resource_manager, **args)
-        if 'tweak_function' not in kwargs:
-            kwargs['tweak_function'] = self.default_tweak_function
+        #=======================================================================
+        # if 'tweak_function' not in kwargs:
+        #     kwargs['tweak_function'] = self.default_tweak_function
+        #=======================================================================
         if workload and not _reader:
-            _reader_arguments = ['max_lines']
+            _reader_arguments = ['max_lines', 'tweak_function', 'equivalence', 'start_time']
             args = self.prepare_arguments(_reader_arguments, kwargs)
-            _reader = self.set_workload_input(workload, **args)
+            _reader = self.set_workload_input(workload, job_factory=_job_factory, **args)
+            _uargs += _reader_arguments
         if not isinstance(_additional_data, list):
             assert(isinstance(_additional_data, additional_data) or issubclass(_additional_data, additional_data)), 'Only subclasses of additional_data class are acepted as _additional_data argument '
             _additional_data = [_additional_data]
             
         _scheduler.set_resource_manager(_resource_manager)
         
+        for _u in _uargs:
+            kwargs.pop(_u, None)
+
         simulator_base.__init__(self, _resource_manager, _reader, _job_factory, _scheduler, _additional_data, config_file=_simulator_config, **kwargs)
         
         self.start_time = None
@@ -335,11 +348,11 @@ class hpc_simulator(simulator_base):
             self.constants.running_at['running_jobs'] = {x: self.mapper.events[x] for x in self.mapper.running}
             _sleep(self.constants.running_at['interval'])
     
-    def start_simulation(self, init_unix_time, watcher=False, visualization=False, **kwargs):
+    def start_simulation(self, watcher=False, visualization=False, **kwargs):
         """
         
         Initializes the simulation
-        
+                
         :param init_unix_time: Adjustement for job timings. If the first job corresponds to 0, the init_unix_time must corresponds to the real submit time of the workload. Otherwise, if the job contains the real submit time, init_unix_time is 0.
         :param watcher: Initializes the watcher. 
         :param visualization: Initializes the running jobs visualization using matplotlib.
@@ -376,9 +389,9 @@ class hpc_simulator(simulator_base):
                 'args': [self.constants.WATCH_PORT, functions],
                 'object': None
             }
-        self.reader.open_file()
+        # self.reader.open_file()
 
-        kwargs['init_unix_time'] = init_unix_time
+        # kwargs['init_unix_time'] = init_unix_time
 
         simulation = Thread(target=self.start_hpc_simulation, kwargs=kwargs)
         simulation.start()
@@ -390,54 +403,14 @@ class hpc_simulator(simulator_base):
         [d['object'].stop() for d in self.daemons.values() if d['object']]
         if visualization:
             _stop.set()
-        
-    def default_tweak_function(self, _dict, init_unix_time):
-        """
-        
-        Function will disappear. It will be part of the default SWF reader
-        
-        """
-        # At this point, where this function is called, the _dict object have the assignation from the log data.
-        # As in the SWF workload logs the numbers of cores are not expressed, just the number of requested processors, we have to tweak this information
-        # i.e we replace the number of processors by the number of requested cores.
-        _processors = _dict.pop('requested_number_processors') if _dict['requested_number_processors'] != -1 else _dict.pop(
-            'allocated_processors')
-        _memory = _dict.pop('requested_memory') if _dict['requested_memory'] != -1 else _dict.pop('used_memory')
-        # For this system configuration. Each processor has 2 cores, then total required cores are calculated as
-        # required_processor x 2 cores =  required cores of the job
-        _dict['core'] = _processors * 2
-        # The requested memory is given for each processor, therefore the total of requested memory is calculated as memory x processors = required memory of the job
-        _dict['mem'] = _memory * _processors
-        # If the following keys are not given, these are calculated by the job factory with the previous data
-        # In this dataset there is no way to know how many cores of each node where requested, by default both cores are requested by processor
-        # Each node has two processor, then it is possible to alocate upto 2 processor by node for the same job.
-        _dict['requested_nodes'] = _processors
-        _dict['requested_resources'] = {'core': 2, 'mem': _memory}
-        # A final and important tweak is modifying the time corresponding to 0 time. For this workload as defined in the file
-        # the 0 time corresponds to Sun Jul 28 09:04:05 CEST 2002 (1027839845 unix time)
-        _dict['submit_time'] = _dict.pop('submit_time') + init_unix_time
-        assert (
-        _dict['core'] >= 0), 'Please consider to clean your data cannot exists requests with any info about core request.'
-        assert (
-        _dict['mem'] >= 0), 'Please consider to clean your data cannot exists requests with any info about mem request.'
-        return _dict
-        
-    def start_hpc_simulation(self, _debug=False, tweak_function=None, init_unix_time=0):
+                
+    def start_hpc_simulation(self, _debug=False):
         """
         
         Initializes the simulation in a new thread. It is called by the start_timulation using its arguments.
         :param _debug: Debugging flag
         
-        """
-        
-        # TODO move to the default swf reader
-        if tweak_function:
-            assert(callable(tweak_function)), 'tweak_function argument must be a function.'
-            self.tweak_function = tweak_function
-        else:
-            self.tweak_function = self.constants.tweak_function
-        self.init_unix_time = init_unix_time
-                    
+        """                   
         
         #=======================================================================
         # Load events corresponding at the "current time" and the next one
@@ -448,7 +421,7 @@ class hpc_simulator(simulator_base):
 
         print('Starting the simulation process.')
         
-        self.load_events(event_dict, self.mapper, _debug, self.max_sample)
+        self.load_events(self.mapper.current_time, event_dict, self.mapper, _debug, self.max_sample)
         events = self.mapper.next_events()
 
         #=======================================================================
@@ -495,7 +468,7 @@ class hpc_simulator(simulator_base):
             #===================================================================
             if len(self.mapper.loaded) < 10:
                 sample = self.max_sample if(len(self.mapper.loaded) < self.max_sample) else 2
-                self.load_events(event_dict, self.mapper, _debug, sample)
+                self.load_events(_actual_time, event_dict, self.mapper, _debug, sample)
             #===================================================================
             # Continue with next events            
             #===================================================================
@@ -572,38 +545,51 @@ class hpc_simulator(simulator_base):
         with open(_filepath, 'a') as f:
             f.write(bline)
 
-    def load_events(self, jobs_dict, mapper, _debug=False, time_samples=2):
+    def load_events(self, current_time, jobs_dict, mapper, _debug=False, time_samples=2):
         """
 
         Incremental loading. Load the new jobs into the 
+        :param current_time: Current simulation time.
         :param jobs_dict: Dictionary of the current load, queued and running jobs
         :param mapper: Job event mapper object
         :param _debug: Debug flag
         :param time_samples: Default 2. It load the next two time steps. 
 
         """
-        _time = None
-        while not self.reader.EOF and time_samples > 0:
-            _dicts = self.reader.next_dicts()
-            if not _dicts:
-                break
-            tmp_dict = {}
-            job_list = []
-            for _dict in _dicts:
-                if self.tweak_function:
-                    self.tweak_function(_dict, self.init_unix_time)
-                je = self.job_factory.factory(**_dict)
-                if self.checkJobValidity(je):
-                    self.loaded_jobs += 1
-                    tmp_dict[je.id] = je
-                    job_list.append(je)
-                elif _debug:
-                    print("Job %s violates the system's resource constraints and will be discarded" % je.id)
-                if _time != je.queued_time:
-                    _time = je.queued_time
-                    time_samples -= 1
-            mapper.load_events(job_list)
-            jobs_dict.update(tmp_dict)
+        nt_points, ps_jobs = self.reader.next(current_time, time_points=time_samples)
+        tmp_dict = {}
+        job_list = []
+        for nt_point, jobs in ps_jobs.items():
+            for job in jobs:
+                self.loaded_jobs += 1
+                tmp_dict[job.id] = job
+                job_list.append(job)
+        mapper.load_events(job_list)
+        jobs_dict.update(tmp_dict)
+        #=======================================================================
+        # _time = None
+        # while not self.reader.EOF and time_samples > 0:
+        #     _dicts = self.reader.next_dicts()
+        #     if not _dicts:
+        #         break
+        #     tmp_dict = {}
+        #     job_list = []
+        #     for _dict in _dicts:
+        #         if self.tweak_function:
+        #             self.tweak_function(_dict, self.init_unix_time)
+        #         je = self.job_factory.factory(**_dict)
+        #         if self.checkJobValidity(je):
+        #             self.loaded_jobs += 1
+        #             tmp_dict[je.id] = je
+        #             job_list.append(je)
+        #         elif _debug:
+        #             print("Job %s violates the system's resource constraints and will be discarded" % je.id)
+        #         if _time != je.queued_time:
+        #             _time = je.queued_time
+        #             time_samples -= 1
+        #     mapper.load_events(job_list)
+        #     jobs_dict.update(tmp_dict)
+        #=======================================================================
 
     def checkJobValidity(self, job):
         """
