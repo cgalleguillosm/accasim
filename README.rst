@@ -10,3 +10,4 @@ For more information please visit the `webpage of AccaSim <https://sites.google.
 What's new?
 ***************
 - 12-07-2017 First version of the package.
+- 19-07-2017 Documentation is moved to `http://accasim.readthedocs.io <http://accasim.readthedocs.io>`_

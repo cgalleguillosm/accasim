@@ -20,14 +20,6 @@ accasim\.utils\.reader\_class module
     :undoc-members:
     :show-inheritance:
 
-accasim\.utils\.version module
-------------------------------
-
-.. automodule:: accasim.utils.version
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 accasim\.utils\.visualization\_class module
 -------------------------------------------
 

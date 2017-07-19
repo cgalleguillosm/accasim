@@ -102,3 +102,6 @@ ENV/
 /.project
 /.pydevproject
 /run.py
+/cph_example.py
+/prb_example.py
+/extra/

@@ -6,11 +6,18 @@
 Welcome to AccaSim's documentation!
 ===================================
 
+.. include:: ../../README.rst
+
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
+   :hidden:
+   
+   installation
+   modules
+   
+.. include:: installation.rst
 
-
+.. include:: documentation.rst	
 
 Indices and tables
 ==================

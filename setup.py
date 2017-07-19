@@ -1,4 +1,5 @@
 from setuptools import setup, find_packages
+from accasim import __version__
 from codecs import open
 from os import path
 import re, mmap
@@ -9,16 +10,9 @@ package_name = 'accasim'
 with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
     long_description = f.read()
     
-with open(path.join(here, 'accasim', 'utils', 'version.py')) as f:
-    data = f.readlines()[-1]
-    mo = re.search('version = \'([\d.]+)\'', data)
-    if mo:
-        package_version = mo.group(1)
-    else:
-        raise Exception('Missing version')
 setup(
     name=package_name,
-    version=package_version,
+    version=__version__,
     description='An HPC Workload Management Simulator',
     long_description=long_description,
     url='https://sites.google.com/view/accasim',
