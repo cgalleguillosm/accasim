@@ -107,7 +107,7 @@ class scheduler_base(ABC):
         :param es: events to be scheduled
         :param _debug: Flag to debug
         
-        :return a tuple of (time to schedule, event id, list of assigned nodes)
+        :return: a tuple of (time to schedule, event id, list of assigned nodes)
         
         """
         assert(self.resource_manager is not None), 'The resource manager is not defined. It must defined prior to run the simulation.'
@@ -153,7 +153,7 @@ class simple_heuristic(scheduler_base):
         :param es: events to be scheduled
         :param _debug: Flag to debug
         
-        :return a tuple of (time to schedule, event id, list of assigned nodes)  
+        :return: a tuple of (time to schedule, event id, list of assigned nodes)  
         
         """
 
@@ -175,33 +175,45 @@ class simple_heuristic(scheduler_base):
 class fifo_sched(simple_heuristic):
     """
 
-    FIFO scheduling policy. The first come, first served (commonly called FIFO ‒ first in, first out) 
+    **FIFO scheduling policy.** 
+    
+    The first come, first served (commonly called FIFO ‒ first in, first out) 
     process scheduling algorithm is the simplest process scheduling algorithm. 
         
     """
     name = 'FIFO'
+    """ Name of the Scheduler policy. """
+    
     sorting_arguments = {
             'key': lambda x: x.queued_time,
             'reverse': False
         }
+    """ This sorting function allows to sort the jobs in relation of the scheduling policy. """
 
     def __init__(self, _allocator, _resource_manager=None, _seed=0, **kwargs):
         """
+        
         FIFO Constructor
+        
         """
         simple_heuristic.__init__(self, _seed, _resource_manager, _allocator, self.name, self.sorting_arguments, **kwargs)
         
 class ljf_sched(simple_heuristic):
     """
     
-    LJF scheduling policy.  
+    **LJF scheduling policy.**
+    
+    Longest Job First (LJF) sorts the jobs, where the longest jobs are preferred over the shortest ones.  
         
     """
     name = 'LJF'
+    """ Name of the Scheduler policy. """
+    
     sorting_arguments = {
             'key': lambda x: x.expected_duration,
             'reverse': True
         }
+    """ This sorting function allows to sort the jobs in relation of the scheduling policy. """
 
     def __init__(self, _allocator, _resource_manager=None, _seed=0, **kwargs):
         """
@@ -214,14 +226,19 @@ class ljf_sched(simple_heuristic):
 class sjf_sched(simple_heuristic):
     """
     
-    SJF scheduling policy. ...
-        
+    **SJF scheduling policy.**
+    
+    Shortest Job First (SJF) sorts the jobs, where the shortest jobs are preferred over the longest ones.
+    
     """
     name = 'SJF'
+    """ Name of the Scheduler policy. """
+    
     sorting_arguments = {
             'key': lambda x: x.expected_duration,
             'reverse': False
         }
+    """ This sorting function allows to sort the jobs in relation of the scheduling policy. """
 
     def __init__(self, _allocator, _resource_manager=None, _seed=0, **kwargs):
         """
@@ -238,10 +255,11 @@ class easybf_sched(scheduler_base):
     
     Whenever a job cannot be allocated, a reservation is made for it. After this, the following jobs are used to
     backfill the schedule, not allowing them to use the reserved nodes.
-    Sorting as name, sort funct parameters
-    
+        
     """
+    
     name = 'EASY_Backfilling'
+    """ Name of the Scheduler policy. """
     
     def __init__(self, _allocator, _resource_manager=None, _seed=0, **kwargs):
         """
@@ -274,7 +292,7 @@ class easybf_sched(scheduler_base):
         :param es: events to be scheduled
         :param _debug: Flag to debug
         
-        :return a tuple of (time to schedule, event id, list of assigned nodes)  
+        :return: a tuple of (time to schedule, event id, list of assigned nodes)  
 
         """
 
@@ -393,7 +411,7 @@ class easybf_sched(scheduler_base):
         :param future_endings: List of tuples of runninng events + events to be dispatched. (id, expected_ending time, assigns{node: {used attr: used value}} )
         :param e: Event to be fitted in the time slot
             
-        :return a tuple of time of the slot and nodes
+        :return: a tuple of time of the slot and nodes
 
         """
         virtual_resources = deepcopy(avl_resources)

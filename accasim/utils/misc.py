@@ -240,6 +240,7 @@ def from_isodatetime_2_timestamp(dtime):
     """
     
     Converts a ISO datetime to Unix Timestamp
+    
     :param dtime: Datetime in YYYY-MM-DD HH:MM:SS format
     
     :return: Timestamp of the dtime 
@@ -411,26 +412,24 @@ class Singleton(object):
 class CONSTANT(Singleton):
     """
     
-    This class allows to load all config into the Singleton Object called CONSTANT. 
-    For accessing to all the parameters, it will be possible only calling the parameters as its attribute.
-
+    This class allows to load all config parameters into a :class:`.Singleton` Object. 
+    This object will allow access to all the parameters. The parameters could be accessed as attribute name.
     
-    Example
+    New attrs could be passed as dict (:func:`load_constants`) or simply with (attr, value) (:func:`load_constant`)
     
-        Config:
-        PATH = '/path/to/'
+    :Example:
+          
+        **Program**:
         
-        Program
-        c = CONSTANT()
-        print(c.PATH)
-        
-        >> /path/to/
+        >>> PATH = '/path/to/'
+        >>> c = CONSTANT()
+        >>> c.load('PATH', PATH)
+        >>> print(c.PATH)
+        >>> /path/to/
 
-    Note
+    :Note:
     
         It's loaded into all base class by default!
-    
-    New attrs could be passed as dict (load_constants) or simply with (attr, value) (load_constant)
     
     """    
     def load_constants(self, _dict):
@@ -907,21 +906,76 @@ def clean_results(*args):
 class DEFAULT_SIMULATION:
     """
     
-    Default and base simulation parameters
+    Default and base simulation parameters. The following parameters are loaded into the :class:`.CONSTANT`.
+    This constants values can be overridden by passing as kwargs in the :class:`accasim.base.simulator_class.hpc_simulator` class instantiation.
     
-    Note
-        CONFIG_FOLDER_NAME: Folder of the config files
-        RESULTS_FOLDER_NAME: Folder for the result files  
-        SCHEDULE_OUTPUT: Format of the dispatching plan file 
-        PPRINT_SCHEDULE_OUTPUT: Format of the dispatching plan file in pretty print version
-        SCHED_PREFIX: Prefix of the dispatching plan file
-        PPRINT_PREFIX: Prefix of the pprint file
-        STATISTICS_PREFIX: Prefix of the statistic file
-        BENCHMARK_PREFIX: Prefix of the benchmark file
-        RESOURCE_ORDER: How resource are sorted for printing purposes
-        WATCH_PORT: Port used for the watcher daemon.
+    :Note:
+    
+        * CONFIG_FOLDER_NAME: Folder where the configuration files are.
+            * "CONFIG_FOLDER_NAME": "config/"
+        * RESULTS_FOLDER_NAME: Folder where the configuration files will be.
+            * "RESULTS_FOLDER_NAME": "results/"
+        * SCHEDULE_OUTPUT: Format of the dispatching plan file.
+            * "SCHEDULE_OUTPUT": 
+            
+            .. code:: 
+
+                {
+                    "format": "{job_id};{user};{queue_time}__{assignations}__{start_time};{end_time};{total_nodes};{total_cpu};{total_mem};{expected_duration};",
+                    "attributes": {
+                        "job_id": ("id", "str"),
+                        "user": ("user_id", "str"),
+                        "queue_time": ("queued_time", "accasim.utils.misc.str_datetime"),
+                        "start_time": ("start_time", "accasim.utils.misc.str_datetime"),
+                        "end_time": ("end_time", "accasim.utils.misc.str_datetime"),
+                        "assignations": ("assigned_nodes", "requested_resources", "accasim.utils.misc.str_resources"),
+                        "total_nodes": ("requested_nodes", "int"),
+                        "total_cpu": ("core", "int"),
+                        "total_mem": ("mem", "int"),
+                        "expected_duration": ("expected_duration", "int")      
+                    }
+                }
+                
+        * PPRINT_SCHEDULE_OUTPUT: Format of the dispatching plan file in pretty print version. (Human readable version).
+            * "PPRINT_SCHEDULE_OUTPUT":
+            
+            .. code:: 
+            
+                {
+                    "format": "{:>5} {:>15} {:^19} {:^19} {:>8} {:>8} {:>8} {:>5} {:>4} {:>10} {:<20}",
+                    "order": ["n", "job_id", "start_time", "end_time", "wtime", "rtime", "slowdown", "nodes", "core", "mem", "assigned_nodes"],
+                    "attributes":{
+                        "n": ("end_order", "int"),
+                        "job_id": ("id", "str"),
+                        "start_time": ("start_time", "accasim.utils.misc.str_datetime"),
+                        "end_time": ("end_time", "accasim.utils.misc.str_datetime"),
+                        "wtime": ("waiting_time", "int"),
+                        "rtime": ("running_time", "int"),
+                        "slowdown": ("slowdown", "float"),
+                        "nodes": ("requested_nodes", "int"),
+                        "core": ("core", "int"),
+                        "mem": ("mem", "int"),
+                        "assigned_nodes": ("assigned_nodes", "accasim.utils.misc.str_nodes")
+                    }
+                }
+                
+        * SCHED_PREFIX: Prefix of the dispatching plan file.
+            * "SCHED_PREFIX": "sched-"
+        * PPRINT_PREFIX: Prefix of the pprint file.
+            * "PPRINT_PREFIX": "pprint-"
+        * STATISTICS_PREFIX: Prefix of the statistic file.
+            * "STATISTICS_PREFIX": "stats-"
+        * BENCHMARK_PREFIX: Prefix of the benchmark file.
+            * "BENCHMARK_PREFIX": "bench-"
+        * SUBMISSION_ERROR_PREFIX: Prefix of the submission error file.
+            * "SUBMISSION_ERROR_PREFIX": "suberror-"
+        * RESOURCE_ORDER: How resource are sorted for printing purposes.
+            * "RESOURCE_ORDER": ["core", "mem"]
+        * WATCH_PORT: Port used for the watcher daemon.
+            * "WATCH_PORT": 8999
     
     """
+    
     parameters = {
         "CONFIG_FOLDER_NAME": "config/",
         "RESULTS_FOLDER_NAME": "results/",
@@ -961,9 +1015,11 @@ class DEFAULT_SIMULATION:
         "PPRINT_PREFIX": "pprint-",
         "STATISTICS_PREFIX": "stats-",
         "BENCHMARK_PREFIX": "bench-",
+        "SUBMISSION_ERROR_PREFIX": "suberror-",
         "RESOURCE_ORDER": ["core", "mem"],
         "WATCH_PORT": 8999
     }
+    """dict: Default Simulation parameters """
     
 def path_leaf(path):
     """

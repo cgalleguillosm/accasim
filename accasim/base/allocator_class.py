@@ -146,6 +146,7 @@ class allocator_base(ABC):
         :param _resource_manager: A resource manager instance or None. If a resource manager is already instantiated,
              it's used for set internally set it and obtain the system capacity for dealing with the request verifications.
              The dispathing process can't start without a resource manager. 
+             
         """
         if _resource_manager:
             assert isinstance(_resource_manager, resource_manager), 'Resource Manager not valid for scheduler'
@@ -323,6 +324,7 @@ class ffp_alloc(allocator_base):
         :param reserved_time: the list (or single element) of reservation times
         :param reserved_nodes: the list of lists (or single list) of reserved nodes for each reservation
         :param debug: the debug flag
+        
         :return: the list of nodes that cannot be used by event e
     
         """
@@ -378,6 +380,7 @@ class ffp_alloc(allocator_base):
         to be overridden.
 
         :param sorted_keys: the list of keys that needs to be adjusted
+        
         :return: none
     
         """
@@ -391,6 +394,7 @@ class ffp_alloc(allocator_base):
         
         :param resources: the node's available resources
         :param requested_resources: the job's requested resources
+        
         :return: the number of job units fitting in the node
     
         """

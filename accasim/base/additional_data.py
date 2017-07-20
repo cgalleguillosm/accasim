@@ -44,7 +44,9 @@ class additional_data_type:
     def update(self, value):
         """
         Updates the internal value
-        :param value: New value 
+        
+        :param value: New value
+         
         """
         self.data = value
         
@@ -109,7 +111,8 @@ class additional_data(ABC):
         """
             Set the system event manager
             
-            :param event_manager: An instantiation of a :class:`accasim.base.event_class.event_mapper` class or None 
+            :param event_manager: An instantiation of a :class:`accasim.base.event_class.event_mapper` class or None
+             
         """       
         if self.event_mapper:
             return

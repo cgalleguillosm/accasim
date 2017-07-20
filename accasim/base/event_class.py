@@ -41,9 +41,9 @@ class attribute_type:
         
         Constructor for defining a new attribute type.
         
-        @param name: Attribute name
-        @param type_class: Class type of attribute (str, int, float, etc.) for casting. If value  is already casted it is not necesary.
-        @param optional: False by default. If it is True, the default value will be None and it is not required to give any value to this.  
+        :param name: Attribute name
+        :param type_class: Class type of attribute (str, int, float, etc.) for casting. If value  is already casted it is not necesary.
+        :param optional: False by default. If it is True, the default value will be None and it is not required to give any value to this.  
         
         """
         assert(isinstance(name, str))
@@ -58,9 +58,9 @@ class event(ABC):
         
         Constructor of the basic job event. 
             
-        @param job_id: Identification of the job.
-        @param queued_time: Corresponding time to the submission time to the system in unix timestamp.
-        @param duration: Real duration of the job in unix timestamp.
+        :param job_id: Identification of the job.
+        :param queued_time: Corresponding time to the submission time to the system in unix timestamp.
+        :param duration: Real duration of the job in unix timestamp.
         
         """
         self.constants = CONSTANT()
@@ -77,10 +77,10 @@ class event(ABC):
         Internal method that reads a description, and extract the value from the object itself and return it. It is used
         for genereting the output logs. (This method is candidate to be moved into utils package.)
         
-        @param obj: Object to be analyzed
-        @param attrs: Attributes to be extracted from the object
+        :param obj: Object to be analyzed
+        :param attrs: Attributes to be extracted from the object
             
-        @return: Value of the object.   
+        :return: Value of the object.   
         
         """ 
         if isinstance(attrs, tuple):
@@ -137,10 +137,10 @@ class job_factory:
     def __init__(self, _resource_manager, job_class=event, job_attrs=[], job_mapper=default_swf_mapper):
         """
         
-        @param _resource_manager: The resource manager of the simulator. It is required for creating the job requests.
-        @param job_class: The class to be created by the Factory. By default it uses the Event class, but any subclass of it can be used (modified versions). 
-        @param job_attrs: The extra attributes (attribute_type class) (already job_id, queued_time and duration are mandatory) to be set in the JobEvent class
-        @param job_mapper: Rename the the old key to a new key (using the value of the mapper dictionary)
+        :param _resource_manager: The resource manager of the simulator. It is required for creating the job requests.
+        :param job_class: The class to be created by the Factory. By default it uses the Event class, but any subclass of it can be used (modified versions). 
+        :param job_attrs: The extra attributes (attribute_type class) (already job_id, queued_time and duration are mandatory) to be set in the JobEvent class
+        :param job_mapper: Rename the the old key to a new key (using the value of the mapper dictionary)
         
         """
         assert(isinstance(_resource_manager, resource_manager))
@@ -174,12 +174,11 @@ class job_factory:
         
         Creates a job instance with the dictionary received as argument. It verifies that all attributes has been included in the kwargs.
         
-        @param \*\*kwargs: Dictionary with the job attributes.
+        :param \*\*kwargs: Dictionary with the job attributes.
         
-        @return: Returns a job instantiation.  
+        :return: Returns a job instantiation.  
 
-        """
-        
+        """        
         
         for _old, _new in self.mapper.items():
             value = kwargs.pop(_old)
@@ -197,9 +196,10 @@ class job_factory:
         """
         
         Sets the attributes to the job object.
-        @param obj: Object to be updated
-        @param reference: Attribute type of reference. It contains the name, optionality and type for casting.
-        @param values: Values to be added to the object
+        
+        :param obj: Object to be updated
+        :param reference: Attribute type of reference. It contains the name, optionality and type for casting.
+        :param values: Values to be added to the object
                
         """
         for _attr in reference:
@@ -214,7 +214,7 @@ class job_factory:
 
         This method sets the request of the job, it uses the resources available of the system to define it.  
 
-        @param obj: Job object
+        :param obj: Job object
 
         """
         # Calculate only if it is not present
@@ -234,7 +234,7 @@ class job_factory:
 
         Method that returns the minimal attributes of a job. Default values: ID, Expected Duration, CORE and MEM.
         
-        @return: Array of Attributes
+        :return: Array of Attributes
 
         """
         # Attribute to identify the user
@@ -259,8 +259,9 @@ class event_mapper:
         """
 
         This class coordinates events submission, queueing and ending. 
-        @param _resource_manager: Resource manager instance
-        @param \*\*kwargs: nothing for the moment. 
+        
+        :param _resource_manager: Resource manager instance
+        :param \*\*kwargs: nothing for the moment. 
 
         """
         assert(isinstance(_resource_manager, resource_manager)), 'Wrong type for the resource_manager argument.'
@@ -287,7 +288,7 @@ class event_mapper:
         
         Jobs are loaded to the system. This is the first step for a job simulation.
         
-        @param es: List of jobs. Jobs must be subclass of event class. 
+        :param es: List of jobs. Jobs must be subclass of event class. 
         
         """
         if isinstance(es, list):
@@ -303,7 +304,7 @@ class event_mapper:
         
         Internal method for job submission.
             
-        @param e: Single job (event subclass).
+        :param e: Single job (event subclass).
           
         """
         assert(isinstance(e, event)), 'Using %s, expecting a single %s' % (e.__class__, event.__name__)
@@ -325,8 +326,9 @@ class event_mapper:
         The job must run until the real one is reached, then if a job is waiting to finish but is less than the
         real ending time, this value must be updated with the real one.
         
-        @param events_dict: Actual Loaded, queued and running jobs in a dictionary {id: job object}
-        @return: Array of completed jobs         
+        :param events_dict: Actual Loaded, queued and running jobs in a dictionary {id: job object}
+        
+        :return: Array of completed jobs         
     
         """
         _es = []
@@ -344,7 +346,8 @@ class event_mapper:
 
         Internal method for Job's completion. This method sets the ending time, and make some standard calculations for statistics, such as slowdown, waiting time. 
         Finally it calls the methods for output.
-        @param e: Job to be completed.
+        
+        :param e: Job to be completed.
 
         """
         e.end_time = self.current_time
@@ -361,12 +364,13 @@ class event_mapper:
         """
 
         Internal method for Job's dispatching. This method updates the related attributes for allocation of the job. 
-        @param _job: Job object
-        @param _time: Time of dispatching
-        @param _time_diff: Time used if dispatching processing _time must be considered.
-        @param _nodes: Nodes to be allocated.
         
-        @return: True if the allocation must be performed, false otherwise. False for jobs that have duration equal to 0
+        :param _job: Job object
+        :param _time: Time of dispatching
+        :param _time_diff: Time used if dispatching processing _time must be considered.
+        :param _nodes: Nodes to be allocated.
+        
+        :return: True if the allocation must be performed, false otherwise. False for jobs that have duration equal to 0
 
         """ 
         id = _job.id
@@ -418,7 +422,7 @@ class event_mapper:
 
         Return the jobs that belongs to the next time point.
         
-        @return: Array of jobs recently submitted + queued available at current time. 
+        :return: Array of jobs recently submitted + queued available at current time. 
 
         """
         self.current_time = self.time_points.pop()
@@ -433,7 +437,7 @@ class event_mapper:
     def has_events(self):
         """
 
-        @return: True if are loaded, queued or running jobs. False otherwise.
+        :return: True if are loaded, queued or running jobs. False otherwise.
 
         """
         return (self.loaded or self.queued or self.running)  
@@ -443,10 +447,10 @@ class event_mapper:
 
         Internal method for processing the job's dispatching. Jobs are started if start time is equals to current time.
 
-        @param event_dict: Actual Loaded, queued and running jobs in a dictionary {id: job object}
-        @param to_dispatch: A tuple which contains the (start time, job id, nodes)
-        @param time_diff: Time which takes the dispatching processing time. Default 0. 
-        @param _debug: Debug flag    
+        :param event_dict: Actual Loaded, queued and running jobs in a dictionary {id: job object}
+        :param to_dispatch: A tuple which contains the (start time, job id, nodes)
+        :param time_diff: Time which takes the dispatching processing time. Default 0. 
+        :param _debug: Debug flag    
 
         """
         for (_time, _id, _nodes) in to_dispatch:
@@ -474,9 +478,10 @@ class event_mapper:
         """
 
         Internal method for completed jobs. Removes from the dictionary finished jobs.
-        @param event_dict: Actual Loaded, queued and running jobs in a dictionary {id: job object}
         
-        @return: return Array list of jobs objects.
+        :param event_dict: Actual Loaded, queued and running jobs in a dictionary {id: job object}
+        
+        :return: return Array list of jobs objects.
 
         """
         _es = self.move_to_finished(event_dict)
@@ -491,7 +496,7 @@ class event_mapper:
 
         Show the current state of the system in terms of loaded, queued, running and finished jobs.
             
-        @return: String including the system info.
+        :return: String including the system info.
 
         """
         return ('Loaded {}, Queued {}, Running {}, and Finished {} Jobs'.format(len(self.loaded), len(self.queued), len(self.running), len(self.finished)))
@@ -501,7 +506,7 @@ class event_mapper:
 
         Current availability of the system.
         
-        @return: Return the availability of the system.
+        :return: Return the availability of the system.
 
         """
         return self.resource_manager.availability()
@@ -511,7 +516,7 @@ class event_mapper:
 
         Current usage of the system
         
-        @return: Return the usage of the system
+        :return: Return the usage of the system
 
         """
         return self.resource_manager.resources.usage()
@@ -521,7 +526,7 @@ class event_mapper:
 
         Current time
         
-        @return: Return the current simulated time
+        :return: Return the current simulated time
 
         """
         return self.current_time
@@ -531,7 +536,7 @@ class event_mapper:
 
         Str representation of the event mapper
         
-        @return: Return the current system info.
+        :return: Return the current system info.
 
         """
         return 'Loaded: %s\nQueued: %s\nRunning: %s\nExpected job finish: %s\nReal job finish on: %s,\nFinished: %s\nNext time events: %s' % (self.loaded, self.queued, self.running, None, self.real_ending, self.finished, self.time_points)

@@ -39,10 +39,10 @@ class scheduling_visualization:
     
     def __init__(self, datasource, system_info, min_time=10 * 60, max_time=30 * 60):
         """
-            @param datasource: The data to be plot. This must include the running jobs with the specific allocations. 
-            @param system_info: The system resourcce to divide the plot area into resources types. Corresponds to the resource_manager system capacity.
-            @param min_time: Default 600. How much the plot will show before the current time. In secs. 
-            @param max_time: Default 1800. How much the plot will show after the current time. In secs.
+            :param datasource: The data to be plot. This must include the running jobs with the specific allocations. 
+            :param system_info: The system resourcce to divide the plot area into resources types. Corresponds to the resource_manager system capacity.
+            :param min_time: Default 600. How much the plot will show before the current time. In secs. 
+            :param max_time: Default 1800. How much the plot will show after the current time. In secs.
         """
         self.datasource = datasource
         self.system_info = system_info
@@ -92,9 +92,9 @@ class scheduling_visualization:
         """
             Loads new jobs into the jobs that are "running" in the plot. Checks first if it is already in the plot, if not it is added.
             The jobs are sorted in regards of the resource utilization.
-            @param current_time: Current simulation time.
-            @param running_jobs: list of running jobs.
-            @param _resources:  
+            :param current_time: Current simulation time.
+            :param running_jobs: list of running jobs.
+            :param _resources:  
         """
         for _id, _job in running_jobs.items():
             if _id in self.job_patches:
@@ -183,9 +183,9 @@ class scheduling_visualization:
         """
          Update the usage in the corresponding label of the resource type.
          
-         @param _ax: Axis object
-         @param _res: Axis resource name
-         @param _used: Current usage of the resource type.  
+         :param _ax: Axis object
+         :param _res: Axis resource name
+         :param _used: Current usage of the resource type.  
         """
         _res_usage = _used / self.system_info[_res]['total']
         _ax.set_ylabel('{} {:.2%}'.format(_res, _res_usage), rotation=90, size=20)
@@ -195,9 +195,9 @@ class scheduling_visualization:
          Modify the lenged of the resource type in regards of the jobs that use most the resources.
          Only a subset of jobs will be in the legend. By default 10.
          
-         @param ax: Axis object
-         @param res: Axis resource name
-         @param legend_size: Default 10. Size of the legend.
+         :param ax: Axis object
+         :param res: Axis resource name
+         :param legend_size: Default 10. Size of the legend.
         """
         h, l = ax.get_legend_handles_labels()
         # L.get_texts()[0].set_text('make it short')
@@ -217,9 +217,9 @@ class scheduling_visualization:
         """
         Updates the position of the patch in regards of the utilization of the resource
         
-        @param _patches: Patch objects corresponding to a job.
-        @param _res: Name of the resource type
-        @param _used: How much the job uses of the resoure type. 
+        :param _patches: Patch objects corresponding to a job.
+        :param _res: Name of the resource type
+        :param _used: How much the job uses of the resoure type. 
         """
         _patch = _patches[_res]
         _patch.set_y(self.system_info[_res]['used'] / self.system_info[_res]['total'])
@@ -228,7 +228,7 @@ class scheduling_visualization:
     def update_finished_jobs(self, _finished_jobs):
         """
          Patches of completed jobs are removed from the chart
-         @param _finished_jobs: Array list of job's Id            
+         :param _finished_jobs: Array list of job's Id            
         """        
         for id in _finished_jobs:
             _dict_patches = self.job_patches.pop(id, {})
@@ -245,10 +245,10 @@ class scheduling_visualization:
     def job_normalization(self, current_time, job):
         """
         Jobs are normalized in terms of the current visualization, setting as min and max the maximum width of the patch
-        @param current_time: Current time of the simulation.
-        @param job: Job object.
+        :param current_time: Current time of the simulation.
+        :param job: Job object.
         
-        @return: Return the min and max positions of the patch  
+        :return: Return the min and max positions of the patch  
         """
         _min = self.min_time
         _max = self.max_time
@@ -263,7 +263,7 @@ class scheduling_visualization:
     def start_line_draw(self, current_time):
         """
         Draws the current time line and add the corresponding text
-        @param current_time: Current simulation time 
+        :param current_time: Current simulation time 
         """
         if self.last_line['time'] == current_time:
             return
@@ -311,8 +311,8 @@ class scheduling_visualization:
     def xlimit(self, current_time, ax=None):
         """
         Limit of the X Axis
-        @param current_time: Current simulation time
-        @param ax: None for all axis (there is one axis for each resource type) updates. Specify axis for a single update.   
+        :param current_time: Current simulation time
+        :param ax: None for all axis (there is one axis for each resource type) updates. Specify axis for a single update.   
         """
         if ax is None:         
             for _, ax in self.axis_mapper.items():
@@ -323,8 +323,8 @@ class scheduling_visualization:
     def _set_xlimit(self, ax, current_time):
         """
             Performs the xlimit update
-            @param ax: Axis object to be updated
-            @param current_time: Current simulation time  
+            :param ax: Axis object to be updated
+            :param current_time: Current simulation time  
         """
         if not current_time:
             return
@@ -339,7 +339,7 @@ class scheduling_visualization:
         """
         Moves for all available matplotlib colors
         
-        @return: Return an specific color to represent a job. 
+        :return: Return an specific color to represent a job. 
         """
         if self.color_pos is None: 
             self.color_pos = len(self.colors) // 2

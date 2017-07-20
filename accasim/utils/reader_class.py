@@ -51,18 +51,18 @@ class default_workload_parser(workload_parser_base):
         workload_parser_base.__init__(self)
         """
             workloader_paser is a general class for parsing workload files.
-            @param reg_exp: Dictionary where the name of the group is the key and the value
+            :param reg_exp: Dictionary where the name of the group is the key and the value
                 its regular expresion. It must contain all the regular expresions in a sorted way,
                 for appending one at the end of the previous and then recover the value(s) for each group.
-            @param avoid_token: List of reg_exp to avoid reading lines. The lines that are avoided 
+            :param avoid_token: List of reg_exp to avoid reading lines. The lines that are avoided 
                 won't be readed by the parser. 
         """
         self.reg_exp_dict, self.avoid_tokens = default_swf_parse_config
         
     def feasible_line(self, line):
         """
-            @param line: Line to be checked
-            @return: True if it can be parse (it does not match to any avoid token), False otherwise.
+            :param line: Line to be checked
+            :return: True if it can be parse (it does not match to any avoid token), False otherwise.
         """
         for _token in self.avoid_tokens:
             p = re.compile(_token)
@@ -73,7 +73,7 @@ class default_workload_parser(workload_parser_base):
     def parse_line(self, line):
         """
             Parse a feasible line, returning a dict for all groupnames
-            @param line: Line to be parsed
+            :param line: Line to be parsed
             
             :return: A dictionary of the parsed data.
             
@@ -98,7 +98,7 @@ class reader_class(ABC):
     This class is used to simulate the creation of jobs from HPC users.
     This is an abstract class. The main method is read, which must be implemented to return the set of next submission for the system.
     
-    Note
+    :Note:
     
         A default implementation is named as default_reader_class. This class read from a single file, and use a SWF parser to extract the jobs.
     
@@ -109,9 +109,9 @@ class reader_class(ABC):
         
         Reader class constructor.
         
-        Note
+        :Note:
         
-            For a job generation at least the required attributes for a job event must be presented: job_id, queued_time, duration.
+            For a job generation at least the required attributes for a job event must be presented: *job_id*, *queued_time*, *duration*.
         
         :param _job_factory: Job Factory instance.
         
@@ -259,7 +259,6 @@ class default_reader_class(reader_class):
         return self.file
     
     def read_next_lines(self, n_lines=1):
-        # logging.debug('Reading next %i lines.' % (n_lines))
         if not self.EOF:
             tmp_lines = 0
             lines = [] 
@@ -310,19 +309,20 @@ class default_tweak_class(tweak_class):
         i.e we replace the number of processors by the number of requested cores.        
         
         The equivalence from processor to core is given in the system config file. As in the example, one processor contains two cores. Then the number of cores will be
-        processor * core. 
+        processor \* core. 
         
-        Example
-        
-            "equivalence": {
-                "processor": {
-                    "core": 2
-                }
-            }
+        :Example:
+            
+        >>> "equivalence": {
+        >>>     "processor": {
+        >>>         "core": 2
+        >>>     }
+        >>> }
         
         :param _dict: Dictionary to be tweaked.
         
         :return: The tweaked dictionary.
+        
         """
 
         _processors = _dict['total_processors']

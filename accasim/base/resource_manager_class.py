@@ -37,12 +37,12 @@ class resources_class:
     def __init__(self, groups, resources, **kwargs):
         """
         
-            :param groups: define the groups of resources. i.e: {'group_0': {'core': 4, 'mem': 10}, .. }
-            :param resources: Stablish the available resources of the system, in terms of number of previous groups. i.e: {'group_0': 32}, This will set 32 nodes of the group_0
-            :param \*\*kwargs:
-                - node_prefix: This will set the prefix of the node name. The default name is 'node', this name is followed by _(i) where i corresponds to the ith loaded node.
-                - available_prefix: This will set the prefix of the available resources. Internal use
-                - used_prefix: This will set the prefix of the used resources. Internal use
+        :param groups: define the groups of resources. i.e: {'group_0': {'core': 4, 'mem': 10}, .. }
+        :param resources: Stablish the available resources of the system, in terms of number of previous groups. i.e: {'group_0': 32}, This will set 32 nodes of the group_0
+        :param \*\*kwargs:
+            - node_prefix: This will set the prefix of the node name. The default name is 'node', this name is followed by _(i) where i corresponds to the ith loaded node.
+            - available_prefix: This will set the prefix of the available resources. Internal use
+            - used_prefix: This will set the prefix of the used resources. Internal use
         
         """
         self.constants = CONSTANT()
@@ -73,9 +73,9 @@ class resources_class:
 
     def total_resources(self):
         """
-            Total system resources
-            
-            @return: A dictionary with the resources and its values.
+        Total system resources
+        
+        :return: A dictionary with the resources and its values.
             
         """
         if self.system_total_resources:
@@ -92,8 +92,8 @@ class resources_class:
         
          Internal method for defining groups of resources.
          
-         @param name: Name of the group
-         @param group: Values of the group. As defined in the system config.  
+         :param name: Name of the group
+         :param group: Values of the group. As defined in the system config.  
         
         """
         assert(isinstance(group, dict))
@@ -105,8 +105,8 @@ class resources_class:
         
         Method for job allocation. It receives the node name and the resources to be used.
         
-        @param node_name: Name of the node to be updated.
-        @param \*\*kwargs: Dictionary of the system resources and its values to be used. 
+        :param node_name: Name of the node to be updated.
+        :param \*\*kwargs: Dictionary of the system resources and its values to be used. 
         
         """
         # TODO: Update using self.system_resource_types
@@ -125,8 +125,8 @@ class resources_class:
         
         Method for allocation release. It receives the node name and the resources to be released.
         
-        @param node_name: Name of the node to be updated.
-        @param \*\*kwargs: Dictionary of the system resources and its values to be released. 
+        :param node_name: Name of the node to be updated.
+        :param \*\*kwargs: Dictionary of the system resources and its values to be released. 
         
         """
         # TODO: Update using self.system_resource_types
@@ -142,7 +142,7 @@ class resources_class:
         
         System availablity calculation
         
-        @return: Return a dictionary with the system availability. In terms of {node: {resource: value}}
+        :return: Return a dictionary with the system availability. In terms of {node: {resource: value}}
         
         """
         # TODO: Update using self.system_resource_types
@@ -162,7 +162,7 @@ class resources_class:
         
         System usage calculation
         
-        @return: Return a string of the system usage 
+        :return: Return a string of the system usage 
         
         """
         # TODO: Update using self.system_resource_types
@@ -181,7 +181,7 @@ class resources_class:
     def system_capacity(self):
         """
         
-        @return: Return total system capacity 
+        :return: Return total system capacity 
         
         """
         _capacity = {
@@ -197,7 +197,7 @@ class resources_class:
         
         Instantiation of the resource manager object
         
-        @return: Resource manager object. 
+        :return: Resource manager object. 
         
         """
         return resource_manager(self)
@@ -207,9 +207,9 @@ class resources_class:
         
         Generate the resource key names
         
-        @param _key: Name of the resource
+        :param _key: Name of the resource
             
-        @return: Return the Resource key name. 
+        :return: Return the Resource key name. 
         
         """
         assert(_key in self.system_resource_types), '{} is not a resource type'.format(_key)
@@ -233,7 +233,7 @@ class resource_manager:
         Constructor for Resource Manager.
         This class handles the resources through Allocation and Release methods.
         
-        @param _resource: An instance of the resources class. It defines the system capacity.  
+        :param _resource: An instance of the resources class. It defines the system capacity.  
         
         """
         assert(isinstance(_resource, resources_class)), ('Only %s class is acepted for resources' % resources_class.__name__)
@@ -245,8 +245,8 @@ class resource_manager:
         
         Method for job allocation. It uses the event request to determine the resources to be allocated.
         
-        @param event: Job event object.
-        @param node_names: List of nodes where the job will be allocated.  
+        :param event: Job event object.
+        :param node_names: List of nodes where the job will be allocated.  
         
         """
         logging.debug('Allocating %s event in nodes %s' % (event.id, ', '.join([node for node in node_names])))
@@ -266,7 +266,7 @@ class resource_manager:
         
         Method for job release. It release the allocated resources on the specific nodes.
         
-        @param id: Job Id 
+        :param id: Job Id 
         
         """
         for node_name, values in self.actual_events.pop(id).items():
@@ -275,7 +275,7 @@ class resource_manager:
     def node_resources(self, *args):
         """
         
-        @param \*args: list of node names 
+        :param \*args: list of node names 
         
         Print nodes and its resources 
         
@@ -286,7 +286,7 @@ class resource_manager:
     def availability(self):
         """
         
-        @return: Return system availability
+        :return: Return system availability
         
         """        
         return self.resources.availability()
@@ -294,7 +294,7 @@ class resource_manager:
     def resource_types(self):
         """
         
-        @return: Return resource types of the system
+        :return: Return resource types of the system
         
         """
         return self.resources.system_resource_types
@@ -302,7 +302,7 @@ class resource_manager:
     def get_nodes(self):
         """
         
-        @return: Return node names
+        :return: Return node names
         
         """
         return list(self.resources.resources.keys())
@@ -313,9 +313,9 @@ class resource_manager:
         Return the total system resource for the required argument. The resource have to exist in the system. 
         If no arguments is proportioned all resources are returned.
         
-        @param \*args: Depends on the system configuration. But at least it must have ('core', 'mem') resources.
+        :param \*args: Depends on the system configuration. But at least it must have ('core', 'mem') resources.
             
-        @return: Dictionary of the resources and its values.          
+        :return: Dictionary of the resources and its values.          
         
         """
         _resources = self.resources.total_resources()
@@ -330,9 +330,9 @@ class resource_manager:
     def groups_available_resource(self, _key=None):
         """
         
-        @param _key: None for values of all types for all groups. Giving a specific key will return the resource for the specific type
+        :param _key: None for values of all types for all groups. Giving a specific key will return the resource for the specific type
         
-        @return: Dictionary of {group{type: value}}   
+        :return: Dictionary of {group{type: value}}   
         
         """
         if not _key:

@@ -45,6 +45,7 @@ class simulator_base(ABC):
         """
         
         Simulator base constructor
+         
         :param _resource_manager: Resource manager class instantiation
         :param _reader: Reader class instantiation
         :param _job_factory: Job Factory instantiation
@@ -188,7 +189,7 @@ class simulator_base(ABC):
         
         Verifies arguments for a specific instantation and create the dictionary. 
         
-        Note:
+        :Note:
         
             this method will be moved to misc
         
@@ -404,11 +405,12 @@ class hpc_simulator(simulator_base):
         if visualization:
             _stop.set()
                 
-    def start_hpc_simulation(self, _debug=False):
+    def start_hpc_simulation(self, debug=False):
         """
         
         Initializes the simulation in a new thread. It is called by the start_timulation using its arguments.
-        :param _debug: Debugging flag
+        
+        :param debug: Debugging flag
         
         """                   
         
@@ -421,7 +423,7 @@ class hpc_simulator(simulator_base):
 
         print('Starting the simulation process.')
         
-        self.load_events(self.mapper.current_time, event_dict, self.mapper, _debug, self.max_sample)
+        self.load_events(self.mapper.current_time, event_dict, self.mapper, debug, self.max_sample)
         events = self.mapper.next_events()
 
         #=======================================================================
@@ -432,7 +434,7 @@ class hpc_simulator(simulator_base):
             
             benchStartTime = _clock() * 1000
             
-            if _debug:
+            if debug:
                 print('{} INI: Loaded {}, Queued {}, Running {}, Finished {}'.format(_actual_time, len(self.mapper.loaded), len(self.mapper.queued), len(self.mapper.running), len(self.mapper.finished)))
             self.mapper.release_ended_events(event_dict)
             
@@ -445,22 +447,22 @@ class hpc_simulator(simulator_base):
             schedStartTime = _clock() * 1000
             schedEndTime = schedStartTime
             if events:
-                if _debug:
+                if debug:
                     print('{} DUR: To Schedule {}'.format(_actual_time, len(events)))
-                to_dispatch = self.dispatcher.schedule(self.mapper.current_time, event_dict, events, _debug)
+                to_dispatch = self.dispatcher.schedule(self.mapper.current_time, event_dict, events, debug)
                 # to_dispatch = self.dispatcher.schedule(self.mapper.current_time, event_dict, events, len(self.mapper.finished) > 15000)
-                if _debug:
+                if debug:
                     print('{} DUR: To Dispatch {}. {}'.format(_actual_time, len(to_dispatch), self.resource_manager.resources.usage()))
                 time_diff = 0
                 schedEndTime = _clock() * 1000
                 try:
-                    self.mapper.dispatch_events(event_dict, to_dispatch, time_diff, _debug)
+                    self.mapper.dispatch_events(event_dict, to_dispatch, time_diff, debug)
                 except AssertionError as e:
                     print('{} DUR: {}'.format(_actual_time, e))
                     print('{} DUR: Loaded {}, Queued {}, Running {}, Finished {}'.format(_actual_time, len(self.mapper.loaded), len(self.mapper.queued), len(self.mapper.running), len(self.mapper.finished)))
                     _exit()
                                    
-            if _debug:
+            if debug:
                 print('{} END: Loaded {}, Queued {}, Running {}, Finished {}'.format(_actual_time, len(self.mapper.loaded), len(self.mapper.queued), len(self.mapper.running), len(self.mapper.finished)))
 
             #===================================================================
@@ -468,7 +470,7 @@ class hpc_simulator(simulator_base):
             #===================================================================
             if len(self.mapper.loaded) < 10:
                 sample = self.max_sample if(len(self.mapper.loaded) < self.max_sample) else 2
-                self.load_events(_actual_time, event_dict, self.mapper, _debug, sample)
+                self.load_events(_actual_time, event_dict, self.mapper, debug, sample)
             #===================================================================
             # Continue with next events            
             #===================================================================
@@ -549,6 +551,7 @@ class hpc_simulator(simulator_base):
         """
 
         Incremental loading. Load the new jobs into the 
+        
         :param current_time: Current simulation time.
         :param jobs_dict: Dictionary of the current load, queued and running jobs
         :param mapper: Job event mapper object
@@ -561,37 +564,21 @@ class hpc_simulator(simulator_base):
         job_list = []
         for nt_point, jobs in ps_jobs.items():
             for job in jobs:
-                self.loaded_jobs += 1
-                tmp_dict[job.id] = job
-                job_list.append(job)
+                if self.check_job_validity(job):
+                    self.loaded_jobs += 1
+                    tmp_dict[job.id] = job
+                    job_list.append(job)
+                else:
+                    _filepath = _path.join(self.constants.RESULTS_FOLDER_PATH, self.constants.SUBMISSION_ERROR_PREFIX + self.constants.WORKLOAD_FILENAME)
+                    error_msg = "Job {} violates the system's resource constraints and will be discarded".format(job.id)
+                    with open(_filepath, 'a') as f:
+                        f.write(error_msg + '\n')
+                    if _debug:
+                        print(error_msg)
         mapper.load_events(job_list)
         jobs_dict.update(tmp_dict)
-        #=======================================================================
-        # _time = None
-        # while not self.reader.EOF and time_samples > 0:
-        #     _dicts = self.reader.next_dicts()
-        #     if not _dicts:
-        #         break
-        #     tmp_dict = {}
-        #     job_list = []
-        #     for _dict in _dicts:
-        #         if self.tweak_function:
-        #             self.tweak_function(_dict, self.init_unix_time)
-        #         je = self.job_factory.factory(**_dict)
-        #         if self.checkJobValidity(je):
-        #             self.loaded_jobs += 1
-        #             tmp_dict[je.id] = je
-        #             job_list.append(je)
-        #         elif _debug:
-        #             print("Job %s violates the system's resource constraints and will be discarded" % je.id)
-        #         if _time != je.queued_time:
-        #             _time = je.queued_time
-        #             time_samples -= 1
-        #     mapper.load_events(job_list)
-        #     jobs_dict.update(tmp_dict)
-        #=======================================================================
 
-    def checkJobValidity(self, job):
+    def check_job_validity(self, job):
         """
         
         Simple method that checks if the loaded job violates the system's resource constraints.
@@ -616,8 +603,8 @@ class hpc_simulator(simulator_base):
     def memory_usage_psutil(self):
         """
    
-        Returns the memory usage in MB
-   
+        :return: Memory usage in MB
+        
         """
         process = _Process(_getpid())
         memr = process.memory_info().rss / float(2 ** 20)

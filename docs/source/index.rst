@@ -11,14 +11,10 @@
    
    installation
    modules
+   examples
    
 .. include:: installation.rst
 
 .. include:: documentation.rst	
 
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+.. include:: license.rst
