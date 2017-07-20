@@ -9,9 +9,12 @@
    :maxdepth: 2
    :hidden:
    
-   installation
-   modules
+   documentation
    examples
+   dispatching_methods
+   installation
+   license
+   modules
    
 .. include:: installation.rst
 

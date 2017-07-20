@@ -1,5 +1,5 @@
-AccaSim 
-=======
+AccaSim: HPC Simulator for Workload Management 
+==============================================
 
 *current version:* |version|
 

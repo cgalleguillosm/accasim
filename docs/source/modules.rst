@@ -6,15 +6,10 @@ Documentation
 
 * :ref:`modindex`
 * :doc:`examples`
+* :doc:`dispatching_methods`
+* Package Documentation
 
-.. * :ref:`genindex`
-	* :ref:`search`
-
-**Automatically generated documentation**
-
-
-.. toctree::
-   :maxdepth: 4
-
-   accasim
-   
+	.. toctree::
+	   :maxdepth: 4
+	
+	   accasim
