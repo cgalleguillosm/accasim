@@ -15,8 +15,11 @@
    installation
    license
    modules
+   tools
    
 .. include:: installation.rst
+
+.. include:: tools.rst
 
 .. include:: documentation.rst	
 

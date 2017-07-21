@@ -25,11 +25,13 @@ PRB scheduling method makes use of the Estimated Waiting Time (EWT) for working,
 
         **Show/Hide Code**
 
-    .. literalinclude:: ../../extra/prb_scheduler.py
+    .. literalinclude:: ../../extra/dispatching_methods/prb_scheduler.py
 		:caption: PRB
 		:language: python
 		:linenos:
 		:lines: 24-
+
+:download:`Download source code <../../extra/dispatching_methods/prb_scheduler.py>`
 
 .. _CPH:
 				
@@ -37,7 +39,7 @@ Constraint Programing  + Heuristic (CPH)
 ----------------------------------------
 
 CPH scheduling method makes use of the Estimated Waiting Time (EWT) for working, this method and the EWT were introduced in [BorghesiCLMB15]_. 
-This scheduler uses `OR-Tools library <https://developers.google.com/optimization/>`_.
+This scheduler uses `OR-Tools library <https://developers.google.com/optimization/>`_. 
 
 .. container:: toggle
 
@@ -45,11 +47,13 @@ This scheduler uses `OR-Tools library <https://developers.google.com/optimizatio
 
         **Show/Hide Code**
 
-    .. literalinclude:: ../../extra/cph_scheduler.py
+    .. literalinclude:: ../../extra/dispatching_methods/cph_scheduler.py
 		:caption: CPH
 		:language: python
 		:linenos:
 		:lines: 24-
+
+:download:`Download source code <../../extra/dispatching_methods/cph_scheduler.py>`.
 
 Citations
 ---------
