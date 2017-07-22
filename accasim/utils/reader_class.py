@@ -224,19 +224,26 @@ class default_reader_class(reader_class):
         
         """
         reader_class.__init__(self, job_factory)
+        self.parser = None
+        self.tweak_function = None
         if parser:
             if not isinstance(parser, workload_parser_base):
-                assert(issubclass(parser, workload_parser_base)), 'Only default_workload_parser class can be used as parsers'
+                assert(issubclass(parser, workload_parser_base)), 'Only :class:`.workload_parser_base` class can be used as parsers'
                 self.parser = parser()
             else:
-                assert(isinstance(parser, workload_parser_base)), 'Only default_workload_parser object can be used as parsers'
+                assert(isinstance(parser, workload_parser_base)), 'Only :class:`.workload_parser_base` object can be used as parsers'
                 self.parser = parser                
         else:
             self.parser = default_workload_parser()
+            if not tweak_function:
+                self.tweak_function = default_tweak_class(start_time, equivalence)
+
         if tweak_function:
-            pass
-        else:
-            self.tweak_function = default_tweak_class(start_time, equivalence)
+            assert(isinstance(tweak_function, tweak_function)), 'The tweak_function argument must be an implementation of the :class:`.tweak_class`'
+            self.tweak_function = tweak_function
+        elif not self.tweak_function:
+            self.tweak_function = None
+
         self.equivalence = equivalence
         self.start_time = start_time
         self.last_line = 0
@@ -284,8 +291,9 @@ class default_reader_class(reader_class):
         parsed_line = self.parser.parse_line(line[0])
         if not parsed_line:
             return None
-        _dict = self.tweak_function.tweak_function(parsed_line)
-        return _dict
+        if self.tweak_function: 
+            parsed_line = self.tweak_function.tweak_function(parsed_line)
+        return parsed_line
 
 class tweak_class(ABC):
     
@@ -337,6 +345,7 @@ class default_tweak_class(tweak_class):
         _dict['requested_resources']['mem'] = _dict['mem']
         
         _dict['queued_time'] = _dict.pop('queued_time') + self.start_time
+
         assert (
         _dict['core'] >= 0), 'Please consider to clean your data cannot exists requests with any info about core request.'
         assert (

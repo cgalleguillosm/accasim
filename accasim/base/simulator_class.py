@@ -25,12 +25,12 @@ from time import clock as _clock, sleep as _sleep
 from datetime import datetime
 from abc import abstractmethod, ABC
 from accasim.utils.reader_class import default_reader_class, reader_class
-from accasim.utils.misc import CONSTANT, watcher_daemon, DEFAULT_SIMULATION, load_config, path_leaf, clean_results
+from accasim.utils.misc import CONSTANT, watcher_daemon, DEFAULT_SIMULATION, load_config, path_leaf, clean_results, default_swf_mapper
 from accasim.utils.visualization_class import scheduling_visualization
-from accasim.base.event_class import event_mapper
+from accasim.base.event_class import event_mapper, attribute_type
 from accasim.base.resource_manager_class import resources_class, resource_manager
 from accasim.base.scheduler_class import scheduler_base
-from accasim.base.event_class import job_factory
+from accasim.base.event_class import job_factory as job_factory_class 
 from accasim.base.additional_data import additional_data
 from threading import Thread, Event as THEvent
 from os import getpid as _getpid, path as _path, makedirs as _makedirs
@@ -61,8 +61,8 @@ class simulator_base(ABC):
         self.reader = _reader
         assert(isinstance(_resource_manager, resource_manager))
         self.resource_manager = _resource_manager
-        assert(isinstance(_job_factory, job_factory))
-        assert(self.check_request(_job_factory.attrs_names)), 'System resources must be included in Job Factory descrpition.'
+        assert(isinstance(_job_factory, job_factory_class))
+        # assert(self.check_request(_job_factory.attrs_names)), 'System resources must be included in Job Factory descrpition.'
         self.job_factory = _job_factory
         assert(isinstance(_dispatcher, scheduler_base))
         self.dispatcher = _dispatcher
@@ -124,6 +124,7 @@ class simulator_base(ABC):
         _system_resources = self.resource_manager.resources.system_resource_types
         for _res in _system_resources:
             if not(_res in attrs_names):
+                print('Resource \'{}\' is not included in the Job dict.'.format(_res))
                 return False
         return True
     
@@ -266,20 +267,20 @@ class hpc_simulator(simulator_base):
     Default implementation of the simulator_base class.    
     
     """
-    def __init__(self, sys_config, _scheduler, workload=None, _resource_manager=None, _reader=None, _job_factory=None, _additional_data=[], _simulator_config=None, overwrite_previous=True,
+    def __init__(self, sys_config, scheduler, workload=None, resource_manager=None, reader=None, job_factory=None, additional_data=[], simulator_config=None, overwrite_previous=True,
         scheduling_output=True, pprint_output=False, benchmark_output=False, statistics_output=True, show_statistics=True, **kwargs):
         """
     
         Constructor of the HPC Simulator class.
     
         :param sys_config: Filepath to the synthetic system configuration. Used by the resource manager to create the system.
-        :param _scheduler: Dispatching method
+        :param scheduler: Dispatching method
         :param workload: Filepath to the workload, it is used by the reader. If a reader is not given, the default one is used.
-        :param _resource_manager: Optional. Instantiation of the resource_manager class.
-        :param _reader: Optional. Instantiation of the reader class.
-        :param _job_factory: Optional. Instantiation of the job_factory class.
-        :param _additional_data: Optional. Array of Objects or Classes of additional_data class.  
-        :param _simulator_config: Optional. Filepath to the simulator config. For replacing the misc.DEFAULT_SIMULATION parameters.
+        :param resource_manager: Optional. Instantiation of the resource_manager class.
+        :param reader: Optional. Instantiation of the reader class.
+        :param job_factory: Optional. Instantiation of the job_factory class.
+        :param additional_data: Optional. Array of Objects or Classes of additional_data class.  
+        :param simulator_config: Optional. Filepath to the simulator config. For replacing the misc.DEFAULT_SIMULATION parameters.
         :param overwrite_previous: Default True. Overwrite previous results. 
         :param scheduling_output: Default True. Dispatching plan output. Format modificable in DEFAULT_SIMULATION  
         :param pprint_output: Default False. Dispatching plan output in pretty print version. Format modificable in DEFAULT_SIMULATION
@@ -300,37 +301,35 @@ class hpc_simulator(simulator_base):
 
         _uargs = []
 
-        if not _resource_manager:
-            _resource_manager, equiv, start_time = self.generate_enviroment(sys_config)
+        if not resource_manager:
+            resource_manager, equiv, start_time = self.generate_enviroment(sys_config)
             kwargs['equivalence'] = equiv
             kwargs['start_time'] = start_time
-        if not _job_factory:
+        if not job_factory:
+            kwargs['job_mapper'] = default_swf_mapper
+            kwargs['job_attrs'] = self.default_job_description() 
             _jf_arguments = ['job_class', 'job_attrs', 'job_mapper']
             args = self.prepare_arguments(_jf_arguments, kwargs)
             _uargs += _jf_arguments
-            _job_factory = job_factory(_resource_manager, **args)
-        #=======================================================================
-        # if 'tweak_function' not in kwargs:
-        #     kwargs['tweak_function'] = self.default_tweak_function
-        #=======================================================================
-        if workload and not _reader:
+            job_factory = job_factory_class(resource_manager, **args)
+        if workload and not reader:
             _reader_arguments = ['max_lines', 'tweak_function', 'equivalence', 'start_time']
             args = self.prepare_arguments(_reader_arguments, kwargs)
-            _reader = self.set_workload_input(workload, job_factory=_job_factory, **args)
+            reader = self.set_workload_input(workload, job_factory=job_factory, **args)
             _uargs += _reader_arguments
-        if not isinstance(_additional_data, list):
-            assert(isinstance(_additional_data, additional_data) or issubclass(_additional_data, additional_data)), 'Only subclasses of additional_data class are acepted as _additional_data argument '
-            _additional_data = [_additional_data]
+        if not isinstance(additional_data, list):
+            assert(isinstance(additional_data, additional_data) or issubclass(additional_data, additional_data)), 'Only subclasses of additional_data class are acepted as additional_data argument '
+            additional_data = [additional_data]
             
-        _scheduler.set_resource_manager(_resource_manager)
+        scheduler.set_resource_manager(resource_manager)
         
         for _u in _uargs:
             kwargs.pop(_u, None)
 
-        simulator_base.__init__(self, _resource_manager, _reader, _job_factory, _scheduler, _additional_data, config_file=_simulator_config, **kwargs)
+        simulator_base.__init__(self, resource_manager, reader, job_factory, scheduler, additional_data, config_file=simulator_config, **kwargs)
         
-        self.start_time = None
-        self.end_time = None
+        self.start_simulation_time = None
+        self.end_simulation_time = None
         self.max_sample = 2
         self.daemons = {}
         self.loaded_jobs = 0
@@ -390,9 +389,6 @@ class hpc_simulator(simulator_base):
                 'args': [self.constants.WATCH_PORT, functions],
                 'object': None
             }
-        # self.reader.open_file()
-
-        # kwargs['init_unix_time'] = init_unix_time
 
         simulation = Thread(target=self.start_hpc_simulation, kwargs=kwargs)
         simulation.start()
@@ -418,8 +414,8 @@ class hpc_simulator(simulator_base):
         # Load events corresponding at the "current time" and the next one
         #=======================================================================
         event_dict = self.mapper.events
-        self.start_time = _clock()
-        self.constants.load_constant('start_time', self.start_time)
+        self.start_simulation_time = _clock()
+        self.constants.load_constant('start_simulation_time', self.start_simulation_time)
 
         print('Starting the simulation process.')
         
@@ -486,7 +482,7 @@ class hpc_simulator(simulator_base):
                     self.write_to_benchmark(_actual_time, queuelen, benchEndTime - benchStartTime, scheduleTime, dispatchTime, benchMemUsage)
                 )
 
-        self.end_time = _clock()
+        self.end_simulation_time = _clock()
         assert(self.loaded_jobs == len(self.mapper.finished)), 'Loaded {} and Finished {}'.format(self.loaded_jobs, len(self.mapper.finished))
         self.statics_write_out(self.constants.SHOW_STATISTICS, self.constants.STATISTICS_OUTPUT)
         print('Simulation process completed.')
@@ -505,7 +501,7 @@ class hpc_simulator(simulator_base):
             return
         wtimes = self.mapper.wtimes
         slds = self.mapper.slowdowns
-        sim_time_ = 'Simulation time: {0:.2f} secs\n'.format(self.end_time - self.start_time)
+        sim_time_ = 'Simulation time: {0:.2f} secs\n'.format(self.end_simulation_time - self.start_simulation_time)
         disp_method_ = 'Dispathing method: {}\n'.format(self.dispatcher)
         total_jobs_ = 'Total jobs: {}\n'.format(self.loaded_jobs)
         makespan_ = 'Makespan: {}\n'.format(self.mapper.last_run_time - self.mapper.first_time_dispatch)
@@ -639,3 +635,23 @@ class hpc_simulator(simulator_base):
         """
         for ad in self.additional_data:
             ad.execute()            
+            
+    def default_job_description(self):
+        """
+
+        Method that returns the minimal attributes of a job. Default values: ID, Expected Duration, CORE and MEM.
+        
+        :return: Array of Attributes
+
+        """
+        # Attribute to identify the user
+        user_id = attribute_type('user_id', int)
+        
+        # New attributes required by the Dispatching methods.
+        expected_duration = attribute_type('expected_duration', int)
+        
+        # Default system resources: core and mem.
+        total_cores = attribute_type('core', int)
+        total_mem = attribute_type('mem', int)
+            
+        return [total_cores, total_mem, expected_duration, user_id ]

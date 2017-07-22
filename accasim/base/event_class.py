@@ -31,7 +31,7 @@ import asyncio
 from builtins import str, filter
 from inspect import signature
 from accasim.utils.misc import CONSTANT, sorted_list, default_swf_mapper
-from accasim.base.resource_manager_class import resource_manager
+from accasim.base.resource_manager_class import resource_manager as resource_manager_class
 
 
 class attribute_type:
@@ -53,7 +53,7 @@ class attribute_type:
                 
 class event(ABC):
     
-    def __init__(self, job_id, queued_time, duration):
+    def __init__(self, job_id, queued_time, duration, requested_nodes, requested_resources):
         """
         
         Constructor of the basic job event. 
@@ -61,11 +61,15 @@ class event(ABC):
         :param job_id: Identification of the job.
         :param queued_time: Corresponding time to the submission time to the system in unix timestamp.
         :param duration: Real duration of the job in unix timestamp.
+        :param requested_nodes: Number of requested nodes
+        :param requested_resources: Dictionary with the requested resources for a single node. 
         
         """
         self.constants = CONSTANT()
         self.id = job_id
         self.queued_time = queued_time
+        self.requested_nodes = requested_nodes
+        self.requested_resources = requested_resources
         self.start_time = None
         self.end_time = None
         self.duration = duration
@@ -134,32 +138,36 @@ class event(ABC):
             f.write(output_format.format(*values) + '\n')
                         
 class job_factory:
-    def __init__(self, _resource_manager, job_class=event, job_attrs=[], job_mapper=default_swf_mapper):
+    def __init__(self, resource_manager=None, job_class=event, job_attrs=[], job_mapper={}):
         """
         
-        :param _resource_manager: The resource manager of the simulator. It is required for creating the job requests.
+        :param resource_manager: The resource manager of the simulator. It is required for creating the job requests.
         :param job_class: The class to be created by the Factory. By default it uses the Event class, but any subclass of it can be used (modified versions). 
         :param job_attrs: The extra attributes (attribute_type class) (already job_id, queued_time and duration are mandatory) to be set in the JobEvent class
-        :param job_mapper: Rename the the old key to a new key (using the value of the mapper dictionary)
+        :param job_mapper: Rename the the old key to a new key (using the value of the job_mapper dictionary)
         
         """
-        assert(isinstance(_resource_manager, resource_manager))
+        self.resource_manager = None
+        if resource_manager:
+            assert(isinstance(resource_manager, resource_manager_class)), 'Only subclases of :class:`.resource_manager_class` are accepted.'
+            self.resource_manager = resource_manager
+            self.resource_manager_setup()
+                 
         assert(issubclass(job_class, event)), 'Only subclasses of event class are accepted. Received: {} class'.format(_class.__name__)
+        
         if job_attrs:
-            assert(isinstance(job_attrs, list) and all(isinstance(attr_type, attribute_type) for attr_type in job_attrs))
-        else:
-            attrs = self.default_job_description()
-        # self.resource_manager = _resource_manager
-        self.group_resources = _resource_manager.groups_available_resource()
-        self.system_resources = _resource_manager.resources.system_resource_types
+            assert(isinstance(job_attrs, list)), 'jobs_attrs must be a list'
+            assert(all(isinstance(attr_type, attribute_type) for attr_type in job_attrs)), 'The elements of jobs_attrs must be of :class:`.attribute_type` class.'
+            
         self.obj_type = job_class
         self.obj_parameters = list(signature(self.obj_type).parameters)
         self.attrs_names = []
         self.mandatory_attrs = {}
         self.optional_attrs = {}
-        self.mapper = job_mapper
+        self.job_mapper = job_mapper
+        self.checked = False
         
-        for attr in attrs:
+        for attr in job_attrs:
             _attr_name = attr.name
             assert(_attr_name not in self.attrs_names + self.obj_parameters), '{} attribute name already set. Names must be unique'.format(_attr_name)
             if attr.optional:
@@ -168,6 +176,33 @@ class job_factory:
             else:
                 self.mandatory_attrs[_attr_name] = attr
             self.attrs_names.append(_attr_name)
+            
+    def check_requested_resources(self, job_attrs):
+        """
+        Checks if the requested resources in the dict include all the system resources.
+        
+        :param job_attrs: Array of job attribute names
+        """
+        _req_resources = job_attrs['requested_resources']
+        missing_res = [r for r in self.system_resources if r not in _req_resources.keys()]
+        assert(len(missing_res) == 0), 'Missing resources in the readed jobs: {}'.format(missing_res)
+        self.checked = True
+        
+    def resource_manager_setup(self):
+        """
+            
+        The groups and system resources types are set.
+            
+        """        
+        self.group_resources = self.resource_manager.groups_available_resource()
+        self.system_resources = self.resource_manager.resources.system_resource_types
+
+    def set_resource_manager(self, resource_manager):
+        if resource_manager:
+            assert(isinstance(resource_manager, resource_manager_class)), 'Only subclases of :class:`.resource_manager` are accepted.'
+            self.resource_manager = resource_manager
+            self.resource_manager_setup()
+
                  
     def factory(self, **kwargs):
         """
@@ -179,17 +214,23 @@ class job_factory:
         :return: Returns a job instantiation.  
 
         """        
+        assert(self.resource_manager), 'Missing resource_manager attribute. It must be added via :func:`.set_resource_manager`.'
         
-        for _old, _new in self.mapper.items():
+        for _old, _new in self.job_mapper.items():
             value = kwargs.pop(_old)
             kwargs[_new] = value
         _missing = list(filter(lambda x:x not in kwargs, set(self.obj_parameters + list(self.mandatory_attrs))))
         assert(not _missing), 'Missing attributes: {}'.format(', '.join(_missing))
-        _tmp = self.obj_type(**{k:kwargs[k] for k in self.obj_parameters})
+        _obj_attr = {k:kwargs[k] for k in self.obj_parameters}
+        
+        if not self.checked:
+            self.check_requested_resources(_obj_attr)
+        
+        _tmp = self.obj_type(**_obj_attr)
         setattr(_tmp, '_dict', kwargs)
         self.add_attrs(_tmp, self.mandatory_attrs, kwargs)
         self.add_attrs(_tmp, self.optional_attrs, kwargs)
-        self.add_request(_tmp)
+        # self.add_request(_tmp)
         return _tmp
         
     def add_attrs(self, obj, reference, values):
@@ -228,44 +269,20 @@ class job_factory:
         if not hasattr(obj, 'requested_resources'):
             _partition = getattr(obj, 'requested_nodes')
             setattr(obj, 'requested_resources', {_res: getattr(obj, _res) // _partition for _res in self.system_resources})
-    
-    def default_job_description(self):
-        """
-
-        Method that returns the minimal attributes of a job. Default values: ID, Expected Duration, CORE and MEM.
-        
-        :return: Array of Attributes
-
-        """
-        # Attribute to identify the user
-        user_id = attribute_type('user_id', int)
-        
-        # New attributes required by the Dispatching methods.
-        expected_duration = attribute_type('expected_duration', int)
-        
-        # Default system resources: core and mem.
-        total_cores = attribute_type('core', int)
-        total_mem = attribute_type('mem', int)
-    
-        # This attributes are required to be set, if not by default are calculated. As in this example (explained in tweak_dict function) 
-        requested_nodes = attribute_type('requested_nodes', int)
-        requested_resources = attribute_type('requested_resources', dict)
-        
-        return [total_cores, total_mem, requested_nodes, requested_resources, expected_duration, user_id ]
             
 class event_mapper:
     
-    def __init__(self, _resource_manager, **kwargs):
+    def __init__(self, resource_manager, **kwargs):
         """
 
         This class coordinates events submission, queueing and ending. 
         
-        :param _resource_manager: Resource manager instance
+        :param resource_manager: Resource manager instance
         :param \*\*kwargs: nothing for the moment. 
 
         """
-        assert(isinstance(_resource_manager, resource_manager)), 'Wrong type for the resource_manager argument.'
-        self.resource_manager = _resource_manager
+        assert(isinstance(resource_manager, resource_manager_class)), 'Wrong type for the resource_manager argument.'
+        self.resource_manager = resource_manager
         self.constants = CONSTANT()
         # Stats
         self.first_time_dispatch = None
@@ -534,7 +551,7 @@ class event_mapper:
     def __str__(self):
         """
 
-        Str representation of the event mapper
+        Str representation of the event job_mapper
         
         :return: Return the current system info.
 
