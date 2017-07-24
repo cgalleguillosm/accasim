@@ -21,30 +21,44 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-from accasim.base.resource_manager_class import resource_manager
+from accasim.base.resource_manager_class import resource_manager as resource_manager_class 
 from accasim.base.allocator_class import allocator_base
 from accasim.utils.misc import CONSTANT
+from copy import deepcopy, copy
 from abc import abstractmethod, ABC
+import sys
 import random
 import logging
 
 
 class scheduler_base(ABC):
-    def __init__(self, _seed, _resource_manager, _allocator):
+    
+    """
+    
+        This class allows to implement dispatching methods by integrating with an implementation of this class an allocator (:class:`accasim.base.allocator_class.allocator_base`). 
+        An implementation of this class could also serve as a entire dispatching method if the allocation class is not used as default (:class:`.allocator` = None), but the resource manager must
+        be set on the allocator using :func:`accasim.base.allocator_class.allocator_base.set_resource_manager`.
+        
+    """
+    
+    def __init__(self, seed, resource_manager, allocator=None):
         """
         
         Construct a scheduler
             
-        :param _seed: Seed for the random state
-        :param _resource_manager: A Resource Manager object for dealing with system resources.
-        :param _allocator: Allocator object to be used by the scheduler to allocater after schedule
+        :param seed: Seed for the random state
+        :param resource_manager: A Resource Manager object for dealing with system resources.
+        :param allocator: Allocator object to be used by the scheduler to allocater after schedule generation. If an allocator isn't defined, the scheduler class must generate the entire dispatching plan.
                  
         """
-        random.seed(_seed)
+        random.seed(seed)
         self.constants = CONSTANT()
-        assert isinstance(_allocator, allocator_base), 'Allocator not valid for scheduler'
-        self.allocator = _allocator
-        self.set_resource_manager(_resource_manager)
+        self.allocator = None
+        if allocator:
+            assert isinstance(allocator, allocator_base), 'Allocator not valid for scheduler'
+            self.allocator = allocator
+        self.set_resource_manager(resource_manager)
+        self.internal_ref = {}
         
     @property
     def name(self):
@@ -82,25 +96,26 @@ class scheduler_base(ABC):
         """
         raise Exception('This function must be implemented!!')
     
-    def set_resource_manager(self, _resource_manager):
+    def set_resource_manager(self, resource_manager):
         """
         
-        Set a resource manager
+        Set a resource manager. 
 
-        :param _resource_manager: An instantiation of a resource_manager class or None 
+        :param resource_manager: An instantiation of a resource_manager class or None 
         
         """        
-        if _resource_manager:
-            self.allocator.set_resource_manager(_resource_manager)
-            assert isinstance(_resource_manager, resource_manager), 'Resource Manager not valid for scheduler'
-            self.resource_manager = _resource_manager
+        if resource_manager:
+            if self.allocator:
+                self.allocator.set_resource_manager(resource_manager)
+            assert isinstance(resource_manager, resource_manager_class), 'Resource Manager not valid for scheduler'
+            self.resource_manager = resource_manager
         else:
             self.resource_manager = None
             
     def schedule(self, cur_time, es_dict, es, _debug=False):
         """
         
-        Method for schedule. It call the specific scheduling method.
+        Method for schedule. It calls the specific scheduling method.
         
         :param cur_time: current time
         :param es_dict: dictionary with full data of the events
@@ -113,7 +128,10 @@ class scheduler_base(ABC):
         assert(self.resource_manager is not None), 'The resource manager is not defined. It must defined prior to run the simulation.'
         if _debug:
             print('{}: {} queued jobs to be considered in the dispatching plan'.format(cur_time, len(es)))
-        return self.scheduling_method(cur_time, es_dict, es, _debug)
+        dispatching_plan = self.scheduling_method(cur_time, es_dict, es, _debug)
+        if self.allocator:
+            dispatching_plan = self.allocator.allocate(dispatching_plan, time, _debug)
+        return dispatching_plan
     
     def __str__(self):
         return self.get_id()
@@ -128,10 +146,10 @@ class simple_heuristic(scheduler_base):
     
     """
 
-    def __init__(self, _seed, _resource_manager, _allocator, _name, _sorting_parameters, **kwargs):
-        scheduler_base.__init__(self, _seed, _resource_manager, _allocator)
-        self.name = _name
-        self.sorting_parameters = _sorting_parameters
+    def __init__(self, seed, resource_manager, allocator, name, sorting_parameters, **kwargs):
+        scheduler_base.__init__(self, seed, resource_manager, allocator)
+        self.name = name
+        self.sorting_parameters = sorting_parameters
 
     def get_id(self):
         """
@@ -167,9 +185,10 @@ class simple_heuristic(scheduler_base):
         to_schedule_e.sort(**self.sorting_parameters)
         _time = cur_time
 
-        allocated_events = self.allocator.allocate(to_schedule_e, _time, skip=False, debug=_debug)
+        return to_schedule_e
+        # allocated_events = self.allocator.allocate(to_schedule_e, _time, skip=False, debug=_debug)
 
-        return allocated_events
+        # return allocated_events
 
     
 class fifo_sched(simple_heuristic):
@@ -255,22 +274,31 @@ class easybf_sched(scheduler_base):
     
     Whenever a job cannot be allocated, a reservation is made for it. After this, the following jobs are used to
     backfill the schedule, not allowing them to use the reserved nodes.
-        
+       
+    This dispatching methods includes its own calls to the allocator over the dispatching process. 
+    Then it isn't use the auto allocator call, after the schedule generation.    
+     
     """
     
     name = 'EASY_Backfilling'
     """ Name of the Scheduler policy. """
     
-    def __init__(self, _allocator, _resource_manager=None, _seed=0, **kwargs):
+    def __init__(self, allocator, resource_manager=None, seed=0, **kwargs):
         """
     
         Easy BackFilling Constructor
     
         """
-        scheduler_base.__init__(self, _seed, _resource_manager, _allocator)
+        scheduler_base.__init__(self, seed, resource_manager, allocator=None)
         self.blocked_job_id = None
         self.reserved_slot = (None, [])
         self.blocked_resources = False
+        self.nonauto_allocator = allocator
+        self.allocator_rm_set = False
+        self.nonauto_allocator.set_resource_manager(resource_manager)
+        if self.allocator_rm_set:
+            if not self.nonauto_allocator.resource_manager:
+                self.allocator_rm_set = True
         
     def get_id(self):
         """
@@ -280,7 +308,7 @@ class easybf_sched(scheduler_base):
         :return: the scheduler's id.
     
         """
-        return '-'.join([self.name, self.allocator.name])
+        return '-'.join([self.name, self.nonauto_allocator.name])
 
     def scheduling_method(self, cur_time, es_dict, es, _debug=False):
         """
@@ -295,9 +323,12 @@ class easybf_sched(scheduler_base):
         :return: a tuple of (time to schedule, event id, list of assigned nodes)  
 
         """
-
+        
+        if not self.allocator_rm_set:
+            self.nonauto_allocator.set_resource_manager(self.resource_manager)
+                    
         avl_resources = self.resource_manager.availability()
-        self.allocator.set_resources(avl_resources)
+        self.nonauto_allocator.set_resources(avl_resources)
 
         if _debug:
             print('---------%s---------' % (cur_time))
@@ -311,7 +342,7 @@ class easybf_sched(scheduler_base):
             if _debug:
                 print(cur_time, ': Allocating the blocked node')
             _e = es_dict[self.blocked_job_id]
-            blocked_job_allocation = self.allocator.search_allocation(_e, cur_time, skip=False)
+            blocked_job_allocation = self.nonauto_allocator.allocate(_e, cur_time, skip=False)
             if blocked_job_allocation[0] is not None:
                 _jobs_allocated.append(blocked_job_allocation)
                 assert(es[0] == self.blocked_job_id), '%s' % es
@@ -389,7 +420,7 @@ class easybf_sched(scheduler_base):
 
         # Trying to backfill the remaining jobs in the queue
         to_schedule_e_backfill = [es_dict[_id] for _id in for_backfilling]
-        backfill_allocation = self.allocator.search_allocation(to_schedule_e_backfill,
+        backfill_allocation = self.nonauto_allocator.allocate(to_schedule_e_backfill,
                                                                cur_time,
                                                                reserved_time=reserved_time,
                                                                reserved_nodes=reserved_nodes,
@@ -415,7 +446,7 @@ class easybf_sched(scheduler_base):
 
         """
         virtual_resources = deepcopy(avl_resources)
-        virtual_allocator = copy(self.allocator)
+        virtual_allocator = copy(self.nonauto_allocator)
 
         for fe in future_endings:
             # print('FE: ', fe[0], fe[1], fe[2])
@@ -427,7 +458,7 @@ class easybf_sched(scheduler_base):
             # then it passes them to the allocator, which sorts them
             if self._event_fits_resources(virtual_resources, e.requested_nodes, e.requested_resources):
                 virtual_allocator.set_resources(virtual_resources)
-                reservation = virtual_allocator.search_allocation(e, _time, skip=False, debug=_debug)
+                reservation = virtual_allocator.allocate(e, _time, skip=False, debug=_debug)
                 if reservation[0] is not None:
                     return _time, reservation[2]
         raise Exception('Can\'t find the slot.... no end? :(')
@@ -479,7 +510,7 @@ class easybf_sched(scheduler_base):
         ready_distpach = []
         # Trying to allocate the jobs
         to_schedule_e = [es_dict[e] for e in es]
-        allocation = self.allocator.allocating_method(to_schedule_e, cur_time, skip=False, debug=_debug)
+        allocation = self.nonauto_allocator.allocate(to_schedule_e, cur_time, skip=False, debug=_debug)
         # Computing the index of the first non-allocated job
         _idx_notdispatched = next((idx for idx, al in enumerate(allocation) if al[0] is None), len(es))
         # Building the ready_dispatch list for successful allocations, containing the assigned nodes info
