@@ -130,7 +130,7 @@ class scheduler_base(ABC):
             print('{}: {} queued jobs to be considered in the dispatching plan'.format(cur_time, len(es)))
         dispatching_plan = self.scheduling_method(cur_time, es_dict, es, _debug)
         if self.allocator:
-            dispatching_plan = self.allocator.allocate(dispatching_plan, time, _debug)
+            dispatching_plan = self.allocator.allocate(dispatching_plan, cur_time, _debug)
         return dispatching_plan
     
     def __str__(self):
