@@ -29,14 +29,15 @@ from accasim.utils.misc import sorted_object_list
 class cph_scheduler(scheduler_base):
     """
     A scheduler which uses constraint programming to plan a sub-optimal schedule.
+    This scheduler don't use the automatic feature of the automatic allocation, then it isn't
     
-    Sorting as name, sort funct parameters
     """
     name = 'CPH'
     
-    def __init__(self, _allocator, _resource_manager=None, _seed=0, _ewt={'default': 1800}, **kwargs):
-        scheduler_base.__init__(self, _seed, _resource_manager, _allocator)
+    def __init__(self, allocator, resource_manager=None, _seed=0, _ewt={'default': 1800}, **kwargs):
+        scheduler_base.__init__(self, _seed, resource_manager, None)
         self.ewt = _ewt
+        self.manual_allocator = allocator
         
         self.max_ewt = 0
         self.QueuedJobClass = namedtuple('Job', ['id', 'first', 'second'])
@@ -57,9 +58,11 @@ class cph_scheduler(scheduler_base):
             
             :return a tuple of (time to schedule, event id, list of assigned nodes)  
         """
+        if not self.manual_allocator.resource_manager:
+            self.manual_allocator.set_resource_manager(self.resource_manager)
         allocation = []
         avl_resources = self.resource_manager.availability()
-        self.allocator.set_resources(avl_resources)
+        self.manual_allocator.set_resources(avl_resources)
         for i in range(self.numberOfIterations):
             timelimit = 1000
             solve_tries = 1
@@ -100,8 +103,8 @@ class cph_scheduler(scheduler_base):
                 if _debug:
                     print('{} incorrect allocation. {}'.format(_id, 'Postponed job (Estimated time: {})'.format(_time)))
         # Trying to allocate all jobs scheduled now
-        self.allocator.set_attr(schedule=(es_dict, schedule_plan))
-        allocation = self.allocator.allocate(to_schedule_now, cur_time, skip=True, debug=_debug)
+        self.manual_allocator.set_attr(schedule=(es_dict, schedule_plan))
+        allocation = self.manual_allocator.allocate(to_schedule_now, cur_time, skip=True, debug=_debug)
 
         for (time, idx, nodes) in allocation:
             if time is not None:
@@ -265,7 +268,7 @@ class cph_scheduler(scheduler_base):
 
         :return: the scheduler's id.
         """
-        return '-'.join([self.__class__.__name__, self.name, self.allocator.get_id()])
+        return '-'.join([self.__class__.__name__, self.name, self.manual_allocator.get_id()])
         
     def prepare_job(self, jobs, cur_time):
         """
