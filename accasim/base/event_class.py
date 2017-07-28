@@ -96,8 +96,11 @@ class event(ABC):
         if len(sp_attr) > 1:
             tmp = getattr(obj, sp_attr[0])
             return self.subattr(tmp, ''.join(sp_attr[1:]))
-        return getattr(obj, sp_attr[0])
-    
+        try:
+            return getattr(obj, sp_attr[0])
+        except AttributeError:
+            return 'NA'
+        
     def schd_write_out(self):
         """
         
@@ -109,7 +112,10 @@ class event(ABC):
         _dict = self.constants.SCHEDULE_OUTPUT
         _attrs = {}
         for a, av in _dict['attributes'].items():
-            _attrs[a] = locate(av[-1])(*self.subattr(self, av[:-1])) 
+            try:
+                _attrs[a] = locate(av[-1])(*self.subattr(self, av[:-1]))
+            except ValueError:
+                _attrs[a] = 'NA'
         output_format = _dict['format']
         format_elements = re.findall('\{(\w+)\}', output_format)
         values = {k: v for k, v in _attrs.items() if k in format_elements}
