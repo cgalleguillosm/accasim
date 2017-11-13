@@ -14,3 +14,5 @@ What's new?
 ***************
 - 12-07-2017 First version of the package.
 - 19-07-2017 Documentation is moved to `http://accasim.readthedocs.io <http://accasim.readthedocs.io/en/latest/>`_
+- 21-08-2017 Automatic plot generation for comparison of multiple workload schedules and benchmark files: Slowdown, Queue sizes, Load ratio, Efficiency, Scalability, Simulation time, Memory Usage. 
+- 13-11-2017 Simulating distinct dispatchers under same system and simulator configuration can be managed under the Experimentation class. It also includes the automatic plot generation. 
