@@ -15,7 +15,7 @@ setup(
     version=__version__,
     description='An HPC Workload Management Simulator',
     long_description=long_description,
-    url='https://sites.google.com/view/accasim',
+    url='http://accasim.readthedocs.io/en/latest/',
     author='Cristian Galleguillos',
     author_email='cristian.galleguillos.m@mail.pucv.cl',
     license='MIT',

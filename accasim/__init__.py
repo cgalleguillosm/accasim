@@ -1,2 +1,2 @@
-# __all__ = ['base', 'utils']
-__version__ = '0.0.8'
+# __all__ = ['base', 'utils', 'experimentation']
+__version__ = '0.0.9'

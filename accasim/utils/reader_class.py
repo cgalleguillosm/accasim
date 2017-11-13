@@ -254,18 +254,31 @@ class default_reader_class(reader_class):
         self.open_file()
         
     def __del__(self):
+        """
+
+        :return:
+        """
         if self.file:
             self.file.close()
             self.file = None   
             self.EOF = True 
         
-    def open_file(self): 
+    def open_file(self):
+        """
+
+        :return:
+        """
         if self.file is None:
             self.file = open(self.filepath)
             self.EOF = False    
         return self.file
     
     def read_next_lines(self, n_lines=1):
+        """
+
+        :param n_lines:
+        :return:
+        """
         if not self.EOF:
             tmp_lines = 0
             lines = [] 
@@ -283,7 +296,12 @@ class default_reader_class(reader_class):
             return lines
         return None
     
-    def read(self, current_time):
+    def read(self, current_time=0):
+        """
+
+        :param current_time:
+        :return:
+        """
         line = self.read_next_lines()
         # No more lines. End of File
         if not line:
@@ -298,15 +316,29 @@ class default_reader_class(reader_class):
 class tweak_class(ABC):
     
     def __init__(self, **kwargs):
+        """
+
+        :param kwargs:
+        """
         pass
     
     @abstractmethod
     def tweak_function(self, job_dict):
+        """
+
+        :param job_dict:
+        :return:
+        """
         pass
 
 class default_tweak_class(tweak_class):
 
     def __init__(self, start_time, equivalence):
+        """
+
+        :param start_time:
+        :param equivalence:
+        """
         self.start_time = start_time
         self.equivalence = equivalence
         

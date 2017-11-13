@@ -22,7 +22,7 @@ The workload descrition is a public workload trace collected from the `Seth clus
 belonging the High Performance Computing Center North (HPC2N) of the Swedish National Infrastructure for Computing. The workload trace file includes 200,735 jobs spanning 
 through 4 years, from July 2002 to January 2006, and is available `on-line <http://www.cs.huji.ac.il/labs/parallel/workload/l\_hpc2n/index.html>`_ in the SWF format. 
 
-Seth  was built in 2001 and is already retired by now. It ranked 59th in Top500 list\footnote{http://www.top500.org/}, the world's 500 fastest computers. It was composed of 
+Seth  was built in 2001 and is already retired by now. It ranked 59th in Top500 list\footnote{https://www.top500.org/}, the world's 500 fastest computers. It was composed of
 120 nodes, each node with two AMD Athlon MP2000+ dual core processors with 1.667 GHz and 1 GB of RAM. Because multiple jobs can co-exist on the same node, we consider a better 
 representation of the system,  made of cores instead of processors. Besides, it is required to define the start time of the workload, because the first job belongs to 0. 
 To perform the change between processors and cores, the member equivalence is defined. It contains the actual name, the new one and the equivalence for a single unit. 

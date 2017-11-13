@@ -7,6 +7,7 @@ Subpackages
 .. toctree::
 
     accasim.base
+    accasim.experimentation
     accasim.utils
 
 Module contents

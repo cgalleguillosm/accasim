@@ -19,7 +19,9 @@
 #
 import os
 import sys
+
 sys.path.insert(0, os.path.abspath('../../'))
+sys.path.insert(0, os.path.abspath('../../accasim'))
 from accasim import __version__
 
 # -- General configuration ------------------------------------------------
@@ -77,7 +79,6 @@ pygments_style = 'sphinx'
 # If true, `todo` and `todoList` produce output, else they produce nothing.
 todo_include_todos = False
 
-
 # -- Options for HTML output ----------------------------------------------
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
@@ -88,8 +89,8 @@ html_theme = "classic"
 html_theme_path = ["."]
 html_theme_options = {
     "rightsidebar": "true",
-	"stickysidebar": "true",
-	"externalrefs": "true",
+    "stickysidebar": "true",
+    "externalrefs": "true",
     "relbarbgcolor": "black"
 }
 
@@ -111,22 +112,20 @@ html_static_path = ['_static']
 # refs: http://alabaster.readthedocs.io/en/latest/installation.html#sidebars
 html_sidebars = {
     '**': [
-		# 'relations.html',  # needs 'show_related': True theme option to display
-		'localtoc.html',
-		'searchbox.html',
-		# 'sourcelink.html', 
+        # 'relations.html',  # needs 'show_related': True theme option to display
+        'localtoc.html',
+        'searchbox.html',
+        # 'sourcelink.html',
         # 'about.html',
         # 'navigation.html',
         # 'donate.html',
     ]
 }
 
-
 # -- Options for HTMLHelp output ------------------------------------------
 
 # Output file base name for HTML help builder.
 htmlhelp_basename = 'AccaSimdoc'
-
 
 # -- Options for LaTeX output ---------------------------------------------
 
@@ -156,7 +155,6 @@ latex_documents = [
      'Cristian Galleguillos', 'manual'),
 ]
 
-
 # -- Options for manual page output ---------------------------------------
 
 # One entry per manual page. List of tuples
@@ -165,7 +163,6 @@ man_pages = [
     (master_doc, 'accasim', 'AccaSim Documentation',
      [author], 1)
 ]
-
 
 # -- Options for Texinfo output -------------------------------------------
 
@@ -177,6 +174,3 @@ texinfo_documents = [
      author, 'AccaSim', 'One line description of project.',
      'Miscellaneous'),
 ]
-
-
-

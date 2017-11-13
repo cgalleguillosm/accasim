@@ -26,36 +26,62 @@ import matplotlib.patches as patches
 from matplotlib.backends.backend_pdf import PdfPages
 from math import floor
 from accasim.utils.reader_class import default_reader_class
-from accasim.utils.misc import load_config
+from accasim.utils.misc import load_config, from_isodatetime_2_timestamp as _timestamp, str_resources
+from accasim.utils.file import path_leaf, load_jsonfile
 from accasim.base.resource_manager_class import resources_class
 from copy import deepcopy
-from os.path import splitext
+from os.path import splitext as _splitext, join as _join
 import numpy as np
 
 
-class PlotFactory:
+class plot_factory:
     """
     A class for plot production and schedule files pre-processing.
     
     In this class, some basic algorithms are implemented for pre-processing the schedule files produced through 
     simulation, and for producing some common evaluation plots.
     """
+    
+    SCHEDULE_CLASS = 'schedule'
+    BENCHMARK_CLASS = 'benchmark'
+    SLOWDOWN_PLOT = 'slowdown'
+    QUEUE_SIZE_PLOT = 'queue_size'
+    LOAD_RATIO_PLOT = 'load_ratio'
+    EFFICIENCY_PLOT = 'efficiency'
+    SCALABILITY_PLOT = 'scalability'
+    SIMULATION_TIME_PLOT = 'sim_time'
+    SIMULAION_MEMORY_PLOT ='sim_memory'
+    
+    PLOT_TYPES = {
+        SCHEDULE_CLASS: [SLOWDOWN_PLOT, QUEUE_SIZE_PLOT, LOAD_RATIO_PLOT, EFFICIENCY_PLOT],
+        BENCHMARK_CLASS: [SCALABILITY_PLOT, SIMULATION_TIME_PLOT, SIMULAION_MEMORY_PLOT]
+    }
 
-    def __init__(self, type):
+    def __init__(self, plot_class, sim_params_fname, config=None, resource=None, workload_parser=None, debug=False):
         """
         The constructor for the class.
         
-        :param type: the type of files to be analyzed. Can be either 'schedule', if schedule files are going to be 
+        :param plot_class: the plot_class of files to be analyzed. Can be either 'schedule', if schedule files are going to be 
         analyzed, or 'benchmark' if resource usage log files will be analyzed;
+        :params sim_params_fname: 
+        :param config: The path to a system configuration file. Needed for the schedule meta-simulation;
+        :param resource: a resource type in the system to be considered. If specified, all resource-related statistics
+            will be computed in regards to this resource alone;
+        :param workload_parser: 
+        :param debug: Debug flag.
         """
-        self._scheduletype = 'schedule'
-        self._benchmarktype = 'benchmark'
 
-        if type!=self._scheduletype and type!=self._benchmarktype:
-            print('Wrong Plot type chosen. Selecting schedule type by default...')
-            self._type = self._scheduletype
-        else:
-            self._type = type
+        if not (plot_class in self.PLOT_TYPES.keys()):
+            if self._debug:
+                print('Wrong Plot plot_class chosen. Selecting schedule plot_class by default...') 
+            plot_class = self.SCHEDULE_CLASS
+        self._plot_class = plot_class
+
+        self._debug = debug
+        self._sim_params_fname = sim_params_fname
+        self._config = config
+        self._resource = resource
+        self._workload_parser = workload_parser
 
         self._preprocessed = False
         self._filepaths = []
@@ -91,11 +117,12 @@ class PlotFactory:
             self._labels = labels
 
         if len(self._filepaths) != len(self._labels):
-            print("Filepaths and Labels lists must have the same lengths.")
+            if self._debug:
+                print("Filepaths and Labels lists must have the same lengths.")
             self._labels = []
             self._filepaths = []
 
-    def preProcess(self, config='', resource=None):
+    def preProcess(self):
         """
         Performs pre-processing on all specified files, according to their type.
         
@@ -103,13 +130,10 @@ class PlotFactory:
         queue size, load ratios and such. If the data is of the benchmark type, the files are simply parsed and their
         information stored.
         
-        :param config: The path to a system configuration file. Needed for the schedule meta-simulation;
-        :param resource: a resource type in the system to be considered. If specified, all resource-related statistics
-            will be computed in regards to this resource alone;
         """
         if not self._preprocessed:
             # Perform pre-processing for schedule files
-            if self._type == self._scheduletype:
+            if self._plot_class == self.SCHEDULE_CLASS:
                 self._slowdowns = []
                 self._queuesizes = []
                 self._loadratiosX = []
@@ -118,12 +142,12 @@ class PlotFactory:
                 self._preprocessed = True
                 for f in self._filepaths:
                     # If an error is encountered on one of the files, the process is aborted
-                    if not self._getScheduleData(f, config, resource):
+                    if not self._getScheduleData(f, self._config, self._resource):
                         self._preprocessed = False
                         break
 
             # Perform pre-processing for benchmark files
-            elif self._type == self._benchmarktype:
+            elif self._plot_class == self.BENCHMARK_CLASS:
                 self._simdata = []
                 self._schedtimes = []
                 self._mantimes = []
@@ -167,22 +191,22 @@ class PlotFactory:
         :param output: path of the output PDF file;
         """
         if self._preprocessed:
-            if type == 'slowdown' and self._type == self._scheduletype:
-                self.boxPlot(self._slowdowns,title,'Slowdown', scale, xlim, ylim, figsize, meansonly, output)
-            elif type == 'queue_size' and self._type == self._scheduletype:
-                self.boxPlot(self._queuesizes, title, 'Queue size', scale, xlim, ylim, figsize, meansonly, output)
-            elif type == 'load_ratio' and self._type == self._scheduletype:
+            if type == self.SLOWDOWN_PLOT and self._plot_class == self.SCHEDULE_CLASS:
+                self.boxPlot(self._slowdowns,title,'Slowdown', scale, xlim, (1, None), figsize, meansonly, output)
+            elif type == self.QUEUE_SIZE_PLOT and self._plot_class == self.SCHEDULE_CLASS:
+                self.boxPlot(self._queuesizes, title, 'Queue size', scale, xlim, (0, None), figsize, meansonly, output)
+            elif type == self.LOAD_RATIO_PLOT and self._plot_class == self.SCHEDULE_CLASS:
                 self.distributionScatterPlot(self._loadratiosX, self._loadratiosY, alpha, title, scale, xlim, ylim, figsize, output)
-            elif type == 'efficiency' and self._type == self._scheduletype:
+            elif type == self.EFFICIENCY_PLOT and self._plot_class == self.SCHEDULE_CLASS:
                 self.boxPlot(self._efficiencies, title, 'Resource efficiency', scale, xlim, ylim, figsize, meansonly, output)
-            elif type == 'scalability' and self._type == self._benchmarktype:
+            elif type == self.SCALABILITY_PLOT and self._plot_class == self.BENCHMARK_CLASS:
                 self.scalabilityPlot(self._scalabilitydataX, self._scalabilitydataY, title, scale, xlim, ylim, figsize, legend, output)
-            elif type == 'sim_time' and self._type == self._benchmarktype:
+            elif type == self.SIMULATION_TIME_PLOT and self._plot_class == self.BENCHMARK_CLASS:
                 self.boxPlotTimes(self._mantimes, self._schedtimes, title, scale, xlim, ylim, figsize, legend, output)
-            elif type == 'sim_memory' and self._type == self._benchmarktype:
+            elif type == self.SIMULAION_MEMORY_PLOT and self._plot_class == self.BENCHMARK_CLASS:
                 self.boxPlotMemory(self._simmemory, title, scale, xlim, ylim, figsize, legend, output)
             else:
-                print("Plot type specified is not valid. Review the documentation for valid plot types.")
+                raise Exception("Plot type specified is not valid. Review the documentation for valid plot types.")
         else:
             print("Files were not pre-processed yet. Please call the preProcess method first.")
 
@@ -193,7 +217,8 @@ class PlotFactory:
         :param filepath: the path to the log file;
         :return: True if successful, False otherwise;
         """
-        print("- Pre-processing file "+filepath+"...")
+        if self._debug:
+            print("- Pre-processing file "+filepath+"...")
         # Tries to read from the file, aborts if an error is encountered
         try:
             f = open(filepath)
@@ -217,8 +242,7 @@ class PlotFactory:
                     maxqueuesize = int(attrs[1])
             f.close()
         except Exception as e:
-            print("Error encountered while pre-processing: " + str(e))
-            return False
+            raise Exception("Error encountered while pre-processing: " + str(e))
 
         # Certain statistics are computed from the data
         data = {}
@@ -268,45 +292,62 @@ class PlotFactory:
             types are used;
         :return: True if successful, False otherwise;
         """
-        print("- Pre-processing file " + filepath + "...")
+        if self._debug:
+            print("- Pre-processing file " + filepath + "...")
         # Generates the dictionary of system resources from the config file
         resobject, equiv = self._generateSystemConfig(config)
         base_res = resobject.availability()
+
         # Makes sure the resource type exists in the system
         if resource is not None and resource not in resobject.system_resource_types:
-            print("Resource type " + resource + "is not valid. Using all available resources...")
+            if self._debug:
+                print("Resource type " + resource + "is not valid. Using all available resources...")
             resource = None
 
         # Tries to read from the log file, aborts if an error is encountered
         try:
-            reader =  default_reader_class(filepath, equivalence=equiv)
+            reader = default_reader_class(filepath, parser=self._workload_parser, equivalence=equiv) 
+            _path, _filename = path_leaf(filepath)
+            _sim_params_path = _join(_path, self._sim_params_fname)
             jobs = []
             slowdowns = []
             timePoints = []
-            print("Loading jobs...")
+            if self._debug:
+                print("Loading jobs...")
             while True:
                 # Jobs are read and their slowdown values are stored
                 job = reader.read()
                 if job is not None:
-                    duration = job['end_time'] - job['start_time']
-                    wait = job['start_time'] - job['queued_time']
+                    job['start_time'] = _timestamp(job['start_time'])
+                    job['end_time'] = _timestamp(job['end_time'])
+                    job['queue_time'] = _timestamp(job['queue_time'])
+                    _start_time = job['start_time']
+                    _end_time = job['end_time']
+                    _queued_time = job['queue_time']
+                    duration = _end_time - _start_time
+                    wait = _start_time - _queued_time
                     slowdown = (wait + duration) / duration if duration != 0 else wait if wait != 0 else 1.0
-                    if slowdown > 1.0:
-                        slowdowns.append(slowdown)
+                    #===========================================================
+                    # What happen if there is only 1.0 slowdown values?? The chart must be skipped? or generated?
+                    # if slowdown > 1.0:
+                    #     slowdowns.append(slowdown)
+                    #===========================================================
+                    slowdowns.append(slowdown)
                     jobs.append(job)
                     # Timepoints for use in the simulation are stored
-                    timePoints.append(job['queue_time'])
-                    timePoints.append(job['start_time'])
-                    timePoints.append(job['end_time'])
+                    timePoints.append(_queued_time)
+                    timePoints.append(_start_time)
+                    timePoints.append(_end_time)
                 else:
                     break
         except Exception as e:
-            print("Error encountered while pre-processing: " + str(e))
-            return False
+            raise Exception("Error encountered while pre-processing: " + str(e))
 
-        print("Jobs loaded. Sorting...")
+        if self._debug:
+            print("Jobs loaded. Sorting...")
+
         # Jobs are sorted by their submission time, like in the original simulation
-        jobs.sort(key=lambda x: x['queued_time'])
+        jobs.sort(key=lambda x: x['queue_time'])
         # We compute the final set of distinct, ordered timepoints
         timePoints = sorted(set(timePoints))
 
@@ -323,7 +364,8 @@ class PlotFactory:
         efficiencyperjob = []
         running = []
 
-        print("Sorting done. Starting simulation...")
+        if self._debug:
+            print("Sorting done. Starting simulation...")
 
         # Meta-simulations: goes on until there are no more timepoints to consider
         while timePointsIDX < len(timePoints):
@@ -333,8 +375,8 @@ class PlotFactory:
             # Adds to the queue jobs that were submitted in this timepoint; the index is persistent, for efficiency
             while jobIDX < len(jobs):
                 j = jobs[jobIDX]
-                assert j['queued_time'] >= point
-                if j['queued_time'] == point:
+                assert j['queue_time'] >= point
+                if j['queue_time'] == point:
                     queue.append(jobs[jobIDX])
                     jobIDX += 1
                 else:
@@ -345,37 +387,39 @@ class PlotFactory:
             run.append(len(running) + 1)
             resources.append(self._getLoadRatio(base_res, sys_res, resource))
             efficiency.append(self._getLoadRatioSelective(base_res, sys_res, resource))
-
+            
             # Jobs that have terminated release their resources
-            jobstoend = [j for j in running if j.end_time == point]
+            jobstoend = [j for j in running if j['end_time'] == point]
             for j in jobstoend:
-                req, assignations = self._getRequestedResources(j)
+                req, assignations = self._getRequestedResources(_sim_params_path, j['assignations'])
                 for node in assignations:
                     for k,val in req.items():
                         sys_res[node][k] += val
                 running.remove(j)
-
+            
             # Jobs that have to start take their resources from the system
-            jobstostart = [j for j in queue if j.start_time == point]
+            jobstostart = [j for j in queue if j['start_time'] == point]
             for j in jobstostart:
-                if j.end_time - j.start_time > 0:
-                    req, assignations = self._getRequestedResources(j)
+                if j['end_time'] - j['start_time'] > 0:
+                    req, assignations = self._getRequestedResources(_sim_params_path, j['assignations'])
                     for node in assignations:
                         for k, val in req.items():
                             sys_res[node][k] -= val
                             if sys_res[node][k] < 0:
                                 sys_res[node][k] = 0
-                                print("Caution: resource " + k + " is going below zero.")
+                                if self._debug:
+                                    print("Caution: resource " + k + " is going below zero.")
                     running.append(j)
                 queue.remove(j)
             # Additionally, we store for every started job its resource allocation efficiency
             for j in jobstostart:
-                if j.end_time - j.start_time > 0:
-                    req, assignations = self._getRequestedResources(j)
+                if j['end_time'] - j['start_time'] > 0:
+                    req, assignations = self._getRequestedResources(_sim_params_path,j['assignations'])
                     eff = self._getResourceEfficiency(req, assignations, sys_res, resource)
                     efficiencyperjob.append(eff)
 
-        print("Simulation done!")
+        if self._debug:
+            print("Simulation done!")
 
         # The metrics values for this instance are added to the internal variables
         self._slowdowns.append(slowdowns)
@@ -406,7 +450,7 @@ class PlotFactory:
 
         return None, None
 
-    def _getRequestedResources(self, job):
+    def _getRequestedResources(self, _params_path, assignations_str):
         """
         TO BE IMPLEMENTED:
         returns the requested resources for the input job.
@@ -414,7 +458,11 @@ class PlotFactory:
         :param job: the dictionary related to the current job;
         :return: the dictionary of resources needed by each job unit, and the list of node assignations;
         """
-        return {}, []
+        _resource_order = load_jsonfile(_params_path)['resource_order']
+        _assignations_list = assignations_str.split(str_resources.SEPARATOR)[0:-1]
+        _nodes_list = [assign.split(';')[0] for assign in _assignations_list]
+        _request = { k:int(v) for k,v in zip(_resource_order, _assignations_list[0].split(';')[1:])}
+        return _request, _nodes_list
 
     def _getResourceEfficiency(self, reqres, nodes, sys_res, resource):
         """
@@ -773,9 +821,10 @@ class PlotFactory:
         :param output: the path to the output files: the label for each test instance will be automatically added 
             for each file;
         """
+
         for i in range(len(xdata)):
             fig, ax = plt.subplots(figsize=figsize)
-
+            
             ax.scatter(xdata[i], ydata[i], color='black', alpha=alpha, s=5)
 
             ax.set_title(title)
@@ -787,7 +836,7 @@ class PlotFactory:
             ax.grid(True)
 
             plt.show()
-            splitoutput = splitext(output)
+            splitoutput = _splitext(output)
             ff = PdfPages(splitoutput[0] + '-' + self._labels[i] + '.pdf')
             ff.savefig(fig)
             ff.close()
@@ -811,7 +860,7 @@ class PlotFactory:
             - the X scalability data containing the queue size for each test instance;
             - the Y scalability data containing the average dispatching times for each test instance;
         """
-        if not self._preprocessed or self._type != self._benchmarktype:
+        if not self._preprocessed or self._plot_class != self.BENCHMARK_CLASS:
             return None, None, None, None, None, None
         else:
             return self._simdata, self._schedtimes, self._mantimes, self._simmemory, self._scalabilitydataX, self._scalabilitydataY
@@ -834,7 +883,7 @@ class PlotFactory:
             - the X data regarding the load ratios (fraction of used nodes) for all time steps;
             - the Y data regarding the load ratios (fraction of used resources) for all time steps;
         """
-        if not self._preprocessed or self._type != self._scheduletype:
+        if not self._preprocessed or self._plot_class != self.SCHEDULE_CLASS:
             return None, None, None, None, None
         else:
             return self._slowdowns, self._queuesizes, self._efficiencies, self._loadratiosX, self._loadratiosY
@@ -846,7 +895,7 @@ if __name__=='__main__':
                   'Path/to/benchmark/file2']
     resultlabel = ['Label',
                    'Label2']
-    plots = PlotFactory(type='benchmark')
+    plots = plot_factory(type='benchmark')
     plots.setFiles(resultpath,resultlabel)
     plots.preProcess()
     plots.producePlot(type='scalability', title='My Scalability Plot')

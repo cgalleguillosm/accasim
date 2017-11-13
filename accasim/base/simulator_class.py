@@ -22,15 +22,18 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 from time import clock as _clock, sleep as _sleep
+from sys import path as _path
 from datetime import datetime
 from abc import abstractmethod, ABC
 from accasim.utils.reader_class import default_reader_class, reader_class
-from accasim.utils.misc import CONSTANT, watcher_daemon, DEFAULT_SIMULATION, load_config, path_leaf, clean_results, default_swf_mapper
+from accasim.utils.misc import CONSTANT, watcher_daemon, DEFAULT_SIMULATION, load_config, clean_results, \
+    default_swf_mapper
+from accasim.utils.file import path_leaf, save_jsonfile
 from accasim.utils.visualization_class import scheduling_visualization
 from accasim.base.event_class import event_mapper, attribute_type
 from accasim.base.resource_manager_class import resources_class, resource_manager
 from accasim.base.scheduler_class import scheduler_base
-from accasim.base.event_class import job_factory as job_factory_class 
+from accasim.base.event_class import job_factory as job_factory_class
 from accasim.base.additional_data import additional_data
 from threading import Thread, Event as THEvent
 from os import getpid as _getpid, path as _path, makedirs as _makedirs
@@ -39,9 +42,10 @@ from _functools import reduce
 import inspect
 import asyncio
 
-class simulator_base(ABC):
 
-    def __init__(self, _resource_manager, _reader, _job_factory, _dispatcher, _additional_data, config_file=None, **kwargs):
+class simulator_base(ABC):
+    def __init__(self, _resource_manager, _reader, _job_factory, _dispatcher, _additional_data, config_file=None,
+                 **kwargs):
         """
         
         Simulator base constructor
@@ -57,23 +61,23 @@ class simulator_base(ABC):
         self.constants = CONSTANT()
         self.define_default_constants(config_file, **kwargs)
         self.real_init_time = datetime.now()
-        assert(isinstance(_reader, reader_class))
+        assert (isinstance(_reader, reader_class))
         self.reader = _reader
-        assert(isinstance(_resource_manager, resource_manager))
+        assert (isinstance(_resource_manager, resource_manager))
         self.resource_manager = _resource_manager
-        assert(isinstance(_job_factory, job_factory_class))
+        assert (isinstance(_job_factory, job_factory_class))
         # assert(self.check_request(_job_factory.attrs_names)), 'System resources must be included in Job Factory descrpition.'
         self.job_factory = _job_factory
-        assert(isinstance(_dispatcher, scheduler_base))
+        assert (isinstance(_dispatcher, scheduler_base))
         self.dispatcher = _dispatcher
 
         self.mapper = event_mapper(self.resource_manager)
         self.additional_data = self.additional_data_init(_additional_data)
-        
+
         self.show_config()
         if self.constants.OVERWRITE_PREVIOUS:
             self.remove_previous()
-        
+
     @abstractmethod
     def start_simulation(self):
         """
@@ -91,7 +95,7 @@ class simulator_base(ABC):
         
         """
         raise NotImplementedError('Must be implemented!')
-    
+
     def additional_data_init(self, _additional_data):
         """
         
@@ -110,7 +114,7 @@ class simulator_base(ABC):
             elif issubclass(ad, additional_data):
                 _ad.append(ad(self.mapper))
             else:
-                raise('Additional data class must be a subclass of the additional_data class')
+                raise ('Additional data class must be a subclass of the additional_data class')
         return _ad
 
     def check_request(self, attrs_names):
@@ -123,11 +127,11 @@ class simulator_base(ABC):
         """
         _system_resources = self.resource_manager.resources.system_resource_types
         for _res in _system_resources:
-            if not(_res in attrs_names):
+            if not (_res in attrs_names):
                 print('Resource \'{}\' is not included in the Job dict.'.format(_res))
                 return False
         return True
-    
+
     def generate_enviroment(self, config_path):
         """
         
@@ -137,13 +141,13 @@ class simulator_base(ABC):
         
         :return: resource manager object.  
         
-        """        
+        """
         config = load_config(config_path)
         equiv = config.pop('equivalence', {})
         start_time = config.pop('start_time', 0)
         resources = resources_class(**config)
         return resources.resource_manager(), equiv, start_time
-    
+
     def define_filepaths(self, **kwargs):
         """
         
@@ -152,12 +156,12 @@ class simulator_base(ABC):
         """
         kwargs['WORKLOAD_FILENAME'] = path_leaf(kwargs['WORKLOAD_FILEPATH'])[1]
         if 'RESULTS_FOLDER_PATH' not in kwargs:
-            script_path, script_name = path_leaf(inspect.stack()[-1].filename) 
+            script_path, script_name = path_leaf(inspect.stack()[-1].filename)
             rfolder = kwargs.pop('RESULTS_FOLDER_NAME')
             kwargs['RESULTS_FOLDER_PATH'] = _path.join(script_path, rfolder)
         self.create_folder(kwargs['RESULTS_FOLDER_PATH'])
         return kwargs
-        
+
     def create_folder(self, path):
         """
         
@@ -171,7 +175,7 @@ class simulator_base(ABC):
         if not _path.exists(path):
             _makedirs(path)
         return path
-    
+
     def set_workload_input(self, workload_path, **kwargs):
         """
         
@@ -184,7 +188,7 @@ class simulator_base(ABC):
         
         """
         return default_reader_class(workload_path, **kwargs)
-    
+
     def prepare_arguments(self, possible_arguments, arguments):
         """
         
@@ -200,8 +204,8 @@ class simulator_base(ABC):
         :return: Dictionary with the corresponding arguments.
         
         """
-        return {k:v for k, v in arguments.items() if k in possible_arguments}
-    
+        return {k: v for k, v in arguments.items() if k in possible_arguments}
+
     def define_default_constants(self, config_filepath, **kwargs):
         """
         
@@ -219,7 +223,7 @@ class simulator_base(ABC):
                 kwargs[k] = v
         kwargs = self.define_filepaths(**kwargs)
         self.constants.load_constants(kwargs)
-        
+
     def show_config(self):
         """
         
@@ -230,13 +234,18 @@ class simulator_base(ABC):
         print('Settings: ')
         print('\tSystem Configuration file: {}'.format(self.constants.SYS_CONFIG_FILEPATH))
         print('\tWorkload file: {}'.format(self.constants.WORKLOAD_FILEPATH))
-        print('\tResults folder: {}{}.'.format(self.constants.RESULTS_FOLDER_PATH, ', Overwrite previous files' if self.constants.OVERWRITE_PREVIOUS else ''))
-        print('\t\t ({}) Dispatching Plan Output. Prefix: {}'.format(self.on_off(self.constants.SCHEDULING_OUTPUT), self.constants.SCHED_PREFIX))
-        print('\t\t ({}) Statistics Output. Prefix: {}'.format(self.on_off(self.constants.STATISTICS_OUTPUT), self.constants.STATISTICS_PREFIX))
-        print('\t\t ({}) Dispatching Plan. Pretty Print Output. Prefix: {}'.format(self.on_off(self.constants.PPRINT_OUTPUT), self.constants.PPRINT_PREFIX))
-        print('\t\t ({}) Benchmark Output. Prefix: {}'.format(self.on_off(self.constants.BENCHMARK_OUTPUT), self.constants.BENCHMARK_PREFIX))
+        print('\tResults folder: {}{}.'.format(self.constants.RESULTS_FOLDER_PATH,
+                                               ', Overwrite previous files' if self.constants.OVERWRITE_PREVIOUS else ''))
+        print('\t\t ({}) Dispatching Plan Output. Prefix: {}'.format(self.on_off(self.constants.SCHEDULING_OUTPUT),
+                                                                     self.constants.SCHED_PREFIX))
+        print('\t\t ({}) Statistics Output. Prefix: {}'.format(self.on_off(self.constants.STATISTICS_OUTPUT),
+                                                               self.constants.STATISTICS_PREFIX))
+        print('\t\t ({}) Dispatching Plan. Pretty Print Output. Prefix: {}'.format(
+            self.on_off(self.constants.PPRINT_OUTPUT), self.constants.PPRINT_PREFIX))
+        print('\t\t ({}) Benchmark Output. Prefix: {}'.format(self.on_off(self.constants.BENCHMARK_OUTPUT),
+                                                              self.constants.BENCHMARK_PREFIX))
         print('Ready to Start')
-        
+
     def on_off(self, state):
         """
         
@@ -247,19 +256,31 @@ class simulator_base(ABC):
         
         """
         return 'ON' if state else 'OFF'
-    
+
     def remove_previous(self):
         """
         
         To clean the previous results.
         
         """
-        _wouts = [(self.constants.SCHEDULING_OUTPUT, self.constants.SCHED_PREFIX), (self.constants.STATISTICS_OUTPUT, self.constants.STATISTICS_PREFIX),
-            (self.constants.PPRINT_OUTPUT, self.constants.PPRINT_PREFIX), (self.constants.BENCHMARK_OUTPUT, self.constants.BENCHMARK_PREFIX)]
-        
-        _paths = [_path.join(self.constants.RESULTS_FOLDER_PATH, _prefix + self.constants.WORKLOAD_FILENAME) for state, _prefix in _wouts if state]            
-        clean_results(*_paths)
+        _wouts = [(self.constants.SCHEDULING_OUTPUT, self.constants.SCHED_PREFIX),
+                  (self.constants.STATISTICS_OUTPUT, self.constants.STATISTICS_PREFIX),
+                  (self.constants.PPRINT_OUTPUT, self.constants.PPRINT_PREFIX),
+                  (self.constants.BENCHMARK_OUTPUT, self.constants.BENCHMARK_PREFIX)]
 
+        _paths = [_path.join(self.constants.RESULTS_FOLDER_PATH, _prefix + self.constants.WORKLOAD_FILENAME) for
+                  state, _prefix in _wouts if state]
+        clean_results(*_paths)
+        
+    def _clean_simulator_constants(self):
+        self.constants.clean_constants()
+
+    def _save_parameters(self, _parameters, filename='simulator_parameters.json'):
+        filename_path = _path.join(self.constants.RESULTS_FOLDER_PATH, filename)
+        _dict = {
+            _param: getattr(self.constants, _param) for _param in _parameters 
+        }
+        save_jsonfile(filename_path, _dict)
 
 class hpc_simulator(simulator_base):
     """
@@ -267,8 +288,11 @@ class hpc_simulator(simulator_base):
     Default implementation of the simulator_base class.    
     
     """
-    def __init__(self, sys_config, scheduler, workload=None, resource_manager=None, reader=None, job_factory=None, additional_data=[], simulator_config=None, overwrite_previous=True,
-        scheduling_output=True, pprint_output=False, benchmark_output=False, statistics_output=True, show_statistics=True, **kwargs):
+
+    def __init__(self, sys_config, scheduler, workload=None, resource_manager=None, reader=None, job_factory=None,
+                 additional_data=[], simulator_config=None, overwrite_previous=True,
+                 scheduling_output=True, pprint_output=False, benchmark_output=False, statistics_output=True, save_parameters=None,
+                 show_statistics=True, **kwargs):
         """
     
         Constructor of the HPC Simulator class.
@@ -286,6 +310,7 @@ class hpc_simulator(simulator_base):
         :param pprint_output: Default False. Dispatching plan output in pretty print version. Format modificable in DEFAULT_SIMULATION
         :param benchmark_output: Default False. Measurement of the simulator and dispatcher performance.
         :param statistics_output: Default True. Statistic of the simulation.
+        :param save_parameters: List of simulation name paremeters to be saved in the target results folder. None or empty for not saving the parameters.
         :param show_statistics: Default True. Show Statistic after finishing the simulation.
         :param \*\*kwargs: Optional parameters to be included in the Constants.
         
@@ -307,7 +332,7 @@ class hpc_simulator(simulator_base):
             kwargs['start_time'] = start_time
         if not job_factory:
             kwargs['job_mapper'] = default_swf_mapper
-            kwargs['job_attrs'] = self.default_job_description() 
+            kwargs['job_attrs'] = self.default_job_description()
             _jf_arguments = ['job_class', 'job_attrs', 'job_mapper']
             args = self.prepare_arguments(_jf_arguments, kwargs)
             _uargs += _jf_arguments
@@ -318,22 +343,27 @@ class hpc_simulator(simulator_base):
             reader = self.set_workload_input(workload, job_factory=job_factory, **args)
             _uargs += _reader_arguments
         if not isinstance(additional_data, list):
-            assert(isinstance(additional_data, additional_data) or issubclass(additional_data, additional_data)), 'Only subclasses of additional_data class are acepted as additional_data argument '
+            assert (isinstance(additional_data, additional_data) or issubclass(additional_data,
+                                                                               additional_data)), 'Only subclasses of additional_data class are acepted as additional_data argument '
             additional_data = [additional_data]
-            
+
         scheduler.set_resource_manager(resource_manager)
-        
+
         for _u in _uargs:
             kwargs.pop(_u, None)
 
-        simulator_base.__init__(self, resource_manager, reader, job_factory, scheduler, additional_data, config_file=simulator_config, **kwargs)
-        
+        simulator_base.__init__(self, resource_manager, reader, job_factory, scheduler, additional_data,
+                                config_file=simulator_config, **kwargs)
+
+        if save_parameters: 
+            self._save_parameters(save_parameters)
+
         self.start_simulation_time = None
         self.end_simulation_time = None
         self.max_sample = 2
         self.daemons = {}
         self.loaded_jobs = 0
-               
+
     def monitor_datasource(self, _stop):
         """
         
@@ -347,7 +377,7 @@ class hpc_simulator(simulator_base):
             self.constants.running_at['current_time'] = self.mapper.current_time
             self.constants.running_at['running_jobs'] = {x: self.mapper.events[x] for x in self.mapper.running}
             _sleep(self.constants.running_at['interval'])
-    
+
     def start_simulation(self, watcher=False, visualization=False, **kwargs):
         """
         
@@ -376,7 +406,6 @@ class hpc_simulator(simulator_base):
             }
             monitor.start()
 
-            
         if watcher:
             functions = {
                 'usage_function': self.mapper.usage,
@@ -400,7 +429,9 @@ class hpc_simulator(simulator_base):
         [d['object'].stop() for d in self.daemons.values() if d['object']]
         if visualization:
             _stop.set()
-                
+        
+        self._clean_simulator_constants()
+
     def start_hpc_simulation(self, debug=False):
         """
         
@@ -408,37 +439,41 @@ class hpc_simulator(simulator_base):
         
         :param debug: Debugging flag
         
-        """                   
-        
-        #=======================================================================
+        """
+
+        # =======================================================================
         # Load events corresponding at the "current time" and the next one
-        #=======================================================================
+        # =======================================================================
         event_dict = self.mapper.events
         self.start_simulation_time = _clock()
         self.constants.load_constant('start_simulation_time', self.start_simulation_time)
 
         print('Starting the simulation process.')
-        
+
         self.load_events(self.mapper.current_time, event_dict, self.mapper, debug, self.max_sample)
         events = self.mapper.next_events()
 
-        #=======================================================================
+        # =======================================================================
         # Loop until there are not loaded, queued and running jobs
-        #=======================================================================
+        # =======================================================================
         while events or self.mapper.has_events():
             _actual_time = self.mapper.current_time
-            
+
             benchStartTime = _clock() * 1000
-            
+
             if debug:
-                print('{} INI: Loaded {}, Queued {}, Running {}, Finished {}'.format(_actual_time, len(self.mapper.loaded), len(self.mapper.queued), len(self.mapper.running), len(self.mapper.finished)))
+                print('{} INI: Loaded {}, Queued {}, Running {}, Finished {}'.format(_actual_time,
+                                                                                     len(self.mapper.loaded),
+                                                                                     len(self.mapper.queued),
+                                                                                     len(self.mapper.running),
+                                                                                     len(self.mapper.finished)))
             self.mapper.release_ended_events(event_dict)
-            
-            #===================================================================
+
+            # ===================================================================
             # External behavior
-            #===================================================================
+            # ===================================================================
             self.execute_additional_data()
-            
+
             queuelen = len(events)
             schedStartTime = _clock() * 1000
             schedEndTime = schedStartTime
@@ -448,28 +483,37 @@ class hpc_simulator(simulator_base):
                 to_dispatch = self.dispatcher.schedule(self.mapper.current_time, event_dict, events, debug)
                 # to_dispatch = self.dispatcher.schedule(self.mapper.current_time, event_dict, events, len(self.mapper.finished) > 15000)
                 if debug:
-                    print('{} DUR: To Dispatch {}. {}'.format(_actual_time, len(to_dispatch), self.resource_manager.resources.usage()))
+                    print('{} DUR: To Dispatch {}. {}'.format(_actual_time, len(to_dispatch),
+                                                              self.resource_manager.resources.usage()))
                 time_diff = 0
                 schedEndTime = _clock() * 1000
                 try:
                     self.mapper.dispatch_events(event_dict, to_dispatch, time_diff, debug)
                 except AssertionError as e:
                     print('{} DUR: {}'.format(_actual_time, e))
-                    print('{} DUR: Loaded {}, Queued {}, Running {}, Finished {}'.format(_actual_time, len(self.mapper.loaded), len(self.mapper.queued), len(self.mapper.running), len(self.mapper.finished)))
+                    print('{} DUR: Loaded {}, Queued {}, Running {}, Finished {}'.format(_actual_time,
+                                                                                         len(self.mapper.loaded),
+                                                                                         len(self.mapper.queued),
+                                                                                         len(self.mapper.running),
+                                                                                         len(self.mapper.finished)))
                     _exit()
-                                   
-            if debug:
-                print('{} END: Loaded {}, Queued {}, Running {}, Finished {}'.format(_actual_time, len(self.mapper.loaded), len(self.mapper.queued), len(self.mapper.running), len(self.mapper.finished)))
 
-            #===================================================================
+            if debug:
+                print('{} END: Loaded {}, Queued {}, Running {}, Finished {}'.format(_actual_time,
+                                                                                     len(self.mapper.loaded),
+                                                                                     len(self.mapper.queued),
+                                                                                     len(self.mapper.running),
+                                                                                     len(self.mapper.finished)))
+
+            # ===================================================================
             # Loading next jobs
-            #===================================================================
+            # ===================================================================
             if len(self.mapper.loaded) < 10:
-                sample = self.max_sample if(len(self.mapper.loaded) < self.max_sample) else 2
+                sample = self.max_sample if (len(self.mapper.loaded) < self.max_sample) else 2
                 self.load_events(_actual_time, event_dict, self.mapper, debug, sample)
-            #===================================================================
+            # ===================================================================
             # Continue with next events            
-            #===================================================================
+            # ===================================================================
             events = self.mapper.next_events()
 
             if self.constants.BENCHMARK_OUTPUT:
@@ -477,13 +521,16 @@ class hpc_simulator(simulator_base):
                 benchMemUsage = self.memory_usage_psutil()
                 scheduleTime = schedEndTime - schedStartTime
                 dispatchTime = benchEndTime - benchStartTime - scheduleTime
-                
+
                 asyncio.create_subprocess_exec(
-                    self.write_to_benchmark(_actual_time, queuelen, benchEndTime - benchStartTime, scheduleTime, dispatchTime, benchMemUsage)
+                    self.write_to_benchmark(_actual_time, queuelen, benchEndTime - benchStartTime, scheduleTime,
+                                            dispatchTime, benchMemUsage)
                 )
 
         self.end_simulation_time = _clock()
-        assert(self.loaded_jobs == len(self.mapper.finished)), 'Loaded {} and Finished {}'.format(self.loaded_jobs, len(self.mapper.finished))
+        assert (self.loaded_jobs == len(self.mapper.finished)), 'Loaded {} and Finished {}'.format(self.loaded_jobs,
+                                                                                                   len(
+                                                                                                       self.mapper.finished))
         self.statics_write_out(self.constants.SHOW_STATISTICS, self.constants.STATISTICS_OUTPUT)
         print('Simulation process completed.')
         self.mapper.current_time = None
@@ -497,7 +544,7 @@ class hpc_simulator(simulator_base):
         :param save: True for saving the statistics, False otherwise.
         
         """
-        if not(show or save):
+        if not (show or save):
             return
         wtimes = self.mapper.wtimes
         slds = self.mapper.slowdowns
@@ -505,14 +552,15 @@ class hpc_simulator(simulator_base):
         disp_method_ = 'Dispathing method: {}\n'.format(self.dispatcher)
         total_jobs_ = 'Total jobs: {}\n'.format(self.loaded_jobs)
         makespan_ = 'Makespan: {}\n'.format(self.mapper.last_run_time - self.mapper.first_time_dispatch)
-        avg_wtimes_ = 'Avg. waiting times: {}\n'.format(reduce(lambda x, y:x + y, wtimes) / float(len(wtimes)))
-        avg_slowdown_ = 'Avg. slowdown: {}\n'.format(reduce(lambda x, y:x + y, slds) / float(len(slds)))
+        avg_wtimes_ = 'Avg. waiting times: {}\n'.format(reduce(lambda x, y: x + y, wtimes) / float(len(wtimes)))
+        avg_slowdown_ = 'Avg. slowdown: {}\n'.format(reduce(lambda x, y: x + y, slds) / float(len(slds)))
         if show:
             print('\n\t' + '\t'.join([sim_time_, disp_method_, total_jobs_, makespan_, avg_wtimes_, avg_slowdown_]))
         if save:
-            _filepath = _path.join(self.constants.RESULTS_FOLDER_PATH, self.constants.STATISTICS_PREFIX + self.constants.WORKLOAD_FILENAME)
+            _filepath = _path.join(self.constants.RESULTS_FOLDER_PATH,
+                                   self.constants.STATISTICS_PREFIX + self.constants.WORKLOAD_FILENAME)
             with open(_filepath, 'a') as f:
-                f.write(sim_time_)            
+                f.write(sim_time_)
                 f.write(disp_method_)
                 f.write(total_jobs_)
                 f.write(makespan_)
@@ -536,10 +584,11 @@ class hpc_simulator(simulator_base):
 
         """
         bvalues = [time, queueSize, stepTime, schedTime, simTime, memUsage]
-        sep_token = ';' 
+        sep_token = ';'
         bline = sep_token.join([str(v) for v in bvalues]) + '\n'
-        
-        _filepath = _path.join(self.constants.RESULTS_FOLDER_PATH, self.constants.BENCHMARK_PREFIX + self.constants.WORKLOAD_FILENAME)
+
+        _filepath = _path.join(self.constants.RESULTS_FOLDER_PATH,
+                               self.constants.BENCHMARK_PREFIX + self.constants.WORKLOAD_FILENAME)
         with open(_filepath, 'a') as f:
             f.write(bline)
 
@@ -565,7 +614,8 @@ class hpc_simulator(simulator_base):
                     tmp_dict[job.id] = job
                     job_list.append(job)
                 else:
-                    _filepath = _path.join(self.constants.RESULTS_FOLDER_PATH, self.constants.SUBMISSION_ERROR_PREFIX + self.constants.WORKLOAD_FILENAME)
+                    _filepath = _path.join(self.constants.RESULTS_FOLDER_PATH,
+                                           self.constants.SUBMISSION_ERROR_PREFIX + self.constants.WORKLOAD_FILENAME)
                     error_msg = "Job {} violates the system's resource constraints and will be discarded".format(job.id)
                     with open(_filepath, 'a') as f:
                         f.write(error_msg + '\n')
@@ -605,14 +655,15 @@ class hpc_simulator(simulator_base):
         process = _Process(_getpid())
         memr = process.memory_info().rss / float(2 ** 20)
         return memr
-    
-    def daemon_init(self):         
+
+    def daemon_init(self):
         """
 
         Initialization of the simulation daemons. I.e. visualization or watcher
 
         """
-        _iter_func = lambda act, next: act.get(next) if isinstance(act, dict) else (getattr(act, next)() if callable(getattr(act, next)) else getattr(act, next))
+        _iter_func = lambda act, next: act.get(next) if isinstance(act, dict) else (
+        getattr(act, next)() if callable(getattr(act, next)) else getattr(act, next))
         for _name, d in self.daemons.items():
             _class = d['class']
             if not _class:
@@ -626,7 +677,7 @@ class hpc_simulator(simulator_base):
                     _args.append(_arg)
             self.daemons[_name]['object'] = _class(*_args)
             self.daemons[_name]['object'].start()
-            
+
     def execute_additional_data(self):
         """
         
@@ -634,8 +685,8 @@ class hpc_simulator(simulator_base):
                 
         """
         for ad in self.additional_data:
-            ad.execute()            
-            
+            ad.execute()
+
     def default_job_description(self):
         """
 
@@ -646,12 +697,12 @@ class hpc_simulator(simulator_base):
         """
         # Attribute to identify the user
         user_id = attribute_type('user_id', int)
-        
+
         # New attributes required by the Dispatching methods.
         expected_duration = attribute_type('expected_duration', int)
-        
+
         # Default system resources: core and mem.
         total_cores = attribute_type('core', int)
         total_mem = attribute_type('mem', int)
-            
-        return [total_cores, total_mem, expected_duration, user_id ]
+
+        return [total_cores, total_mem, expected_duration, user_id]

@@ -4,30 +4,13 @@ accasim\.utils package
 Submodules
 ----------
 
-accasim\.utils\.misc module
----------------------------
+.. toctree::
 
-.. automodule:: accasim.utils.misc
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-accasim\.utils\.reader\_class module
-------------------------------------
-
-.. automodule:: accasim.utils.reader_class
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-accasim\.utils\.visualization\_class module
--------------------------------------------
-
-.. automodule:: accasim.utils.visualization_class
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
+   accasim.utils.file
+   accasim.utils.misc
+   accasim.utils.plot_factory
+   accasim.utils.reader_class
+   accasim.utils.visualization_class
 
 Module contents
 ---------------

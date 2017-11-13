@@ -24,30 +24,23 @@ SOFTWARE.
 import re
 import os
 import logging
-import random
 import json
 from datetime import datetime
 import time
-from threading import Timer, Thread
-from inspect import getouterframes, currentframe
-import functools
-import inspect
-from collections import namedtuple, Mapping
-from _collections import deque
-from math import sqrt
+from collections import Mapping
 from bisect import bisect, bisect_left, bisect_right
 import socket
-from sys import platform as _platform, exit as _exit
 import threading
-from abc import ABC, abstractmethod
 from _functools import reduce
 from itertools import islice
 from builtins import int, str
-import ntpath
+from weakref import WeakValueDictionary as _WeakValueDictionary
+from inspect import getmembers as _getmembers, isclass as _isclass
+from sys import modules as _modules
 
-#===============================================================================
+# ===============================================================================
 # Patterns for SWF files
-#===============================================================================
+# ===============================================================================
 _swf_int_pattern = ('\s*(?P<{}>[-+]?\d+)', int)
 _swf_float_pattern = ('\s*(?P<{}>[-+]?\d+\.\d+|[-+]?\d+)', float)
 _swf_avoid_regexps = [r'^;.*']
@@ -78,6 +71,7 @@ default_swf_mapper = {
     'requested_time': 'expected_duration'
 }
 
+
 def default_sorting_function(obj1, obj2, avoid_data_tokens=[';']):
     """
     
@@ -89,10 +83,11 @@ def default_sorting_function(obj1, obj2, avoid_data_tokens=[';']):
     
     :return: return a positive number for maintaing the order, or a negative one to change the order.
     
-    """ 
+    """
     if obj1[0] in avoid_data_tokens or obj2[0] in avoid_data_tokens:
         return 1
-    return default_sorted_attribute(obj1) - default_sorted_attribute(obj2) 
+    return default_sorted_attribute(obj1) - default_sorted_attribute(obj2)
+
 
 def default_sorted_attribute(workload_line, attr='submit_time', converter=None):
     """
@@ -108,6 +103,7 @@ def default_sorted_attribute(workload_line, attr='submit_time', converter=None):
     if converter:
         return converter(value)
     return value
+
 
 def workload_parser(workload_line, attrs=None, avoid_data_tokens=[';']):
     """ 
@@ -139,7 +135,7 @@ def workload_parser(workload_line, attrs=None, avoid_data_tokens=[';']):
         
         :return: A dictionary with all the attributes requested. If the line is returned it means that the line has the token to avoid.     
     
-    """ 
+    """
     if workload_line[0] in avoid_data_tokens:
         return workload_line
     _common_int_pattern = ('\s*(?P<{}>[-+]?\d+)', int)
@@ -171,10 +167,11 @@ def workload_parser(workload_line, attrs=None, avoid_data_tokens=[';']):
     p = re.compile(reg_exp)
     _matches = p.match(workload_line)
     _dict_line = _matches.groupdict()
-    return {key:_dict[key][1](_dict_line[key]) for key in _sequence} 
-    
+    return {key: _dict[key][1](_dict_line[key]) for key in _sequence}
 
-def sort_file(input_filepath, lines=None, sort_function=default_sorting_function, avoid_data_tokens=[';'], output_filepath=None):
+
+def sort_file(input_filepath, lines=None, sort_function=default_sorting_function, avoid_data_tokens=[';'],
+              output_filepath=None):
     """
     
     The input file for the simulator must be sorted by submit time. It modifies the file input file, 
@@ -189,11 +186,11 @@ def sort_file(input_filepath, lines=None, sort_function=default_sorting_function
     :return: A list of queued time points.  
 
     """
-    assert(callable(sort_function))
+    assert (callable(sort_function))
     logging.debug('Sorting File: %s ' % (input_filepath))
     with open(input_filepath) as f:
         sorted_file = list(f if not lines else islice(f, lines))
-        sorted_file .sort(
+        sorted_file.sort(
             key=cmp_to_key(sort_function)
         )
     if output_filepath is None:
@@ -206,35 +203,46 @@ def sort_file(input_filepath, lines=None, sort_function=default_sorting_function
                 f.write(line)
                 continue
             _line = workload_parser(line)
-            if int(_line['requested_number_processors']) == -1 and int(_line['allocated_processors']) == -1 or int(_line['requested_memory']) == -1 and int(_line['used_memory']) == -1:
-                continue   
+            if int(_line['requested_number_processors']) == -1 and int(_line['allocated_processors']) == -1 or int(
+                    _line['requested_memory']) == -1 and int(_line['used_memory']) == -1:
+                continue
             qtime = default_sorted_attribute(line, 'submit_time')
             queued_times.add(qtime)
             f.write(line)
-    return queued_times.get_list()  
-    
+    return queued_times.get_list()
+
+
 def cmp_to_key(mycmp):
     """
     
     Convert a cmp= function into a key= function
     
     """
+
     class k(object):
         def __init__(self, obj, *args):
             self.obj = obj
+
         def __lt__(self, other):
             return mycmp(self.obj, other.obj) < 0
+
         def __gt__(self, other):
             return mycmp(self.obj, other.obj) > 0
+
         def __eq__(self, other):
             return mycmp(self.obj, other.obj) == 0
+
         def __le__(self, other):
-            return mycmp(self.obj, other.obj) <= 0  
+            return mycmp(self.obj, other.obj) <= 0
+
         def __ge__(self, other):
             return mycmp(self.obj, other.obj) >= 0
+
         def __ne__(self, other):
             return mycmp(self.obj, other.obj) != 0
-    return k    
+
+    return k
+
 
 def from_isodatetime_2_timestamp(dtime):
     """
@@ -251,7 +259,8 @@ def from_isodatetime_2_timestamp(dtime):
     # year, month, day, hour, minute, second, microsecond
     t = datetime(year=int(m[0]), month=int(m[1]), day=int(m[2]), hour=int(m[3]), minute=int(m[4]), second=int(m[5]))
     return int(t.timestamp())
-        
+
+
 class watcher_daemon:
     """
     
@@ -259,7 +268,7 @@ class watcher_daemon:
     
     """
     MAX_LENGTH = 2048
-    
+
     def __init__(self, port, functions):
         """
     
@@ -278,7 +287,6 @@ class watcher_daemon:
         self.hastofinish = False
         self.const = CONSTANT()
         self.functions = functions
-
 
     def start(self):
         """
@@ -312,14 +320,16 @@ class watcher_daemon:
                         response['actual_time'] = str(str_datetime(self.call_inner_function('current_time_function')))
                         if data == 'progress':
                             response['input_filepath'] = self.const.input_filepath
-                            response['progress'] = os.path.getsize(self.const.sched_output_filepath) / os.path.getsize(self.const.input_filepath)
+                            response['progress'] = os.path.getsize(self.const.sched_output_filepath) / os.path.getsize(
+                                self.const.input_filepath)
                             response['time'] = time.clock() - self.const.start_time
                         elif data == 'usage':
                             response['simulation_status'] = self.call_inner_function('simulated_status_function')
                             response['usage'] = self.call_inner_function('usage_function')
                         elif data == 'all':
                             response['input_filepath'] = self.const.input_filepath
-                            response['progress'] = os.path.getsize(self.const.sched_output_filepath) / os.path.getsize(self.const.input_filepath)
+                            response['progress'] = os.path.getsize(self.const.sched_output_filepath) / os.path.getsize(
+                                self.const.input_filepath)
                             response['time'] = time.clock() - self.const.start_time
                             response['simulation_status'] = self.call_inner_function('simulated_status_function')
                             response['usage'] = self.call_inner_function('usage_function')
@@ -328,7 +338,7 @@ class watcher_daemon:
             except socket.timeout:
                 pass
         self.sock.close()
-        
+
     def call_inner_function(self, name):
         """
     
@@ -343,7 +353,7 @@ class watcher_daemon:
                 return _func()
             else:
                 return _func
-        raise Exception('{} was no defined'.format(name)) 
+        raise Exception('{} was no defined'.format(name))
 
     def stop(self):
         """
@@ -353,6 +363,7 @@ class watcher_daemon:
         """
         self.hastofinish = True
         self.timedemon.stop()
+
 
 def generate_config(config_fp, **kwargs):
     """
@@ -369,6 +380,7 @@ def generate_config(config_fp, **kwargs):
     with open(config_fp, 'w') as c:
         json.dump(_local, c, indent=2)
 
+
 def hinted_tuple_hook(obj):
     """
     
@@ -380,6 +392,7 @@ def hinted_tuple_hook(obj):
         return tuple(obj['items'])
     else:
         return obj
+
 
 def load_config(config_fp):
     """
@@ -395,7 +408,8 @@ def load_config(config_fp):
     with open(config_fp) as c:
         _dict = json.load(c, object_hook=hinted_tuple_hook)
     return _dict
-    
+
+
 class Singleton(object):
     """
     
@@ -408,6 +422,7 @@ class Singleton(object):
         if class_ not in class_._instances:
             class_._instances[class_] = super(Singleton, class_).__new__(class_, *args, **kwargs)
         return class_._instances[class_]
+
 
 class CONSTANT(Singleton):
     """
@@ -431,7 +446,9 @@ class CONSTANT(Singleton):
     
         It's loaded into all base class by default!
     
-    """    
+    """
+    _constants = []
+
     def load_constants(self, _dict):
         """
         
@@ -442,7 +459,7 @@ class CONSTANT(Singleton):
         """
         for k, v in _dict.items():
             self.load_constant(k, v)
-            
+
     def load_constant(self, k, v):
         """
         
@@ -452,65 +469,82 @@ class CONSTANT(Singleton):
         :param v: Value of the parameter
         
         """
-        assert(not hasattr(self, k)), '{} already exists as constant ({}={}). Choose a new name.'.format(k, k, getattr(self, k))
+        assert (not hasattr(self, k)), '{} already exists as constant ({}={}). Choose a new name.'.format(k, k,
+                                                                                                          getattr(self,
+                                                                                                                  k))
         setattr(self, k, v)
+        self._constants.append(k)
 
-#===============================================================================
+    def clean_constants(self):
+        for _constant in self._constants:
+            delattr(self, _constant)
+        self._constants = []
+
+
+# ===============================================================================
 # Utils Types for the hinted tuple 
-#===============================================================================
+# ===============================================================================
 
 class str_:
     def __init__(self, text):
         self.text = text
-    
+
     def __str__(self):
         return self.text
 
 
 class str_datetime:
-    
+    REGEX = '\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}'
+    REGEX_GROUP = '(?P<{}>\d{{4}}-\d{{2}}-\d{{2}}\s\d{{2}}:\d{{2}}:\d{{2}})'
+
     def __init__(self, epoch_time):
         self.str_datetime = datetime.fromtimestamp(int(epoch_time)).strftime('%Y-%m-%d %H:%M:%S')
-        
+
     def __format__(self, *args):
         return self.str_datetime
-    
+
     def __str__(self):
         return self.str_datetime
 
 
 class str_time:
-    
     def __init__(self, secs):
         self.str_time = time.gmtime(int(secs))  # time.strftime('%H:%M:%S', time.gmtime(int(secs)))
-        
+
     def __str__(self):
         return self.str_time
-    
+
+
 class str_resources:
-    
+    SEPARATOR = '#'
+    REGEX = '[\d+;|' + SEPARATOR + ']+'
+    REGEX_GROUP = '(?P<{}>[\d+;|' + SEPARATOR + ']+)'
+
     def __init__(self, nodes, resources):
         self.nodes = nodes
         self.resources = resources  # namedtuple('resources', [k for k in resources.keys()])(**resources)
         self.constants = CONSTANT()
-        if hasattr(self.constants, 'resource_order'):
-            self.order = getattr(self.constants, 'resource_order')
-        else:
-            self.order = list (self.resources.keys())
-        
+        if not hasattr(self.constants, 'resource_order'):
+            default_order = list(self.resources.keys())
+            self.constants.load_constant('resource_order', default_order)
+        self.order = self.constants.resource_order
+
     def __str__(self):
-        return '#'.join([';'.join([node.split('_')[1]] + [str(self.resources[_k]) for _k in self.order]) for node in self.nodes]) + '#'
+        return self.SEPARATOR.join(
+            [';'.join([node.split('_')[1]] + [str(self.resources[_k]) for _k in self.order]) for node in
+             self.nodes]) + self.SEPARATOR
+
 
 class str_nodes:
-    
     def __init__(self, nodes):
         self.nodes = nodes
-    
+
     def __format__(self, format_spec):
         return self.__str__()
-    
+
     def __str__(self):
         return ','.join([node.split('_')[1] for node in self.nodes])
+
 
 class sorted_object_list():
     """
@@ -518,7 +552,7 @@ class sorted_object_list():
     Sorted Object list, with two elements for comparison, the main and the tie breaker. Each object must have an id for identification
     
     """
-    
+
     def __init__(self, sorting_priority, _list=[]):
         """
     
@@ -528,7 +562,7 @@ class sorted_object_list():
         :param _list: Optional. Initial list  
     
         """
-        assert(isinstance(sorting_priority, dict) and set(['main', 'break_tie']) <= set(sorting_priority.keys()))
+        assert (isinstance(sorting_priority, dict) and set(['main', 'break_tie']) <= set(sorting_priority.keys()))
 
         self.main_sort = sorting_priority['main']
         self.break_tie_sort = sorting_priority['break_tie']
@@ -541,11 +575,12 @@ class sorted_object_list():
         }
         self.objects = {}
         # dict values, function or inner attributes of wrappred objs
-        self._iter_func = lambda act, next: act.get(next) if isinstance(act, dict) else (getattr(act, next)() if callable(getattr(act, next)) else getattr(act, next))
+        self._iter_func = lambda act, next: act.get(next) if isinstance(act, dict) else (
+            getattr(act, next)() if callable(getattr(act, next)) else getattr(act, next))
 
         if _list:
             self.add(*_list)
-            
+
     def add(self, *args):
         """
     
@@ -568,13 +603,12 @@ class sorted_object_list():
                 self.main.insert(_pos, _main)
                 self.secondary.insert(_pos, _sec)
             else:
-                _pos = bisect_left(self.secondary[_pos :main_pos_r], _sec) + _pos
+                _pos = bisect_left(self.secondary[_pos:main_pos_r], _sec) + _pos
                 self.list.insert(_pos, _id)
                 self.main.insert(_pos, _main)
                 self.secondary.insert(_pos, _sec)
             self.map_insert(self.map['id'], self.map['pos'], _pos, _id)
-    
-    
+
     def map_insert(self, ids_, poss_, new_pos, new_id):
         """
     
@@ -588,7 +622,7 @@ class sorted_object_list():
         """
         n_items = len(ids_)
         if n_items > 0:
-            if not(new_pos in poss_):
+            if not (new_pos in poss_):
                 poss_[new_pos] = new_id
                 ids_[new_id] = new_pos
             else:
@@ -596,13 +630,13 @@ class sorted_object_list():
         else:
             ids_[new_id] = new_pos
             poss_[new_pos] = new_id
-    
+
     def make_map(self, ids_, poss_, new_pos=0, debug=False):
         """
     
         After a removal of a element the map must be reconstructed.
     
-        """    
+        """
         for _idx, _id in enumerate(self.list[new_pos:]):
             ids_[_id] = _idx + new_pos
             poss_[_idx + new_pos] = _id
@@ -610,8 +644,8 @@ class sorted_object_list():
             return
         for p in list(poss_.keys()):
             if p > _idx:
-                del poss_[p] 
-        
+                del poss_[p]
+
     def remove(self, *args, **kwargs):
         """
     
@@ -621,10 +655,10 @@ class sorted_object_list():
     
         """
         for id in args:
-            assert(id in self.objects)
-            del self.objects[id]            
+            assert (id in self.objects)
+            del self.objects[id]
             self._remove(self.map['id'][id], **kwargs)
-            
+
     def _remove(self, _pos, **kwargs):
         """
         
@@ -636,12 +670,11 @@ class sorted_object_list():
         del self.list[_pos]
         del self.secondary[_pos]
         del self.main[_pos]
-        
+
         _id = self.map['pos'].pop(_pos)
         del self.map['id'][_id]
         self.make_map(self.map['id'], self.map['pos'], **kwargs)
 
-                
     def get(self, pos):
         """
         
@@ -663,9 +696,9 @@ class sorted_object_list():
         
         :return: Obect with the specific id
         
-        """        
+        """
         return self.objects[id]
-     
+
     def get_list(self):
         """
         
@@ -673,18 +706,18 @@ class sorted_object_list():
         
         """
         return self.list
-    
+
     def get_object_list(self):
         """
         
         :return: The sorted list of objects
         
         """
-        return [self.objects[_id] for _id in self.list] 
-                
+        return [self.objects[_id] for _id in self.list]
+
     def __len__(self):
         return len(self.list)
-    
+
     # Return None if there is no coincidence
     def pop(self, id=None, pos=None):
         """
@@ -697,7 +730,7 @@ class sorted_object_list():
         :return: Object
         
         """
-        assert(not all([id, pos])), 'Pop only accepts one or zero arguments'
+        assert (not all([id, pos])), 'Pop only accepts one or zero arguments'
         if not self.list:
             return None
         elif id:
@@ -707,20 +740,20 @@ class sorted_object_list():
         else:
             _id = self.list[0]
             self._remove(0)
-            return self.objects.pop(_id)        
-    
+            return self.objects.pop(_id)
+
     def _specific_pop_id(self, id):
         _obj = self.objects.pop(id, None)
         if _obj:
             self._remove(self.map['id'][id])
         return _obj
-    
+
     def _specific_pop_pos(self, pos):
         _id = self.map['pos'].pop(pos, None)
         if _id:
             self.map['pos'][pos] = _id
             self._remove(pos)
-        return self.objects.pop(_id, None)        
+        return self.objects.pop(_id, None)
 
     def __iter__(self):
         self.actual_index = 0
@@ -732,7 +765,7 @@ class sorted_object_list():
             return self.list[self.actual_index - 1]
         except IndexError:
             raise StopIteration
-    
+
     def get_reversed_list(self):
         """
         
@@ -740,30 +773,32 @@ class sorted_object_list():
         
         """
         return list(reversed(self.list))
-    
+
     def get_reversed_object_list(self):
         """
         
         :return: Reversed list of objects
         
         """
-        return [ self.objects[_id] for _id in reversed(self.list)]
-    
+        return [self.objects[_id] for _id in reversed(self.list)]
+
     def __str__(self):
         return str(self.list)
-    
+
+
 class sorted_list:
     """
     
     Sorted list for single comparable objects (int, float, etc)
      
-    """    
+    """
+
     def __init__(self, _list=[]):
-        assert(isinstance(_list, (list)))
+        assert (isinstance(_list, (list)))
         self.list = []
         if _list:
             self.add(*_list)
-    
+
     def add(self, *args):
         """
     
@@ -780,15 +815,15 @@ class sorted_list:
                 pos = bisect(self.list, _num)
                 if self.list[pos - 1] != _num:
                     self.list.insert(pos, _num)
-                    
+
     def get_list(self):
         """
     
         :return: Return the sorted list
     
-        """        
+        """
         return self.list
-   
+
     def find(self, _num):
         """
     
@@ -798,7 +833,7 @@ class sorted_list:
     
         """
         return bisect(self.list, _num) - 1
-    
+
     def remove(self, *args):
         """
     
@@ -809,7 +844,7 @@ class sorted_list:
         """
         for arg in args:
             self.list.remove(arg)
-                
+
     def get(self, pos):
         """
         
@@ -817,7 +852,7 @@ class sorted_list:
         
         """
         return self.list[pos]
-                
+
     def __len__(self):
         """
         
@@ -827,7 +862,7 @@ class sorted_list:
         
         """
         return len(self.list)
-    
+
     def pop(self):
         """
 
@@ -850,10 +885,10 @@ class sorted_list:
             return self.list[self.actual_index - 1]
         except IndexError:
             raise StopIteration
-    
+
     def __str__(self):
         return str(self.list)
-    
+
     def _check_sort(self):
         """
 
@@ -864,13 +899,15 @@ class sorted_list:
             if self.list[i] >= self.list[i + 1]:
                 self.list[0:i + 1]
                 raise Exception('Sorting problem!')
-            
+
+
 class FrozenDict(Mapping):
     """
 
     Inmutable dictionary useful for storing parameter that are dinamycally loaded
 
     """
+
     def __init__(self, *args, **kwargs):
         self._d = dict(*args, **kwargs)
         self._hash = None
@@ -890,7 +927,8 @@ class FrozenDict(Mapping):
             for pair in self.iteritems():
                 self._hash ^= hash(pair)
         return self._hash
-    
+
+
 def clean_results(*args):
     """
 
@@ -902,7 +940,8 @@ def clean_results(*args):
     for fp in args:
         if os.path.isfile(fp) and os.path.exists(fp):
             os.remove(fp)
-            
+
+
 class DEFAULT_SIMULATION:
     """
     
@@ -975,7 +1014,7 @@ class DEFAULT_SIMULATION:
             * "WATCH_PORT": 8999
     
     """
-    
+
     parameters = {
         "CONFIG_FOLDER_NAME": "config/",
         "RESULTS_FOLDER_NAME": "results/",
@@ -991,13 +1030,14 @@ class DEFAULT_SIMULATION:
                 "total_nodes": ("requested_nodes", "int"),
                 "total_cpu": ("core", "int"),
                 "total_mem": ("mem", "int"),
-                "expected_duration": ("expected_duration", "int")      
+                "expected_duration": ("expected_duration", "int")
             }
         },
         "PPRINT_SCHEDULE_OUTPUT": {
             "format": "{:>5} {:>15} {:^19} {:^19} {:>8} {:>8} {:>8} {:>5} {:>4} {:>10} {:<20}",
-            "order": ["n", "job_id", "start_time", "end_time", "wtime", "rtime", "slowdown", "nodes", "core", "mem", "assigned_nodes"],
-            "attributes":{
+            "order": ["n", "job_id", "start_time", "end_time", "wtime", "rtime", "slowdown", "nodes", "core", "mem",
+                      "assigned_nodes"],
+            "attributes": {
                 "n": ("end_order", "int"),
                 "job_id": ("id", "str"),
                 "start_time": ("start_time", "accasim.utils.misc.str_datetime"),
@@ -1020,16 +1060,71 @@ class DEFAULT_SIMULATION:
         "WATCH_PORT": 8999
     }
     """dict: Default Simulation parameters """
-    
-def path_leaf(path):
+
+
+def obj_assertion(obj, class_type, error_msg=None, msg_args=None):
     """
-    
-    Extract path and filename
-    
-    :param path: Entire filepath
-    
-    :return: Return a tuple that contains the (path, filename) 
-    
+
+    :param obj:
+    :param class_type:
+    :param error_msg:
+    :param msg_args:
+    :return:
     """
-    head, tail = ntpath.split(path)
-    return (head, tail or ntpath.basename(head))
+    if error_msg:
+        assert (isinstance(obj, class_type)), error_msg.format(*msg_args)
+        return
+    assert (isinstance(obj, class_type))
+
+
+def list_class_assertion(_list, class_type, allow_empty=False, error_msg=None, msg_args=None):
+    """
+
+    :param _list:
+    :param class_type:
+    :param allow_empty:
+    :param error_msg:
+    :param msg_args:
+    :return:
+    """
+    assert (not allow_empty and len(_list) > 0), 'Empty list not allowed.'
+    try:
+        if error_msg:
+            assert (
+                isinstance(_list, list) and all(
+                    [issubclass(_class, class_type) for _class in _list])), error_msg.format(
+                msg_args)
+            return
+        assert (
+            isinstance(_list, list) and all([issubclass(_class, class_type) for _class in _list]))
+    except TypeError:
+        if error_msg:
+            raise Exception(error_msg.format(msg_args))
+
+
+CUSTOM_TYPES = {
+    'accasim.utils.misc.str_datetime': str_datetime.REGEX_GROUP,
+    'accasim.utils.misc.str_resources': str_resources.REGEX_GROUP,
+}
+
+
+def type_regexp(_type, new_regexp={}):
+    """
+
+    :param _type:
+    :param new_regexp:
+    :return:
+    """
+    STR_TYPE = 'str'
+    INT_TYPE = 'int'
+
+    if _type == STR_TYPE:
+        return '(?P<{}>[0-9a-zA-Z_\-\.@]+)'
+    if _type == INT_TYPE:
+        return '(?P<{}>\d+)'
+    elif _type in CUSTOM_TYPES:
+        return CUSTOM_TYPES[_type]
+    elif _type in new_regexp:
+        return new_regexp[_type]
+    else:
+        raise Exception('The regular expression for the {} type is not defined.')
