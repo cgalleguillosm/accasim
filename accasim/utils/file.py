@@ -145,3 +145,28 @@ def load_jsonfile(filepath):
     """
     with open(filepath) as file:
         return _load(file)
+
+class plain_file_reader:
+    
+    def __init__(self, filepath):
+        """
+
+        :param filepath:
+        """
+        assert(file_exists(filepath, True, True))
+        self.file = open(filepath)
+        self.last_pos = self.file.tell()
+        self.EOF = False
+        
+    def nextline(self):
+        """
+
+        :return:
+        """
+        line = self.file.readline()
+        last_pos = self.file.tell()
+        if self.last_pos == last_pos:
+            self.EOF = True
+            return None
+        self.last_pos = last_pos
+        return line

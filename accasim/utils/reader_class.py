@@ -23,7 +23,8 @@ SOFTWARE.
 """
 import re
 from abc import abstractmethod, ABC
-from accasim.utils.misc import CONSTANT, default_swf_parse_config
+from accasim.utils.misc import CONSTANT, default_swf_parse_config, obj_assertion
+from accasim.base.resource_manager_class import resources_class
 import sys
 from builtins import issubclass
 
@@ -333,14 +334,23 @@ class tweak_class(ABC):
 
 class default_tweak_class(tweak_class):
 
-    def __init__(self, start_time, equivalence):
+    def __init__(self, start_time, equivalence, system_resources):
         """
 
         :param start_time:
         :param equivalence:
         """
+        obj_assertion(system_resources, resources_class)
         self.start_time = start_time
         self.equivalence = equivalence
+        self.generic_request = self._min_max_generic_request([d['resources'] for d in system_resources.definition])
+        
+    def _min_max_generic_request(self, system_resources):
+        _min = { r: 0 for r in list(set().union(*(d.keys() for d in system_resources)))}
+        for k in _min:
+            _min[k] = min([d.get(k, 0) for d in system_resources])
+        return _min
+        
         
     def tweak_function(self, _dict):
         """
@@ -349,7 +359,7 @@ class default_tweak_class(tweak_class):
         i.e we replace the number of processors by the number of requested cores.        
         
         The equivalence from processor to core is given in the system config file. As in the example, one processor contains two cores. Then the number of cores will be
-        processor \* core. 
+        processor \* core. Besides, memory is expressed in kB per processor. 
         
         :Example:
             
@@ -364,17 +374,20 @@ class default_tweak_class(tweak_class):
         :return: The tweaked dictionary.
         
         """
-
         _processors = _dict['total_processors']
         _dict['requested_resources'] = {}
         for k, v in self.equivalence.items():
             if k == 'processor':
                 for k2, v2 in v.items():
-                    _dict[k2] = _processors * v2
-                    _dict['requested_resources'][k2] = v2
-
+                    total_cores = _processors * v2
+                    cores_per_node = self.generic_request[k2]
+                    if cores_per_node > total_cores:
+                        cores_per_node = total_cores  
+                    _dict[k2] = total_cores  
+                    _dict['requested_resources'][k2] = cores_per_node
+                    _processors = _dict[k2] // cores_per_node
         _dict['requested_nodes'] = _processors
-        _dict['requested_resources']['mem'] = _dict['mem']
+        _dict['requested_resources']['mem'] = _dict['mem'] 
         
         _dict['queued_time'] = _dict.pop('queued_time') + self.start_time
 

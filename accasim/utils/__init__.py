@@ -1,1 +1,1 @@
-__all__ = ['misc', 'reader_class', 'visualization_class', 'plot_factory', 'file']
+__all__ = ['data_fitting', 'file', 'misc', 'plot_factory', 'reader_class', 'visualization_class']

@@ -498,7 +498,14 @@ class str_datetime:
     REGEX_GROUP = '(?P<{}>\d{{4}}-\d{{2}}-\d{{2}}\s\d{{2}}:\d{{2}}:\d{{2}})'
 
     def __init__(self, epoch_time):
-        self.str_datetime = datetime.fromtimestamp(int(epoch_time)).strftime('%Y-%m-%d %H:%M:%S')
+        self.datetime = datetime.fromtimestamp(int(epoch_time))
+        self.str_datetime = self.datetime.strftime('%Y-%m-%d %H:%M:%S')
+        
+    def get_hours(self):
+        return int(self.datetime.strftime('%H'))
+    
+    def get_minutes(self):
+        return int(self.datetime.strftime('%M'))
 
     def __format__(self, *args):
         return self.str_datetime
@@ -1077,7 +1084,7 @@ def obj_assertion(obj, class_type, error_msg=None, msg_args=None):
     assert (isinstance(obj, class_type))
 
 
-def list_class_assertion(_list, class_type, allow_empty=False, error_msg=None, msg_args=None):
+def list_class_assertion(_list, class_type, allow_empty=False, error_msg='List class error exception.{}', msg_args=None):
     """
 
     :param _list:
@@ -1087,19 +1094,20 @@ def list_class_assertion(_list, class_type, allow_empty=False, error_msg=None, m
     :param msg_args:
     :return:
     """
-    assert (not allow_empty and len(_list) > 0), 'Empty list not allowed.'
+    if not allow_empty: 
+        assert (len(_list) > 0), 'Empty list not allowed.'
     try:
         if error_msg:
             assert (
                 isinstance(_list, list) and all(
                     [issubclass(_class, class_type) for _class in _list])), error_msg.format(
-                msg_args)
+                '' if not msg_args else msg_args)
             return
         assert (
             isinstance(_list, list) and all([issubclass(_class, class_type) for _class in _list]))
     except TypeError:
         if error_msg:
-            raise Exception(error_msg.format(msg_args))
+            raise Exception(error_msg.format('' if not msg_args else msg_args))
 
 
 CUSTOM_TYPES = {
