@@ -45,6 +45,7 @@ class resources_class:
             - used_prefix: This will set the prefix of the used resources. Internal use
         
         """
+        self.definition = [{'nodes': q, 'resources':groups[k]} for k, q in resources.items() ]
         self.constants = CONSTANT()
         self.groups = {}
         self.resources = {}
