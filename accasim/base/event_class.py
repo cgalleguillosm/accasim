@@ -66,7 +66,7 @@ class event(ABC):
         
         """
         self.constants = CONSTANT()
-        self.id = job_id
+        self.id = str(job_id)
         self.queued_time = queued_time
         self.requested_nodes = requested_nodes
         self.requested_resources = requested_resources

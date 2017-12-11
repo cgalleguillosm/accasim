@@ -137,7 +137,7 @@ class allocator_base(ABC):
         assert(self.resource_manager is not None), 'The resource manager is not defined. It must defined prior to run the simulation.'
         if debug:
             print('{}: {} queued jobs to be considered in the dispatching plan'.format(cur_time, len(es)))
-        return self.allocating_method(es, cur_time, debug)
+        return self.allocating_method(es, cur_time, skip, reserved_time, reserved_nodes, debug)
     
     def set_resource_manager(self, _resource_manager):
         """
@@ -166,7 +166,7 @@ class allocator_base(ABC):
 class ffp_alloc(allocator_base):
     """
     
-    A simple allocator. Does not sort the resources.
+    A simple First-Fit allocator. Does not sort the resources.
         
     This allocator supports both single events and lists of events. It also
      supports backfilling. No sorting of the resources is done, so they are
@@ -417,18 +417,18 @@ class ffp_alloc(allocator_base):
         else:
             return 0
         
-class consolidate_alloc(ffp_alloc):
+class bfp_alloc(ffp_alloc):
     """
     
-    Consolidate Allocator
+    Best-Fit Allocator
     It is an allocator which sorts the nodes basing on the amount of free resources, trying to consolidate.
         
     The less the available resources, the higher the priority.
-    The allocator is based on allocator_simple, changing only the sort and adjust methods.   
+    The allocator is based on ffp_alloc, changing only the sort and adjust methods.   
     
     """
     
-    name = 'Consolidate'
+    name = 'Best_Fit'
 
     def __init__(self, seed=0, resource_manager=None, **kwargs):
         """

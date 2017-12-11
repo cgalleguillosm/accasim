@@ -240,7 +240,7 @@ class default_reader_class(reader_class):
                 self.tweak_function = default_tweak_class(start_time, equivalence)
 
         if tweak_function:
-            assert(isinstance(tweak_function, tweak_function)), 'The tweak_function argument must be an implementation of the :class:`.tweak_class`'
+            assert(isinstance(tweak_function, tweak_class)), 'The tweak_function argument must be an implementation of the :class:`.tweak_class`'
             self.tweak_function = tweak_function
         elif not self.tweak_function:
             self.tweak_function = None
