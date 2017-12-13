@@ -96,9 +96,12 @@ class event(ABC):
         if len(sp_attr) > 1:
             tmp = getattr(obj, sp_attr[0])
             return self.subattr(tmp, ''.join(sp_attr[1:]))
+        
         try:
+            if isinstance(obj, dict):
+                return obj.get(sp_attr[0], 'NA')
             return getattr(obj, sp_attr[0])
-        except AttributeError:
+        except AttributeError as e:
             return 'NA'
         
     def schd_write_out(self):
