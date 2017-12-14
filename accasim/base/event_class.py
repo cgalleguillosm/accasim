@@ -136,7 +136,12 @@ class event(ABC):
             return 
         _dict = self.constants.PPRINT_SCHEDULE_OUTPUT
         _order = _dict['order']
-        _attrs = {a: locate(av[-1])(*self.subattr(self, av[:-1])) for a, av in _dict['attributes'].items() if a in _order}
+        _attrs = {}
+        for a, av in _dict['attributes'].items():
+            try:
+                _attrs[a] = locate(av[-1])(*self.subattr(self, av[:-1]))
+            except ValueError:
+                _attrs[a] = 'NA'
         output_format = _dict['format']
         format_elements = re.findall('\{(\w+)\}', output_format)
         values = [_attrs[k] for k in _order]
