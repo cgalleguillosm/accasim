@@ -362,7 +362,8 @@ class watcher_daemon:
     
         """
         self.hastofinish = True
-        self.timedemon.stop()
+        if hasattr(self, 'timedemon'):
+            self.timedemon.stop()
 
 
 def generate_config(config_fp, **kwargs):

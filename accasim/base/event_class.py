@@ -32,6 +32,7 @@ from builtins import str, filter
 from inspect import signature
 from accasim.utils.misc import CONSTANT, sorted_list, default_swf_mapper
 from accasim.base.resource_manager_class import resource_manager as resource_manager_class
+import copy
 
 
 class attribute_type:
@@ -501,9 +502,21 @@ class event_mapper:
                 #==============================================================
                 self.submit_event(_id)
                 continue
-            _e = event_dict[_id]
+            _e = copy.deepcopy(event_dict[_id])
+            #===================================================================
+            # if self.dispatch_event(_e, _time, time_diff, _nodes):
+            #     done, msg = self.resource_manager.allocate_event(_e, _nodes)
+            #     if not done:
+            #         print('{}. If you see this message many times, probably you have to check your allocation heuristic.'.format(msg))
+            #===================================================================
             if self.dispatch_event(_e, _time, time_diff, _nodes):
-                self.resource_manager.allocate_event(_e, _nodes)
+                done, msg = self.resource_manager.allocate_event(_e, _nodes)
+                if not done:
+                    print('{} Must be postponed. Reason: {}. If you see this message many times, probably you have to check your allocation heuristic.'.format(_id, msg))
+                    self.running.remove(_id)
+                    self.submit_event(_id)
+                else:
+                    event_dict[_id] = _e
                 
     def release_ended_events(self, event_dict):
         """

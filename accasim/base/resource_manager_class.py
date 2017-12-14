@@ -114,12 +114,23 @@ class resources_class:
         assert(self.resources), 'The resources must be setted before jobs allocation'
         assert(self.resources_status[node_name] == self.ON), 'The Node {} is {}, it is impossible to allocate any job'
         _resources = self.resources[node_name]
-        _used = {}
+        # _used = {}
+        _done = []
         for k, v in kwargs.items():
-            _rem_attr = _resources['%s%s' % (self.available_prefix, k)] - _resources['%s%s' % (self.used_prefix, k)]
-            assert(v <= _rem_attr), 'The event was request {} {}, but there is only {} available.'.format(v, k, _rem_attr)
-            _resources['%s%s' % (self.used_prefix, k)] += v
-            _used[k] = _rem_attr - v
+            avl_key = '{}{}'.format(self.available_prefix, k)
+            used_key = '{}{}'.format(self.used_prefix, k)
+            _rem_attr = _resources[avl_key] - _resources[used_key]
+            try:
+                assert(v <= _rem_attr), 'The event requested {} {}, but there are only {} available.'.format(v, k, _rem_attr)
+                _resources[used_key] += v
+                _done.append((used_key, v))
+            except AssertionError as e:
+                while _done:
+                    key, req = _done.pop()
+                    _resources[key] -= req
+                return False, e
+            # _used[k] = _rem_attr - v
+        return True, 'OK'
 
     def release(self, node_name, **kwargs):
         """
@@ -249,6 +260,7 @@ class resource_manager:
         :param event: Job event object.
         :param node_names: List of nodes where the job will be allocated.  
         
+        :return: Tuple: First element True if the event was allocated, False otherwise. Second element a message. 
         """
         logging.debug('Allocating %s event in nodes %s' % (event.id, ', '.join([node for node in node_names])))
         _resources = event.requested_resources
@@ -259,8 +271,21 @@ class resource_manager:
         self.actual_events[event.id] = {
             node_name: { _attr:_resources[_attr] * q for _attr in _attrs} for (node_name, q) in unique_nodes
         }
+        _allocated = True
+        _rollback = []
         for node_name, values in self.actual_events[event.id].items():
-            self.resources.allocate(node_name, **values)
+            done, message = self.resources.allocate(node_name, **values)
+            if done:
+                _rollback.append((node_name, values))
+            else:
+                _allocated = False
+                break
+            
+        while not _allocated and _rollback:
+            node_name, values = _rollback.pop()
+            self.resources.release(node_name, **values)
+            
+        return _allocated, message
 
     def remove_event(self, id):
         """

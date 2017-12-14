@@ -41,6 +41,7 @@ from psutil import Process as _Process
 from _functools import reduce
 import inspect
 import asyncio
+from builtins import exit as _exit
 
 
 class simulator_base(ABC):
@@ -457,7 +458,11 @@ class hpc_simulator(simulator_base):
         # Loop until there are not loaded, queued and running jobs
         # =======================================================================
         while events or self.mapper.has_events():
-            _actual_time = self.mapper.current_time
+            if self.mapper.current_time:
+                _actual_time = self.mapper.current_time
+            else:
+                # If there are not more timepoints, the last timepoint is increased in 1.
+                _actual_time += 1
 
             benchStartTime = _clock() * 1000
 
