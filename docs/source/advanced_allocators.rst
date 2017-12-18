@@ -1,7 +1,7 @@
 Advanced allocators
 ====================
 
-In this page, some advanced allocators implemented using AccaSim are shown. :ref:`Balanced`, :ref:`Weighted` and :ref:`Hybrid` has been used in [NettiISC18]_. 
+In this page, some advanced allocators implemented using AccaSim are shown. :ref:`Balanced`, :ref:`Weighted` and :ref:`Hybrid`. 
 
 .. _Balanced:
 
@@ -37,22 +37,10 @@ available, it will be considered for the type for which it has the greatest avai
 Weighted
 --------
 
-An allocator which tries to perform optimization on the allocation of all events in the queue.
-
-When the user supplies the queue of events to be allocated, the average number of resources required per-type
-is computed, together with the current load rate. The average is weighted according to the expected length of
-each job. These values are used as weights to indicate the value of a resource. Also, the allocator computes 
-the resource weights considering also the base availability in the system, assigning higher values to scarcer 
-resources, to assess which are actually more precious and need to be preserved in a global manner. Each job is 
-then allocated on the nodes on which the minimum number of weighted resources is left (after the allocation), 
-in a similar fashion to the best-fit allocator. 
-
-The user can also supply a "critical resources" list: for such resources, an additional heuristic is used, and in
-this case the allocator goes under the name of Priority-Weighted; this consists in a priority value, per resource 
-type, which will increase as allocations fail for jobs that require critical resources, and will decrease for each 
-successful allocation. If a jobs requires multiple critical resource types, all of their priority values will be
-affected by the allocation. This tends to assign greater weight to critical resources actually requested by jobs, 
-and will make the allocator statistically preserve such resources.
+An allocator which tries to perform optimization on the allocation of the queued jobs. 
+Each job is allocated on the node on which after the allocation the minimum weighted resources will be obtained. 
+The weights quantify the level of criticality of a certain resource type using three parameters: 
+the average amount requested, load ratio and total capacity.
 
 .. container:: toggle
 
@@ -95,5 +83,3 @@ the Balanced allocator; however, each of those lists is sorted individually like
 
 Citations
 ---------
-
-.. [NettiISC18] Netti et al. *Intelligent Resource Allocation for Heterogeneous HPC Systems* Submitted to ISC High Performance 2018.
