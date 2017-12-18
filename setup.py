@@ -38,5 +38,5 @@ setup(
 
     packages=find_packages(exclude=['contrib', 'docs', 'tests']),
 
-    install_requires=['matplotlib', 'psutil', 'numpy', 'scipy'],
+    install_requires=['matplotlib', 'psutil', 'scipy'],
 )
