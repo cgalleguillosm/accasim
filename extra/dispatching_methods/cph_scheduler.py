@@ -149,14 +149,20 @@ class cph_scheduler(scheduler_base):
         for _e in running_events:
             e = es_dict[_e]
             job_map[_e] = e
-            max_mks += e.expected_duration - (cur_time - e.start_time)
+            mks = e.expected_duration - (cur_time - e.start_time)
+            if mks >= 0:
+                max_mks += mks
         
-        for _e in es:
-            e = es_dict[_e]
-            max_mks += es_dict[_e].expected_duration
-            job_map[_e] = e
+        for i, _e in enumerate(es):
+            if i < q_length:
+                # To be scheduled
+                e = es_dict[_e]
+                max_mks += es_dict[_e].expected_duration
+                job_map[_e] = e
+            else:
+                # Postponed
+                temp_sched[_e] = None
         
-        jobs_outOfQ_fakeStart = max_mks
         self.queued_jobs.add(*self.prepare_job(job_map.values(), cur_time))
         prb_vars = []
         for _id in self.queued_jobs:
@@ -173,12 +179,6 @@ class cph_scheduler(scheduler_base):
 
                 # FIX the (-remaining time) where sometimes the job length is overestimated. Just use 1 to speed up the search process
                 duration = 1 if estimated_remaining_time <= 0 else estimated_remaining_time
-            elif job_real_vars_count > q_length:
-                if _debug:
-                    print('{} is posponed because there are more than {} jobs ready with a higher priority.'.format(_id, q_length))
-                start_min = jobs_outOfQ_fakeStart
-                start_max = jobs_outOfQ_fakeStart
-                jobs_outOfQ_fakeStart += duration  
             else:
                 """
                 Arguments: int64 start_min, int64 start_max, int64 duration, bool optional, const std::string& name

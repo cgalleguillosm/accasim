@@ -11,6 +11,7 @@
    
    documentation
    examples
+   advanced_allocators
    dispatching_methods
    installation
    license

@@ -8,6 +8,8 @@ Submodules
 
    accasim.experimentation.experiment
    accasim.experimentation.schedule_parser
+   accasim.experimentation.schedule_writer
+   accasim.experimentation.workload_generator
 
 Module contents
 ---------------
