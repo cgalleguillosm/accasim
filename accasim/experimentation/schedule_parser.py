@@ -23,8 +23,27 @@ SOFTWARE.
 """
 from accasim.utils.reader_class import workload_parser_base
 from accasim.utils.file import plain_file_reader
+from accasim.utils.misc import load_config, type_regexp
 from re import compile as _compile
 
+
+def define_result_parser(simulator_config):
+    """
+
+    :return:
+    """
+    try:
+        _schedule_output = load_config(simulator_config)['schedule_output']
+        # _separators = _schedule_output['separators']
+        _format = _schedule_output['format']
+        _attributes = _schedule_output['attributes']
+    except KeyError as e:
+        print(
+            'Schedule output format not identified. Please check the simulator configuration file for the key \'schedule_output\'.')
+
+    for _attr_name, _data_type in _attributes.items():
+        _format = _format.replace('{' + _attr_name + '}', type_regexp(_data_type[-1]).format(_attr_name))
+    return schedule_parser(_format, [])
 
 class schedule_parser(workload_parser_base):
     def __init__(self, regexp, updater):

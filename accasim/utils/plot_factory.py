@@ -29,8 +29,11 @@ from accasim.utils.reader_class import default_reader_class
 from accasim.utils.misc import load_config, from_isodatetime_2_timestamp as _timestamp, str_resources
 from accasim.utils.file import path_leaf, load_jsonfile
 from accasim.base.resource_manager_class import resources_class
+from accasim.utils.misc import CONSTANT
+from accasim.experimentation.schedule_parser import define_result_parser
 from copy import deepcopy
 from os.path import splitext as _splitext, join as _join
+from os.path import isfile
 import numpy as np
 
 
@@ -306,9 +309,17 @@ class plot_factory:
 
         # Tries to read from the log file, aborts if an error is encountered
         try:
-            reader = default_reader_class(filepath, parser=self._workload_parser, equivalence=equiv) 
-            _path, _filename = path_leaf(filepath)
-            _sim_params_path = _join(_path, self._sim_params_fname)
+            if isfile(self._sim_params_fname):
+                _sim_params_path = self._sim_params_fname
+            else:
+                _path, _filename = path_leaf(filepath)
+                _sim_params_path = _join(_path, self._sim_params_fname)
+
+            if self._workload_parser is not None:
+                reader = default_reader_class(filepath, parser=self._workload_parser, equivalence=equiv)
+            else:
+                reader = default_reader_class(filepath, parser=define_result_parser(_sim_params_path), equivalence=equiv)
+
             jobs = []
             slowdowns = []
             timePoints = []

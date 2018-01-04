@@ -27,9 +27,9 @@ from accasim.base.allocator_class import allocator_base
 from accasim.base.scheduler_class import scheduler_base
 from accasim.base.simulator_class import hpc_simulator
 from accasim.utils.file import file_exists, dir_exists, remove_dir, find_file_by
-from accasim.utils.misc import obj_assertion, list_class_assertion, load_config, type_regexp
+from accasim.utils.misc import obj_assertion, list_class_assertion
 from accasim.utils.plot_factory import plot_factory
-from accasim.experimentation import schedule_parser
+from accasim.experimentation.schedule_parser import define_result_parser
 
 
 class experiment_class:
@@ -82,7 +82,7 @@ class experiment_class:
         self.workload = file_exists(_workload, head_message='Workload file: ')
         self.simulator_config = file_exists(simulator_config, head_message='Simulator configuration file: ')
 
-        self.parser = self._define_result_parser()
+        self.parser = define_result_parser(self.simulator_config)
         self._customize(**kwargs)
         self._update_simulator_attrs(**kwargs)
 
@@ -209,24 +209,6 @@ class experiment_class:
         :return: Dispatching name identifier.
         """
         return '{}{}{}'.format(_sched_name, self._SEPARATOR, _alloc_name)
-
-    def _define_result_parser(self):
-        """
-
-        :return:
-        """
-        try:
-            _schedule_output = load_config(self.simulator_config)['schedule_output']
-            _separators = _schedule_output['separators']
-            _format = _schedule_output['format']
-            _attributes = _schedule_output['attributes']
-        except KeyError as e:
-            print(
-                'Schedule output format not identified. Please check the simulator configuration file for the key \'schedule_output\'.')
-
-        for _attr_name, _data_type in _attributes.items():
-            _format = _format.replace('{' + _attr_name + '}', type_regexp(_data_type[-1]).format(_attr_name))
-        return schedule_parser(_format)
 
     def _customize(self, **kwargs):
         for k, v in kwargs.items():
