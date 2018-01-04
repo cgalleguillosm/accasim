@@ -23,17 +23,21 @@ SOFTWARE.
 """
 from accasim.utils.reader_class import workload_parser_base
 from accasim.utils.file import plain_file_reader
-from accasim.utils.misc import load_config, type_regexp
+from accasim.utils.misc import load_config, type_regexp, DEFAULT_SIMULATION
 from re import compile as _compile
 
 
-def define_result_parser(simulator_config):
+def define_result_parser(simulator_config=None):
     """
 
     :return:
     """
     try:
-        _schedule_output = load_config(simulator_config)['schedule_output']
+        if simulator_config is not None:
+            _schedule_output = load_config(simulator_config)['schedule_output']
+        else:
+            # If no simulation config is supplied, DEFAULT_SIMULATION is used
+            _schedule_output = DEFAULT_SIMULATION().parameters['SCHEDULE_OUTPUT']
         # _separators = _schedule_output['separators']
         _format = _schedule_output['format']
         _attributes = _schedule_output['attributes']
