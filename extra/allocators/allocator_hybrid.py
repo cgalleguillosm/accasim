@@ -21,7 +21,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-from accasim.base.allocator_weighted import allocator_weighted
+from extra.allocators.allocator_weighted import allocator_weighted
 from accasim.base.allocator_class import ffp_alloc
 
 
