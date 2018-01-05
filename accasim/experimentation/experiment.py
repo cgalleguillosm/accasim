@@ -26,7 +26,7 @@ from os.path import join as _join
 from accasim.base.allocator_class import allocator_base
 from accasim.base.scheduler_class import scheduler_base
 from accasim.base.simulator_class import hpc_simulator
-from accasim.utils.file import file_exists, dir_exists, remove_dir, find_file_by
+from accasim.utils.file import file_exists, dir_exists, remove_dir, find_file_by, path_leaf
 from accasim.utils.misc import obj_assertion, list_class_assertion
 from accasim.utils.plot_factory import plot_factory
 from accasim.experimentation.schedule_parser import define_result_parser
@@ -38,7 +38,7 @@ class experiment_class:
 
     SIMULATOR_ATTRIBUTES = {'scheduling_output': True, 'pprint_output': False, 'benchmark_output': True,
                             'statistics_output': True, 'job_factory': None, 'reader': None,
-                            'save_parameters': ['resource_order']}
+                            'save_parameters': ['RESOURCE_ORDER']}
     _SEPARATOR = '_'
     _RESULTS_FOLDER = 'results/{}/{}'
     _SCHEDULE_PREFIX = 'sched-'
@@ -49,7 +49,7 @@ class experiment_class:
         plot_factory.BENCHMARK_CLASS: _BENCHMARK_PREFIX
     }
 
-    def __init__(self, name, _sys_config, _workload, simulator_config, job_factory=None,
+    def __init__(self, name, _sys_config, _workload, simulator_config=None, job_factory=None,
                  reader=None, **kwargs):
         """
         Experiment class constructor.
@@ -80,7 +80,10 @@ class experiment_class:
         self.results = {}
         self.sys_config = file_exists(_sys_config, head_message='System configuration file: ')
         self.workload = file_exists(_workload, head_message='Workload file: ')
-        self.simulator_config = file_exists(simulator_config, head_message='Simulator configuration file: ')
+        if simulator_config is not None:
+            self.simulator_config = file_exists(simulator_config, head_message='Simulator configuration file: ')
+        else:
+            self.simulator_config = None
 
         self.parser = define_result_parser(self.simulator_config)
         self._customize(**kwargs)
