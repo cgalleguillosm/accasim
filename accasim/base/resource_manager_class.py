@@ -72,6 +72,8 @@ class resources_class:
                 self.resources_status[_node_name] = self.ON
                 j += 1              
 
+        self.full = { r:False for r in self.system_resource_types}
+
     def total_resources(self):
         """
         Total system resources
@@ -157,19 +159,17 @@ class resources_class:
         :return: Return a dictionary with the system availability. In terms of {node: {resource: value}}
         
         """
-        # TODO: Update using self.system_resource_types
         assert(self.resources)
         _a = {}
         for node, attrs in self.resources.items():
             if self.resources_status[node] == self.OFF:
                 continue 
             _a[node] = {
-                # attr: (attrs['%s%s' % (self.available_prefix, attr)] - attrs['%s%s' % (self.used_prefix, attr)]) for attr in set([attr.split('_')[1] for attr in attrs])
                 attr: (attrs['%s%s' % (self.available_prefix, attr)] - attrs['%s%s' % (self.used_prefix, attr)]) for attr in self.system_resource_types
             }
         return _a
 
-    def usage(self):
+    def usage(self, type=None):
         """
         
         System usage calculation
@@ -184,11 +184,16 @@ class resources_class:
         for attrs in self.resources.values():
             for k, v in attrs.items():
                 usage[k] += v
-        # for _attr in set([attr.split('_')[1] for attr in usage]):
-        for _attr in self.system_resource_types:
-            if usage['%s%s' % (self.available_prefix, _attr)] > 0:
-                _str_usage.append("%s: %.2f%%" % (_attr, usage['%s%s' % (self.used_prefix, _attr)] / usage['%s%s' % (self.available_prefix, _attr)] * 100))
-        return (_str + ', '.join(_str_usage))
+        if not type:
+            for _attr in self.system_resource_types:
+                if usage['%s%s' % (self.available_prefix, _attr)] > 0:
+                    _str_usage.append("%s: %.2f%%" % (_attr, usage['%s%s' % (self.used_prefix, _attr)] / usage['%s%s' % (self.available_prefix, _attr)] * 100))
+
+            return (_str + ', '.join(_str_usage))
+        elif type == 'dict':
+            return {_attr: usage['%s%s' % (self.used_prefix, _attr)] / usage['%s%s' % (self.available_prefix, _attr)] * 100  for _attr in self.system_resource_types}
+        else:
+            raise NotImplementedError()
 
     def system_capacity(self):
         """
@@ -236,6 +241,20 @@ class resources_class:
                formatted_attrs += '%s: %i/%i, ' % (attr, attrs['%s%s' % (self.used_prefix, attr)], attrs['%s%s' % (self.available_prefix, attr)])
             _str += '- %s: %s\n' % (node, formatted_attrs)
         return _str
+    
+    def update_full(self):
+        _system_resource_types = list(self.full.keys())
+        for node, attrs in self.resources.items():
+            if self.resources_status[node] == self.OFF:
+                continue
+            for attr in _system_resource_types:
+                if (attrs['%s%s' % (self.available_prefix, attr)] - attrs['%s%s' % (self.used_prefix, attr)]) > 0:
+                    _system_resource_types.remove(attr)
+                    self.full[attr] = False
+                    break
+        for res in _system_resource_types:
+            self.full[res] = True  
+             
 
 class resource_manager:
 
@@ -284,7 +303,10 @@ class resource_manager:
         while not _allocated and _rollback:
             node_name, values = _rollback.pop()
             self.resources.release(node_name, **values)
-            
+        
+        if _allocated:
+            self.resources.update_full()
+        
         return _allocated, message
 
     def remove_event(self, id):
@@ -297,6 +319,7 @@ class resource_manager:
         """
         for node_name, values in self.actual_events.pop(id).items():
             self.resources.release(node_name, **values)
+        self.resources.update_full()
 
     def node_resources(self, *args):
         """

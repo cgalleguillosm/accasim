@@ -136,7 +136,7 @@ class allocator_base(ABC):
         """
         assert(self.resource_manager is not None), 'The resource manager is not defined. It must defined prior to run the simulation.'
         if debug:
-            print('{}: {} queued jobs to be considered in the dispatching plan'.format(cur_time, len(es)))
+            print('{}: {} queued jobs to be considered in the dispatching plan'.format(cur_time, len(es) if isinstance(es, (list, tuple)) else 1))
         return self.allocating_method(es, cur_time, skip, reserved_time, reserved_nodes, debug)
     
     def set_resource_manager(self, _resource_manager):
@@ -241,6 +241,7 @@ class ffp_alloc(allocator_base):
         :return: a list of assigned nodes of length e.requested_nodes, for all events that could be allocated. The list is in the format (time,event,nodes) where time can be either cur_time or None.
     
         """
+        debug = False
         if not isinstance(es, (list, tuple)):
             listAsInput = False
             es = [es]

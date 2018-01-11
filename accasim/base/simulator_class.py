@@ -450,7 +450,8 @@ class hpc_simulator(simulator_base):
         self.constants.load_constant('start_simulation_time', self.start_simulation_time)
 
         print('Starting the simulation process.')
-
+        prev_stats = (len(self.mapper.queued), len(self.mapper.running), len(self.mapper.finished)) + tuple(self.resource_manager.resources.usage('dict').values())
+        time_stuck_counter = 0
         self.load_events(self.mapper.current_time, event_dict, self.mapper, debug, self.max_sample)
         events = self.mapper.next_events()
 
@@ -466,14 +467,18 @@ class hpc_simulator(simulator_base):
 
             benchStartTime = _clock() * 1000
 
-            if debug:
-                print('{} INI: Loaded {}, Queued {}, Running {}, Finished {}'.format(_actual_time,
-                                                                                     len(self.mapper.loaded),
-                                                                                     len(self.mapper.queued),
-                                                                                     len(self.mapper.running),
-                                                                                     len(self.mapper.finished)))
             self.mapper.release_ended_events(event_dict)
-
+            cur_stats = (len(self.mapper.queued) + len(events), len(self.mapper.running), len(self.mapper.finished))
+            if debug:
+                print('{} INI: Loaded {}, Queued {}, Running {}, Finished {}'.format(_actual_time, len(self.mapper.loaded), *prev_stats))
+            cur_stats += tuple(self.resource_manager.resources.usage('dict').values())
+            
+            # Stats are different or, the queue is still small to process in short time. By defautl 250 jobs.
+            if any([ c != p for c, p in zip(cur_stats[1:], prev_stats[1:])]) or (prev_stats[0] != cur_stats[0] and cur_stats[0] < 250):
+                time_stuck_counter = 0
+            else:
+                time_stuck_counter += 1
+                print('Time stuck ', time_stuck_counter)
             # ===================================================================
             # External behavior
             # ===================================================================
@@ -482,11 +487,11 @@ class hpc_simulator(simulator_base):
             queuelen = len(events)
             schedStartTime = _clock() * 1000
             schedEndTime = schedStartTime
-            if events:
+
+            if events and time_stuck_counter <= 1:
                 if debug:
                     print('{} DUR: To Schedule {}'.format(_actual_time, len(events)))
                 to_dispatch = self.dispatcher.schedule(self.mapper.current_time, event_dict, events, debug)
-                # to_dispatch = self.dispatcher.schedule(self.mapper.current_time, event_dict, events, len(self.mapper.finished) > 15000)
                 if debug:
                     print('{} DUR: To Dispatch {}. {}'.format(_actual_time, len(to_dispatch),
                                                               self.resource_manager.resources.usage()))
@@ -502,14 +507,13 @@ class hpc_simulator(simulator_base):
                                                                                          len(self.mapper.running),
                                                                                          len(self.mapper.finished)))
                     _exit()
-
+            else:
+                for e in events:
+                    self.mapper.submit_event(e)
+            prev_stats = (len(self.mapper.queued), len(self.mapper.running), len(self.mapper.finished))
             if debug:
-                print('{} END: Loaded {}, Queued {}, Running {}, Finished {}'.format(_actual_time,
-                                                                                     len(self.mapper.loaded),
-                                                                                     len(self.mapper.queued),
-                                                                                     len(self.mapper.running),
-                                                                                     len(self.mapper.finished)))
-
+                print('{} END: Loaded {}, Queued {}, Running {}, Finished {}'.format(_actual_time, len(self.mapper.loaded), *prev_stats))
+            prev_stats += tuple(self.resource_manager.resources.usage('dict').values())
             # ===================================================================
             # Loading next jobs
             # ===================================================================

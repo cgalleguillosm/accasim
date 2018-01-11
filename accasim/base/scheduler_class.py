@@ -29,6 +29,7 @@ from abc import abstractmethod, ABC
 import sys
 import random
 import logging
+import time
 
 
 class scheduler_base(ABC):
@@ -126,6 +127,12 @@ class scheduler_base(ABC):
         
         """
         assert(self.resource_manager is not None), 'The resource manager is not defined. It must defined prior to run the simulation.'
+        # At least each job need 1 core and 1 kb/mb/gb of mem to run
+        min_required_avl = ['core', 'mem']
+        if any([self.resource_manager.resources.full[res] for res in min_required_avl]):
+            if _debug:
+                print("There is no availability of one of the min required resource to run a job. The dispatching process will be delayed until there is enough resources.")
+            return [ (None, e, []) for e in es]        
         if _debug:
             print('{}: {} queued jobs to be considered in the dispatching plan'.format(cur_time, len(es)))
         dispatching_plan = self.scheduling_method(cur_time, es_dict, es, _debug)
@@ -323,15 +330,12 @@ class easybf_sched(scheduler_base):
         :return: a tuple of (time to schedule, event id, list of assigned nodes)  
 
         """
-        
         if not self.allocator_rm_set:
             self.nonauto_allocator.set_resource_manager(self.resource_manager)
                     
         avl_resources = self.resource_manager.availability()
         self.nonauto_allocator.set_resources(avl_resources)
 
-        if _debug:
-            print('---------%s---------' % (cur_time))
         reserved_time = self.reserved_slot[0]
         reserved_nodes = self.reserved_slot[1]
         _jobs_allocated = []
@@ -366,11 +370,7 @@ class easybf_sched(scheduler_base):
             _tmp_jobs_allocated, _id_jobs_nallocated = self._job_allocation(cur_time, es, es_dict, _debug)
             _jobs_allocated += [_j[0] for _j in _tmp_jobs_allocated]
             _ready_dispatch += [_j[1] for _j in _tmp_jobs_allocated]
-            if _debug:
-                print('nallocated ', _id_jobs_nallocated)
             if not _id_jobs_nallocated:
-                if _debug:
-                    print(cur_time, ': 1st return ', _jobs_allocated)
                 return  _jobs_allocated
         else:
             _id_jobs_nallocated = es
@@ -394,8 +394,6 @@ class easybf_sched(scheduler_base):
             # All running events are computed, and the earliest slot in which the blocked job fits is computed.
             revents = [(job_id, es_dict[job_id].start_time + es_dict[job_id].expected_duration, assigns) for job_id, assigns in running_events.items()]
             future_endings = revents + _ready_dispatch
-            if _debug:
-                print('FE: ', future_endings)
             # Sorting by soonest finishing
             future_endings.sort(key=lambda x: x[1], reverse=False)
             self.reserved_slot = self._search_slot(avl_resources, future_endings, es_dict[self.blocked_job_id], _debug)
@@ -411,12 +409,10 @@ class easybf_sched(scheduler_base):
         
         if not for_backfilling:
             # If there are not jobs for backfilling return the allocated job plus the blocked one
-            if _debug:
-                print(cur_time, ': 2nd return ', _jobs_allocated)
             return _jobs_allocated  
         
         if _debug:
-            print(cur_time, ': For BF', for_backfilling)
+            print(cur_time, ': To fill', for_backfilling)
 
         # Trying to backfill the remaining jobs in the queue
         to_schedule_e_backfill = [es_dict[_id] for _id in for_backfilling]
@@ -428,8 +424,6 @@ class easybf_sched(scheduler_base):
                                                                debug=_debug)
         _jobs_allocated += backfill_allocation
 
-        if _debug:
-            print(cur_time, ': 3rd return ', _jobs_allocated)
         return _jobs_allocated
 
     def _search_slot(self, avl_resources, future_endings, e, _debug):
