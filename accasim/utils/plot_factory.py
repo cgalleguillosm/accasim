@@ -29,8 +29,12 @@ from accasim.utils.reader_class import default_reader_class
 from accasim.utils.misc import load_config, from_isodatetime_2_timestamp as _timestamp, str_resources
 from accasim.utils.file import path_leaf, load_jsonfile
 from accasim.base.resource_manager_class import resources_class
+from accasim.utils.misc import CONSTANT
+from accasim.experimentation.schedule_parser import define_result_parser
+from accasim.utils.misc import DEFAULT_SIMULATION
 from copy import deepcopy
 from os.path import splitext as _splitext, join as _join
+from os.path import isfile
 import numpy as np
 
 
@@ -57,7 +61,7 @@ class plot_factory:
         BENCHMARK_CLASS: [SCALABILITY_PLOT, SIMULATION_TIME_PLOT, SIMULAION_MEMORY_PLOT]
     }
 
-    def __init__(self, plot_class, sim_params_fname, config=None, resource=None, workload_parser=None, debug=False):
+    def __init__(self, plot_class, sim_params_fname=None, config=None, resource=None, workload_parser=None, debug=False):
         """
         The constructor for the class.
         
@@ -78,7 +82,7 @@ class plot_factory:
         self._plot_class = plot_class
 
         self._debug = debug
-        self._sim_params_fname = sim_params_fname
+        self._sim_params_fname = sim_params_fname #if sim_params_fname is not None and isfile(sim_params_fname) else None
         self._config = config
         self._resource = resource
         self._workload_parser = workload_parser
@@ -99,6 +103,10 @@ class plot_factory:
         self._simmemory = []
         self._scalabilitydataX = []
         self._scalabilitydataY = []
+
+        self._resource_order = None
+        if self._sim_params_fname is None:
+            self._resource_order = DEFAULT_SIMULATION().parameters['RESOURCE_ORDER']
 
 
     def setFiles(self, paths, labels):
@@ -306,9 +314,26 @@ class plot_factory:
 
         # Tries to read from the log file, aborts if an error is encountered
         try:
-            reader = default_reader_class(filepath, parser=self._workload_parser, equivalence=equiv) 
-            _path, _filename = path_leaf(filepath)
-            _sim_params_path = _join(_path, self._sim_params_fname)
+            _sim_params_path = None
+            # If the simulator config path points to a file, it is considered as is
+            if self._sim_params_fname is not None and isfile(self._sim_params_fname):
+                _sim_params_path = self._sim_params_fname
+            # If it is a plain string, it is used as a token for config files in the experimentation
+            elif self._sim_params_fname is not None:
+                _path, _filename = path_leaf(filepath)
+                _sim_params_path = _join(_path, self._sim_params_fname)
+            # If it is none, the default_result_parser will use the DEFAULT_SIMULATION config
+
+            if _sim_params_path is not None:
+                _resource_order = load_jsonfile(_sim_params_path)['RESOURCE_ORDER']
+            else:
+                _resource_order = self._resource_order
+
+            if self._workload_parser is not None:
+                reader = default_reader_class(filepath, parser=self._workload_parser, equivalence=equiv)
+            else:
+                reader = default_reader_class(filepath, parser=define_result_parser(_sim_params_path), equivalence=equiv)
+
             jobs = []
             slowdowns = []
             timePoints = []
@@ -391,7 +416,7 @@ class plot_factory:
             # Jobs that have terminated release their resources
             jobstoend = [j for j in running if j['end_time'] == point]
             for j in jobstoend:
-                req, assignations = self._getRequestedResources(_sim_params_path, j['assignations'])
+                req, assignations = self._getRequestedResources(_resource_order, j['assignations'])
                 for node in assignations:
                     for k,val in req.items():
                         sys_res[node][k] += val
@@ -401,7 +426,7 @@ class plot_factory:
             jobstostart = [j for j in queue if j['start_time'] == point]
             for j in jobstostart:
                 if j['end_time'] - j['start_time'] > 0:
-                    req, assignations = self._getRequestedResources(_sim_params_path, j['assignations'])
+                    req, assignations = self._getRequestedResources(_resource_order, j['assignations'])
                     for node in assignations:
                         for k, val in req.items():
                             sys_res[node][k] -= val
@@ -414,7 +439,7 @@ class plot_factory:
             # Additionally, we store for every started job its resource allocation efficiency
             for j in jobstostart:
                 if j['end_time'] - j['start_time'] > 0:
-                    req, assignations = self._getRequestedResources(_sim_params_path,j['assignations'])
+                    req, assignations = self._getRequestedResources(_resource_order, j['assignations'])
                     eff = self._getResourceEfficiency(req, assignations, sys_res, resource)
                     efficiencyperjob.append(eff)
 
@@ -450,7 +475,7 @@ class plot_factory:
 
         return None, None
 
-    def _getRequestedResources(self, _params_path, assignations_str):
+    def _getRequestedResources(self, _resource_order, assignations_str):
         """
         TO BE IMPLEMENTED:
         returns the requested resources for the input job.
@@ -458,7 +483,6 @@ class plot_factory:
         :param job: the dictionary related to the current job;
         :return: the dictionary of resources needed by each job unit, and the list of node assignations;
         """
-        _resource_order = load_jsonfile(_params_path)['resource_order']
         _assignations_list = assignations_str.split(str_resources.SEPARATOR)[0:-1]
         _nodes_list = [assign.split(';')[0] for assign in _assignations_list]
         _request = { k:int(v) for k,v in zip(_resource_order, _assignations_list[0].split(';')[1:])}
