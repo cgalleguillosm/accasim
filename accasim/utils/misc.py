@@ -502,6 +502,18 @@ class str_datetime:
         self.datetime = datetime.fromtimestamp(int(epoch_time))
         self.str_datetime = self.datetime.strftime('%Y-%m-%d %H:%M:%S')
         
+    def get_weekday(self):
+        """
+        From 1 to 7
+        """
+        return self.datetime.isoweekday()
+    
+    def get_month(self):
+        """
+        From 1 to 12
+        """
+        return self.datetime.month
+        
     def get_hours(self):
         return int(self.datetime.strftime('%H'))
     

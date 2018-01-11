@@ -28,9 +28,12 @@ from accasim.experimentation.schedule_writer import workload_writer
 
 from abc import ABC
 from scipy import stats as _statistical_distributions
+from scipy.stats import percentileofscore as _percentileofscore
+from statistics import pstdev as _pstdev
 from math import exp as _exp, log as _log
 from random import random as _random
 import warnings
+from collections import Counter
 
 
 class generator(ABC):
@@ -39,7 +42,7 @@ class generator(ABC):
 
         :param distributions:
         """
-        assert (len(distributions) > 1)
+        assert (len(distributions) > 0)
         self.distribution_fit = distribution_fit(distributions)
 
     def dist_cdf(self, x, dist_name, dist_param, optional):
@@ -266,15 +269,18 @@ class arrive_generator(generator):
     BUCKETS = 48  # Every 30min
     SECONDS_IN_BUCKET = SECONDS_PER_DAY / BUCKETS
 
-    def __init__(self, initial_time, cyclic_day_start=0):
+    def __init__(self, initial_time, day_prob, month_prob, cyclic_day_start=0, max_arrive_time=5 * 24 * 3600):
         """
 
         :param initial_time:
         :param cyclic_day_start:
+        :param max_arrive_time: in secs
         """
         assert (0 <= cyclic_day_start < 24), 'The cicle must start between [0, 23].'
 
         self.initial_time = initial_time
+        self.day_prob = day_prob
+        self.month_prob = month_prob
         self.cyclic_day_start = cyclic_day_start
         self.initial_bucket = int(
             round((str_datetime(self.initial_time).get_hours() * self.BUCKETS) / self.HOURS_PER_DAY))
@@ -288,11 +294,11 @@ class arrive_generator(generator):
         self.points = {}
         self.reminders = {}
 
-        distributions = ['gamma', 'dweibull', 'lognorm', 'genexpon', 'expon', 'exponnorm', 'exponweib', 'exponpow',
-                         'truncexpon']  # ['gamma']
+        distributions = ['gamma', 'dweibull', 'lognorm', 'genexpon', 'expon', 'exponnorm', 'exponweib', 'exponpow', 'truncexpon']
         generator.__init__(self, distributions)
 
         self.initialized = False
+        self.TOO_MUCH_ARRIVE_TIME = _log(max_arrive_time)
 
     def add_sample(self, submission_times, name='general', rush_hours=(8, 17)):
         """
@@ -302,6 +308,9 @@ class arrive_generator(generator):
         :param rush_hours:
         :return:
         """
+        total_jobs = len(submission_times)
+        assert(total_jobs >= 1000), 'Data might no be representative. There are just {} jobs.'.format(total_jobs)
+        
         _bucket_number = lambda _dtime: _dtime.get_hours() * (self.BUCKETS // self.HOURS_PER_DAY) + (
         _dtime.get_minutes() // 30)
         assert (name not in self.params), 'Sample {} already exists.'.format(name)
@@ -311,16 +320,31 @@ class arrive_generator(generator):
 
         init, end = rush_hours
 
+        max_arrive_time_diff = 0
+        ia_times = []
+
         for i, (cur_time, next_time) in enumerate(zip(submission_times[:-1], submission_times[1:])):
             ia_time = abs(next_time - cur_time)  # Must be always positive... using abs just in case
             _datetime = str_datetime(cur_time)
             _hour = _datetime.get_hours()
             _pos = _bucket_number(_datetime)
+            
             data['total'].append(_pos)
-
+            ia_times.append(ia_time)
             # Store jobs that were submitted at rush hours
             if init < _hour < end:
                 data['rush'].append(_pos)
+                
+            if ia_time > max_arrive_time_diff:
+                max_arrive_time_diff = ia_time
+        avg_iatimes = sum(ia_times) / len(ia_times)
+        avg_percentile = _percentileofscore(ia_times, avg_iatimes)
+        iatimes_stdev = _pstdev(ia_times)
+        # print('Avg. ', avg_iatimes, ', Max diff', max_arrive_time_diff, ', Percentile', avg_percentile, 'Std', iatimes_stdev)
+        _log_arrive_time = _log(max_arrive_time_diff)
+        
+        if self.TOO_MUCH_ARRIVE_TIME > _log_arrive_time:
+            self.TOO_MUCH_ARRIVE_TIME = _log_arrive_time
 
         for type in data:
             if not data[type]:
@@ -332,7 +356,7 @@ class arrive_generator(generator):
             if self.distribution_plot:
                 self._save_distribution_plot(name, data, type)
 
-    def next_time(self, sample_name='general'):
+    def next_time(self, generation_stats, sample_name='general'):
         """
 
         :param sample_name:
@@ -343,37 +367,57 @@ class arrive_generator(generator):
         if not self.initialized:
             self._initialize()
         dist_params = self.params[sample_name]['total']
-
+        
+        current_day, current_month = self._date_info(self.time_from_begin[sample_name]) 
+        
+        cur_day_jobs = generation_stats['current_d'][current_day - 1]
+        cur_month_jobs = generation_stats['current_m'][current_month - 1]
+        dprob = self.day_prob[current_day - 1]
+        mprob = self.month_prob[current_month - 1]
+        try:
+            if cur_day_jobs / generation_stats['current_jobs'] < dprob: 
+                current_rate = (cur_day_jobs / generation_stats['total_jobs']) 
+            elif cur_month_jobs / generation_stats['current_jobs'] < mprob:
+                current_rate = (cur_month_jobs / generation_stats['total_jobs']) 
+            else:
+                current_rate = 1
+        except ZeroDivisionError:
+            current_rate = 1
+        factor = (1 - current_rate)
+        
+        cur_max_ia_time = self.TOO_MUCH_ARRIVE_TIME - (self.TOO_MUCH_ARRIVE_TIME - _log(self.SECONDS_IN_BUCKET)) * factor
+        
         while True:
             rnd_value = self.dist_rand(**dist_params)
-            if 0 < rnd_value <= 13:  # = TOO_MUCH_ARRIVE_TIME 
+            if rnd_value <= cur_max_ia_time: 
                 break
-
-        point = self.points[sample_name]
-        reminder = self.reminders[sample_name]
+            
         current_bucket = self.current[sample_name]
         weights = self.weights[sample_name]
-
-        point += _exp(rnd_value) / self.SECONDS_IN_BUCKET
+        
+        self.points[sample_name] += _exp(rnd_value) / self.SECONDS_IN_BUCKET
         next_arrive = 0
-        while point > weights[current_bucket]:
-            point -= weights[current_bucket]
+
+        while self.points[sample_name] > weights[current_bucket]:
+            self.points[sample_name] -= weights[current_bucket]
             current_bucket = (current_bucket + 1) % self.BUCKETS
             next_arrive += self.SECONDS_IN_BUCKET
-        new_reminder = point / weights[current_bucket]
-        more_time = self.SECONDS_IN_BUCKET * (new_reminder - reminder)
-        next_arrive += more_time
-        reminder = new_reminder
 
+        new_reminder = self.points[sample_name] / weights[current_bucket]
+        more_time = self.SECONDS_IN_BUCKET * (new_reminder - self.reminders[sample_name])
+        next_arrive += more_time
+        self.reminders[sample_name] = new_reminder
         self.time_from_begin[sample_name] += int(next_arrive)  # int(round(next_arrive))
 
         # Update all attributes
-        self.points[sample_name] = point
-        self.reminders[sample_name] = reminder
         self.current[sample_name] = current_bucket
-        self.weights[sample_name] = weights
 
         return self.time_from_begin[sample_name]
+
+    def _date_info(self, timestamp):
+        dtime = str_datetime(timestamp)
+        return dtime.get_weekday(), dtime.get_month()
+
 
     def _save_distribution_plot(self, name, data, data_type):
         """
@@ -433,13 +477,13 @@ class workload_generator:
         if 'show_msg' in kwargs:
             show_msg = kwargs['show_msg']
         resources = self._set_resources(resources_obj, sys_config)
-        _submissiont_times, _job_total_opers, serial_prob, nodes_parallel_prob = self._initialize(base_reader,
+        _submissiont_times, _job_total_opers, serial_prob, nodes_parallel_prob, day_prob, month_prob = self._initialize(base_reader,
                                                                                                   performance,
                                                                                                   resources,
                                                                                                   non_processing_resources)
         parallel_prob = 1 - serial_prob
 
-        self.arrive_generator = arrive_generator(init_time)
+        self.arrive_generator = arrive_generator(init_time, day_prob, month_prob)
         if show_msg:
             print('Arrive generator samples...')
         self.arrive_generator.add_sample(_submissiont_times)
@@ -477,6 +521,8 @@ class workload_generator:
         _job_submission_times = []
         _job_types = {'serial': 0, 'parallel': 0}
         _job_total_opers = []
+        _job_days = [0 for i in range(7)]
+        _job_months = [0 for i in range(12)]
         _nodes_requested = {n + 1: 0 for n in range(total_nodes)}
         _n_parallel_requests = 0
         total_jobs = 0
@@ -485,6 +531,9 @@ class workload_generator:
             if not _dict:
                 break
             submisison_time = _dict['queued_time']
+            weekday, month = self._date_info(submisison_time)
+            _job_days[weekday - 1] += 1
+            _job_months[month - 1] += 1
             duration = int(_dict['duration'])
             requested_nodes = int(_dict['requested_nodes'])
             requested_resources = _dict['requested_resources']
@@ -505,11 +554,13 @@ class workload_generator:
             total_jobs += 1
 
         _job_types.update((k, v / total_jobs) for k, v in _job_types.items())
+        _job_days = [d / total_jobs for d in _job_days]
+        _job_months = [m / total_jobs for m in _job_months]
 
         if _n_parallel_requests > 1:
             nodes_parallel_prob = {n: _nodes_requested[n] / _n_parallel_requests for n in _nodes_requested}
 
-        return _job_submission_times, _job_total_opers, _job_types['serial'], nodes_parallel_prob
+        return _job_submission_times, _job_total_opers, _job_types['serial'], nodes_parallel_prob, _job_days, _job_months
 
     def generate_jobs(self, n, writer=None):
         """
@@ -522,9 +573,16 @@ class workload_generator:
             obj_assertion(writer, workload_writer,
                           'Received {} type as system resource. resources_class type expected.',
                           [workload_writer.__class__.__name__])
+        generation_stats = {
+            'current_jobs': 0,
+            'total_jobs': n,
+            'current_d': [0 for i in range(7)],
+            'current_m': [0 for i in range(12)]
+        }
         jobs = {}
         for i in range(n):
-            submit_time = self.arrive_generator.next_time()
+            submit_time = self.arrive_generator.next_time(generation_stats)
+            self._update_stats(generation_stats, submit_time)
             job_type, duration, nodes, request = self.job_generator.next_job()
             jobs[i + 1] = {
                 'job_number': i + 1,
@@ -534,7 +592,19 @@ class workload_generator:
                 'resources': request
             }
             writer.add_newline(jobs[i + 1])
+            print(i + 1, jobs[i + 1])
+        print(generation_stats)
         return jobs
+
+    def _update_stats(self, stats, stime):
+        day, month = self._date_info(stime)
+        stats['current_jobs'] += 1
+        stats['current_d'][day - 1] += 1
+        stats['current_m'][month - 1] += 1
+
+    def _date_info(self, submission_date):
+        dtime = str_datetime(submission_date)
+        return dtime.get_weekday(), dtime.get_month()
 
     def _set_resources(self, resources_obj, sys_config):
         """

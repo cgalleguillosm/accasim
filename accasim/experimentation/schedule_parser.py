@@ -27,7 +27,7 @@ from re import compile as _compile
 
 
 class schedule_parser(workload_parser_base):
-    def __init__(self, regexp, updater):
+    def __init__(self, regexp, updater=[]):
         """
         schedule_parser class is an implementation of the :class:`accasim.utils.reader_class.workload_parser_base`
          

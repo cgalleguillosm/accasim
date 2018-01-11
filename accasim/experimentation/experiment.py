@@ -29,7 +29,7 @@ from accasim.base.simulator_class import hpc_simulator
 from accasim.utils.file import file_exists, dir_exists, remove_dir, find_file_by
 from accasim.utils.misc import obj_assertion, list_class_assertion, load_config, type_regexp
 from accasim.utils.plot_factory import plot_factory
-from accasim.experimentation import schedule_parser
+from accasim.experimentation.schedule_parser import schedule_parser
 
 
 class experiment_class:
@@ -223,10 +223,11 @@ class experiment_class:
         except KeyError as e:
             print(
                 'Schedule output format not identified. Please check the simulator configuration file for the key \'schedule_output\'.')
-
+            raise e
         for _attr_name, _data_type in _attributes.items():
             _format = _format.replace('{' + _attr_name + '}', type_regexp(_data_type[-1]).format(_attr_name))
-        return schedule_parser(_format)
+        default_parser = schedule_parser(_format)
+        return default_parser
 
     def _customize(self, **kwargs):
         for k, v in kwargs.items():
