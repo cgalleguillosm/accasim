@@ -478,7 +478,6 @@ class hpc_simulator(simulator_base):
                 time_stuck_counter = 0
             else:
                 time_stuck_counter += 1
-                print('Time stuck ', time_stuck_counter)
             # ===================================================================
             # External behavior
             # ===================================================================
