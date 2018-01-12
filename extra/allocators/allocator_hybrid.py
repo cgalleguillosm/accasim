@@ -154,8 +154,9 @@ class allocator_hybrid(allocator_weighted):
         # the longest list in res_lists, in order to balance their usage.
         for i in range(remaining_nodes):
             rr_res = self._get_longest_list(res_lists, start_indexes)
-            final_list.append(res_lists[rr_res][start_indexes[rr_res]])
-            start_indexes[rr_res] += 1
+            if rr_res != self._noneID:
+                final_list.append(res_lists[rr_res][start_indexes[rr_res]])
+                start_indexes[rr_res] += 1
 
         return final_list
 

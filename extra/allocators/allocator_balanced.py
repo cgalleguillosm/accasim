@@ -96,6 +96,7 @@ class allocator_balanced(ffp_alloc):
         assert self._res_lists is not None, 'Cannot adjust resources if they have not been initialized'
         sorted_keys.clear()
         sorted_keys += self._convert_to_final_list(self._res_lists)
+        return sorted_keys
 
     def _update_resources(self, reserved_nodes, requested_resources):
         """
@@ -131,8 +132,10 @@ class allocator_balanced(ffp_alloc):
         """
         # Each separate list is sorted, so that nodes with the most available critical resources will be placed
         # at the end
+        res_lists[self._noneID] = self._trim_nodes(res_lists[self._noneID])
         res_lists[self._noneID].sort(key=lambda x: x)
         for key in self._critical_resources:
+            res_lists[key] = self._trim_nodes(res_lists[key])
             res_lists[key].sort(key=lambda x: (self._avl_resources.get(x).get(key), x))
 
         # The lists are then combined, by placing in front the 'none' list, which is a buffer for the critical res
@@ -146,8 +149,9 @@ class allocator_balanced(ffp_alloc):
         # the longest list in res_lists, in order to balance their usage.
         for i in range(remaining_nodes):
             rr_res = self._get_longest_list(res_lists, start_indexes)
-            final_list.append(res_lists[rr_res][start_indexes[rr_res]])
-            start_indexes[rr_res] += 1
+            if rr_res != self._noneID:
+                final_list.append(res_lists[rr_res][start_indexes[rr_res]])
+                start_indexes[rr_res] += 1
 
         return final_list
 

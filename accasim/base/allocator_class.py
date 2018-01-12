@@ -187,6 +187,9 @@ class ffp_alloc(allocator_base):
     
         """
         allocator_base.__init__(self, seed, resource_manager)
+        # The list of resource types that are necessary for job execution. Used to determine wether a node can be used
+        # for allocation or not
+        self.nec_res_types = ['core', 'mem']
         if self.resource_manager:
             self._base_availability = self.resource_manager.get_total_resources()
 
@@ -292,7 +295,7 @@ class ffp_alloc(allocator_base):
             if assigned_nodes:
                 allocation.append((cur_time, e.id, assigned_nodes))
                 self._update_resources(assigned_nodes, requested_resources)
-                self._adjust_resources(self._sorted_keys)
+                self._sorted_keys = self._adjust_resources(self._sorted_keys)
                 success_counter += 1
                 if debug:
                     print('Allocation successful for event %s' % (e.id))
@@ -365,27 +368,27 @@ class ffp_alloc(allocator_base):
 
     def _sort_resources(self):
         """
-    
-        Method which sorts the available resources dict. Not used in this class, but can be overridden by extended
-        classes.
 
-        :return: the sorted list of node keys (in this case, identical to the original)
-    
+        Method which sorts the available resources dict. In this class it is used only to trim the nodes list, 
+        but can be overridden by extended classes.
+
+        :return: the sorted list of node keys (in this case, identical to the original minus the full nodes)
+
         """
-        return self._avl_resources.keys()
+        return self._trim_nodes(list(self._avl_resources.keys()))
 
     def _adjust_resources(self, sorted_keys):
         """
-    
-        Method which restores the resources' sorting after a successful allocation. Not used in this class, has
-        to be overridden.
+
+        Method which restores the resources' sorting after a successful allocation. In this class it is used only
+        to remove from the list nodes that have become full after an allocation, has to be overridden.
 
         :param sorted_keys: the list of keys that needs to be adjusted
-        
-        :return: none
-    
+
+        :return: the restored sorted_keys list
+
         """
-        pass
+        return self._trim_nodes(sorted_keys)
 
     def _event_fits_node(self, resources, requested_resources):
         """
@@ -417,7 +420,24 @@ class ffp_alloc(allocator_base):
             return min_availability
         else:
             return 0
-        
+
+    def _trim_nodes(self, nodes):
+        """
+        Method which removes from a list of node IDs those elements that correspond to nodes that are full, i.e. they
+        have no available Memory or CPU resources and are thus useless for allocation.
+
+        :param nodes: A list of node IDs
+        :return: The trimmed list of nodes
+        """
+
+        # ALTERNATIVE SOLUTION: remove elements from list one by one
+        #for i in range(len(nodes) - 1, -1, -1):
+        #    if not all(self._avl_resources[nodes[i]][r] > 0 for r in self.nec_res_types):
+        #        nodes.pop(i)
+        trimNodes = [n for n in nodes if all(self._avl_resources[n][r] > 0 for r in self.nec_res_types)]
+        return trimNodes
+
+
 class bfp_alloc(ffp_alloc):
     """
     
@@ -462,7 +482,7 @@ class bfp_alloc(ffp_alloc):
         
         """
         assert self._avl_resources is not None, 'The dictionary of available resources must be non-empty.'
-        return sorted(self._avl_resources.keys(), key=self.ranking, reverse=False)
+        return sorted(self._trim_nodes(list(self._avl_resources.keys())), key=self.ranking, reverse=False)
 
     def _adjust_resources(self, sorted_keys):
         """
@@ -477,4 +497,6 @@ class bfp_alloc(ffp_alloc):
         """
         assert self._avl_resources is not None, 'The dictionary of available resources must be non-empty.'
         assert sorted_keys is not None, 'The list of keys must be non-empty'
+        sorted_keys = self._trim_nodes(sorted_keys)
         sorted_keys.sort(key=self.ranking, reverse=False)
+        return sorted_keys
