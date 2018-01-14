@@ -26,6 +26,7 @@ import sys
 from abc import abstractmethod, ABC
 from accasim.utils.misc import CONSTANT
 from accasim.base.resource_manager_class import resource_manager
+from _functools import reduce
 
 
 
@@ -253,6 +254,8 @@ class ffp_alloc(allocator_base):
 
         allocation = []
         success_counter = 0
+        # Create aux resources for this allocation
+        self._set_aux_resources()
         for e in es:
             requested_nodes = e.requested_nodes
             requested_resources = e.requested_resources
@@ -267,7 +270,16 @@ class ffp_alloc(allocator_base):
 
             assigned_nodes = []
             nodes_left = requested_nodes
+            # Nodes that satisfy the request are retrieved including the number of request that they fit in total
+            # The auxiliar data is used to speed up the process.
+            # s_nodes, total_fits = self._find_sat_nodes(requested_resources)
+            s_nodes = self._find_sat_nodes(requested_resources)
+            # Only if there are the enough quantity resources the allocation is calculated.
+            # if requested_nodes <= total_fits: 
             for node in self._sorted_keys:
+                if not (node in s_nodes):
+                    # If the node doesn't have the enough resources is skipped (previously calculated)
+                    continue 
                 # The algorithm check whether the given node belongs to the list of reserved nodes, in backfilling.
                 # If it does, the node is discarded.
                 resources = self._avl_resources[node]
@@ -363,8 +375,18 @@ class ffp_alloc(allocator_base):
         for node in reserved_nodes:
             resource = self._avl_resources[node]
             for attr, v in requested_resources.items():
-                assert resource[attr] - v >= 0, 'In node {}, the resource {} is going below to 0'.format(node, attr)
+                cur_q = resource[attr]
+                assert cur_q - v >= 0, 'In node {}, the resource {} is going below to 0'.format(node, attr)
+                # Remove node from the current quantity of resource
+                self.aux_resources[attr][cur_q].remove(node)
                 resource[attr] -= v
+                # Add the node to the new quantity of resource
+                new_q = resource[attr]
+                if new_q == 0:
+                    continue
+                if not (new_q in self.aux_resources[attr]):
+                    self.aux_resources[attr][new_q] = []
+                self.aux_resources[attr][new_q].append(node)
 
     def _sort_resources(self):
         """
@@ -374,7 +396,8 @@ class ffp_alloc(allocator_base):
 
         :return: the sorted list of node keys (in this case, identical to the original minus the full nodes)
 
-        """
+        """      
+
         return self._trim_nodes(list(self._avl_resources.keys()))
 
     def _adjust_resources(self, sorted_keys):
@@ -389,6 +412,27 @@ class ffp_alloc(allocator_base):
 
         """
         return self._trim_nodes(sorted_keys)
+
+    def _set_aux_resources(self):
+        # Generate an aux structure to speedup the allocation process
+        resource_types = self.resource_manager.resources.system_resource_types        
+        # self.aux_resources = {'nodes': {}}
+        self.aux_resources = {}
+        for res_type in resource_types:
+            if not (res_type in self.aux_resources):
+                self.aux_resources[res_type] = {}
+            for node in self._sorted_keys:
+                n_res = self._avl_resources[node][res_type]
+                if n_res == 0:  # This works similar to trim_nodes
+                    continue
+                if not (n_res in self.aux_resources[res_type]):
+                    self.aux_resources[res_type][n_res] = []
+                self.aux_resources[res_type][n_res].append(node)
+                #===============================================================
+                # if not (node in self.aux_resources['nodes']):
+                #     self.aux_resources['nodes'][node] = {} 
+                # self.aux_resources['nodes'][node][res_type] = n_res
+                #===============================================================
 
     def _event_fits_node(self, resources, requested_resources):
         """
@@ -431,12 +475,32 @@ class ffp_alloc(allocator_base):
         """
 
         # ALTERNATIVE SOLUTION: remove elements from list one by one
-        #for i in range(len(nodes) - 1, -1, -1):
+        # for i in range(len(nodes) - 1, -1, -1):
         #    if not all(self._avl_resources[nodes[i]][r] > 0 for r in self.nec_res_types):
         #        nodes.pop(i)
         trimNodes = [n for n in nodes if all(self._avl_resources[n][r] > 0 for r in self.nec_res_types)]
         return trimNodes
-
+    
+    
+    # New function to find nodes that satisfies the node request, this is used in conjuction with the sorted node keys.
+    def _find_sat_nodes(self, req_resources):
+        sat_nodes = {}
+        # fitting_nodes = {}
+        for t_res, n_res in req_resources.items():
+            if not(t_res in sat_nodes):
+                sat_nodes[t_res] = []
+            for n, nodes in self.aux_resources[t_res].items():
+                if n >= n_res:
+                    sat_nodes[t_res] += nodes
+                    #===========================================================
+                    # for node in nodes:
+                    #     if not (node in fitting_nodes):
+                    #         fitting_nodes[node] = {}
+                    #     fitting_nodes[node][t_res] = n // n_res
+                    #===========================================================
+        nodes = list(reduce(set.intersection, (set(val) for val in sat_nodes.values())))
+        # tot_fitting_reqs = sum([min(fitting_nodes[n].values()) for n in nodes])
+        return nodes  # , tot_fitting_reqs
 
 class bfp_alloc(ffp_alloc):
     """
