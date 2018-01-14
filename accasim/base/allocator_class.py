@@ -27,6 +27,9 @@ from abc import abstractmethod, ABC
 from accasim.utils.misc import CONSTANT
 from accasim.base.resource_manager_class import resource_manager
 from _functools import reduce
+from sortedcontainers import SortedSet as _sorted_set
+import time
+
 
 
 
@@ -385,8 +388,8 @@ class ffp_alloc(allocator_base):
                 if new_q == 0:
                     continue
                 if not (new_q in self.aux_resources[attr]):
-                    self.aux_resources[attr][new_q] = []
-                self.aux_resources[attr][new_q].append(node)
+                    self.aux_resources[attr][new_q] = _sorted_set()
+                self.aux_resources[attr][new_q].add(node)
 
     def _sort_resources(self):
         """
@@ -426,8 +429,8 @@ class ffp_alloc(allocator_base):
                 if n_res == 0:  # This works similar to trim_nodes
                     continue
                 if not (n_res in self.aux_resources[res_type]):
-                    self.aux_resources[res_type][n_res] = []
-                self.aux_resources[res_type][n_res].append(node)
+                    self.aux_resources[res_type][n_res] = _sorted_set()
+                self.aux_resources[res_type][n_res].add(node)
                 #===============================================================
                 # if not (node in self.aux_resources['nodes']):
                 #     self.aux_resources['nodes'][node] = {} 
@@ -488,18 +491,19 @@ class ffp_alloc(allocator_base):
         # fitting_nodes = {}
         for t_res, n_res in req_resources.items():
             if not(t_res in sat_nodes):
-                sat_nodes[t_res] = []
+                sat_nodes[t_res] = _sorted_set()
             for n, nodes in self.aux_resources[t_res].items():
                 if n >= n_res:
-                    sat_nodes[t_res] += nodes
+                    sat_nodes[t_res].update(nodes)
                     #===========================================================
                     # for node in nodes:
                     #     if not (node in fitting_nodes):
                     #         fitting_nodes[node] = {}
                     #     fitting_nodes[node][t_res] = n // n_res
                     #===========================================================
-        nodes = list(reduce(set.intersection, (set(val) for val in sat_nodes.values())))
+        # nodes = list(reduce(set.intersection, (set(val) for val in sat_nodes.values())))
         # tot_fitting_reqs = sum([min(fitting_nodes[n].values()) for n in nodes])
+        nodes = reduce(_sorted_set.intersection, sat_nodes.values())
         return nodes  # , tot_fitting_reqs
 
 class bfp_alloc(ffp_alloc):

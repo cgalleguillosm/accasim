@@ -41,6 +41,7 @@ setup(
     install_requires=[
         'matplotlib',
         'psutil',
+        'sortedcontainers',
         'numpy>= 1.6',
         'scipy>= 1.0'],
 )
