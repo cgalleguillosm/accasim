@@ -34,6 +34,7 @@ from accasim.experimentation.schedule_parser import define_result_parser
 from accasim.utils.misc import DEFAULT_SIMULATION
 from copy import deepcopy
 from os.path import splitext as _splitext, join as _join
+from scipy.signal import savgol_filter
 from os.path import isfile
 import numpy as np
 
@@ -173,7 +174,7 @@ class plot_factory:
 
         return self._preprocessed
 
-    def producePlot(self, type, title='', scale='linear', xlim=(None,None), ylim=(None,None), legend=True, figsize=(7,5), meansonly=False, alpha=0.005, output='Output.pdf'):
+    def producePlot(self, type, title='', scale='linear', xlim=(None,None), ylim=(None,None), legend=True, figsize=(7,5), meansonly=False, alpha=0.005, smooth=30, output='Output.pdf'):
         """
         Produces a single plot on the pre-processed files.
         
@@ -196,6 +197,8 @@ class plot_factory:
         :param figsize: the size of the figure, is a tuple;
         :param meansonly: triggers the plot of mean values alone in box-plots, is a boolean;
         :param alpha: the alpha of certain features in plots, in particular for distribution scatter plots;
+        :param smooth: smoothing factor used for the Savitzky-Golay filter in the scalabily plot. The lower the number,
+            the higher the smoothing;
         :param output: path of the output PDF file;
         """
         if self._preprocessed:
@@ -204,11 +207,11 @@ class plot_factory:
             elif type == self.QUEUE_SIZE_PLOT and self._plot_class == self.SCHEDULE_CLASS:
                 self.boxPlot(self._queuesizes, title, 'Queue size', scale, xlim, (0, None), figsize, meansonly, output)
             elif type == self.LOAD_RATIO_PLOT and self._plot_class == self.SCHEDULE_CLASS:
-                self.distributionScatterPlot(self._loadratiosX, self._loadratiosY, alpha, title, scale, xlim, ylim, figsize, output)
+                self.distributionScatterPlot(self._loadratiosX, self._loadratiosY, title, scale, xlim, ylim, figsize, alpha, output)
             elif type == self.EFFICIENCY_PLOT and self._plot_class == self.SCHEDULE_CLASS:
                 self.boxPlot(self._efficiencies, title, 'Resource efficiency', scale, xlim, ylim, figsize, meansonly, output)
             elif type == self.SCALABILITY_PLOT and self._plot_class == self.BENCHMARK_CLASS:
-                self.scalabilityPlot(self._scalabilitydataX, self._scalabilitydataY, title, scale, xlim, ylim, figsize, legend, output)
+                self.scalabilityPlot(self._scalabilitydataX, self._scalabilitydataY, title, scale, xlim, ylim, figsize, legend, smooth, output)
             elif type == self.SIMULATION_TIME_PLOT and self._plot_class == self.BENCHMARK_CLASS:
                 self.boxPlotTimes(self._mantimes, self._schedtimes, title, scale, xlim, ylim, figsize, legend, output)
             elif type == self.SIMULAION_MEMORY_PLOT and self._plot_class == self.BENCHMARK_CLASS:
@@ -776,7 +779,7 @@ class plot_factory:
         ff.savefig(fig)
         ff.close()
 
-    def scalabilityPlot(self, xdata, ydata, title='', scale='linear', xlim=(None,None), ylim=(None,None), figsize=(7,5), legend=True, output='Output.pdf'):
+    def scalabilityPlot(self, xdata, ydata, title='', scale='linear', xlim=(None,None), ylim=(None,None), figsize=(7,5), legend=True, smooth=30, output='Output.pdf'):
         """
         Creates a scalability plot for all test instances, where X represents the queue size, and Y the average
         time required by each dispatching method in the instances.
@@ -791,6 +794,7 @@ class plot_factory:
         :param ylim: the bottom-top boundaries for the plot, is a tuple;
         :param figsize: the size of the figure, is a tuple;
         :param legend: enables or disables visualization of the legend; 
+        :param smooth: smoothing factor for the Savitzky-Golay filter. The lower the number, the higher the smoothing;
         :param output: the path of the output file;
         """
 
@@ -804,9 +808,19 @@ class plot_factory:
 
         fig, ax = plt.subplots(figsize=figsize)
 
+        divideFactor = smooth
+
         for i in range(len(xdata)):
             markeroffset = floor(max(xdata[i])/20 + i*2)
-            ax.plot(xdata[i],ydata[i],label=self._labels[i], linestyle=linestyles[i % numstyles], marker=markers[i % numstyles], markevery=markeroffset, zorder=2 if markers[i % numstyles] is None else 0)
+            if divideFactor > 1 and len(ydata[i]) >= divideFactor:
+                win_len = floor(len(ydata[i]) / divideFactor)
+                win_len += (win_len + 1) % 2
+                if win_len < 5:
+                    win_len = 5
+                yfiltered = savgol_filter(ydata[i], win_len, 3)
+            else:
+                yfiltered = ydata[i]
+            ax.plot(xdata[i],yfiltered,label=self._labels[i], linestyle=linestyles[i % numstyles], marker=markers[i % numstyles], markevery=markeroffset, zorder=2 if markers[i % numstyles] is None else 0)
 
         ax.set_ylabel('Time [ms]', fontsize=fontsize)
         ax.set_xlabel('Queue size', fontsize=fontsize)
@@ -826,7 +840,7 @@ class plot_factory:
         ff.savefig(fig)
         ff.close()
 
-    def distributionScatterPlot(self, xdata, ydata, alpha=0.005, title='', scale='linear', xlim=(0,1.05), ylim=(0,1.05), figsize=(7,5), output='Output.pdf'):
+    def distributionScatterPlot(self, xdata, ydata, title='', scale='linear', xlim=(0,1.05), ylim=(0,1.05), figsize=(7,5), alpha=0.005, output='Output.pdf'):
         """
         Creates a distribution scatter plot for the system's resource efficiency. 
         
