@@ -77,6 +77,13 @@ class generator(ABC):
             warnings.filterwarnings('ignore')
             dist = getattr(_statistical_distributions, dist_name)
             return dist.rvs(*dist_param, **optional)
+        
+    def hist_rand(self, dist_name, dist_param, optional):
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore')
+            dist = getattr(_statistical_distributions, dist_name)
+            return dist.ppf(_random(), **optional)
+
 
     def _generate_dist_params(self, data, save=False, filepath=None):
         """
@@ -97,11 +104,15 @@ class generator(ABC):
         }
         return params 
         
-    def _save_parameters(self, filepath, params):
+    def _save_parameters(self, filepath, dist_params, **kwargs):
         if not filepath:
             filepath = 'dist-params_{}.json'.format(int(time.time()))
+        
+        gen_parameters = {'params': dist_params}
+        for k, v in kwargs.items():
+            gen_parameters[k] = v
         with open(filepath, 'w') as fp:
-            json.dump(params, fp)        
+            json.dump(gen_parameters, fp)        
         
 
 class job_generator(generator):
@@ -109,7 +120,7 @@ class job_generator(generator):
     PARALLEL = 2
 
     def __init__(self, total_nodes, resources_types, serial_prob, parallel_prob, parallel_node_prob, performance,
-                 min_request, max_request, params, distributions=['gamma', 'expon', 'erlang', 'beta', 'arcsine']):
+                 min_request, max_request, params, max_opers_serial, max_parallel_duration, distributions=['gamma', 'expon', 'erlang', 'beta', 'arcsine']):
         """
 
         :param total_nodes:
@@ -125,11 +136,14 @@ class job_generator(generator):
         self.total_nodes = total_nodes
         self.resources = list(min_request.keys())  # resources_types
         self.performance = performance
-        self.params = params
+        self.params = params['params'] if 'params' in params else {}
         self.minimal_request = min_request
         self.maximal_request = max_request
         generator.__init__(self, distributions)
         self._init_probabilities(serial_prob, parallel_prob, parallel_node_prob)
+        self.max_opers = _exp(params['max_opers']) if 'max_opers' in params else 0
+        self.max_opers_serial = max_opers_serial 
+        self.max_parallel_duration = max_parallel_duration
 
     def add_sample(self, log_runtimes, save=False):
         """
@@ -138,11 +152,14 @@ class job_generator(generator):
         :return:
         """
         if not self.params:
+            max_opers = max(log_runtimes)
+            if self.max_opers < max_opers:
+                self.max_opers = max_opers * 1.2  # at max 20% as in the sample
             hist, bins = _histogram(log_runtimes, bins='auto')
             self.params = self._generate_dist_params(hist)
             if save:
                 filename = 'job_params-{}'.format(int(time.time()))
-                self._save_parameters(filename, self.params)
+                self._save_parameters(filename, self.params, max_opers=self.max_opers)
 
 
     def next_job(self):
@@ -151,9 +168,19 @@ class job_generator(generator):
         :return:
         """
         assert (self.params), 'Sample data must be added first!'
-        gflops = _exp(self.dist_rand(**self.params))  # Distribution saves data in log format 
-        type, nodes, request = self._generate_request()
-        runtime = int(self._calc_runtime(gflops, nodes, request))
+        while True:
+            gflops = 0
+            while True:
+                try:
+                    gflops = _exp(self.hist_rand(**self.params))  # Distribution saves data in log format
+                    if gflops <= self.max_opers: 
+                        break
+                except OverflowError:
+                    pass 
+            type, nodes, request = self._generate_request(gflops)
+            runtime = int(self._calc_runtime(gflops, nodes, request))
+            if runtime <= self.max_parallel_duration * 1.1:
+                break
         return type, runtime, nodes, request
 
     def _central_node_prob(self, par_node_prob):
@@ -230,7 +257,7 @@ class job_generator(generator):
             return 0
         return gflops / part_power
 
-    def _generate_request(self, job_profiles=None):
+    def _generate_request(self, gflops, job_profiles=None):
         """
 
         :param job_profiles:
@@ -238,7 +265,7 @@ class job_generator(generator):
         """
         request = {k: 0 for k in self.resources}
         r = _random()
-        if r <= self.p_serial:
+        if r <= self.p_serial and gflops <= self.max_opers_serial:
             nodes = 1
             type = self.SERIAL
         else:
@@ -507,7 +534,7 @@ class workload_generator:
         arrive_gen_optional = {}
                
         resources = self._set_resources(resources_obj, sys_config)
-        _submissiont_times, _job_total_opers, serial_prob, nodes_parallel_prob, day_prob, month_prob = self._initialize(base_reader,
+        _submissiont_times, _job_total_opers, serial_prob, nodes_parallel_prob, day_prob, month_prob, max_opers_serial, max_parallel_duration = self._initialize(base_reader,
                                                                                                   performance,
                                                                                                   resources,
                                                                                                   non_processing_resources)
@@ -540,7 +567,7 @@ class workload_generator:
         resource_types = list(resources.total_resources().keys())
 
         self.job_generator = job_generator(total_nodes, resource_types, serial_prob, parallel_prob, nodes_parallel_prob,
-                                           performance, min_request, max_request, job_parameters, **job_gen_optional)
+                                           performance, min_request, max_request, job_parameters, max_opers_serial, max_parallel_duration, **job_gen_optional)
 
         if show_msg:
             print('Job generator samples...')
@@ -571,6 +598,8 @@ class workload_generator:
         _nodes_requested = {n + 1: 0 for n in range(total_nodes)}
         _n_parallel_requests = 0
         total_jobs = 0
+        _max_opers_serial = 0
+        _max_parallel_duration = 0
         while True:
             _dict = base_reader.next()
             if not _dict:
@@ -588,10 +617,15 @@ class workload_generator:
             _job_runtimes.append(duration)
             _job_submission_times.append(submisison_time)
             _job_type = self._define_job_type(requested_nodes, requested_proc_units)
-            _job_total_opers.add(self._job_operations(duration, requested_nodes, requested_proc_units, performance))
+            _job_total_oper = self._job_operations(duration, requested_nodes, requested_proc_units, performance)
+            _job_total_opers.add(_job_total_oper)
 
             _job_types[_job_type] += 1
+            if _job_type == 'serial' and _max_opers_serial < _job_total_oper:
+                _max_opers_serial = _job_total_oper
             if _job_type == 'parallel':
+                if _max_parallel_duration < duration:
+                    _max_parallel_duration = duration
                 _nodes_requested[requested_nodes] += 1
                 _n_parallel_requests += 1
 
@@ -606,7 +640,7 @@ class workload_generator:
         if _n_parallel_requests > 1:
             nodes_parallel_prob = {n: _nodes_requested[n] / _n_parallel_requests for n in _nodes_requested}
 
-        return _job_submission_times, _job_total_opers, _job_types['serial'], nodes_parallel_prob, _job_days, _job_months
+        return _job_submission_times, _job_total_opers, _job_types['serial'], nodes_parallel_prob, _job_days, _job_months, _max_opers_serial, _max_parallel_duration
 
     def generate_jobs(self, n, writer=None):
         """

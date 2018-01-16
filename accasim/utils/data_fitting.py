@@ -184,7 +184,10 @@ class distribution_fit:
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore')
             dist = getattr(_statistical_distributions, dist_name)
-            param = dist.fit(self.y)
-            pdf = dist.pdf(self.y, *param)
+            params = dist.fit(self.y)
+            arg = params[:-2]
+            loc = params[-2]
+            scale = params[-1]
+            pdf = dist.pdf(self.y, loc=loc, scale=scale, *arg)
             sse = _sum(_power(self.y - pdf, 2.0))
-        return (dist_name, sse, param)
+        return (dist_name, sse, params)
