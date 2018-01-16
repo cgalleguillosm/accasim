@@ -138,7 +138,7 @@ class job_generator(generator):
         :return:
         """
         if not self.params:
-            hist = _histogram(log_runtimes, bins='auto')
+            hist, bins = _histogram(log_runtimes, bins='auto')
             self.params = self._generate_dist_params(hist)
             if save:
                 filename = 'job_params-{}'.format(int(time.time()))
