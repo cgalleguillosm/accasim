@@ -153,8 +153,8 @@ class job_generator(generator):
         """
         if not self.params:
             max_opers = max(log_runtimes)
-            if self.max_opers < max_opers:
-                self.max_opers = max_opers * 1.2  # at max 20% as in the sample
+            if not hasattr(self, 'max_opers') or self.max_opers < max_opers:
+                self.max_opers = _log(_exp(max_opers) * 1.2)  # at max 20% as in the sample
             hist, bins = _histogram(log_runtimes, bins='auto')
             self.params = self._generate_dist_params(hist)
             if save:
@@ -661,6 +661,7 @@ class workload_generator:
         }
         jobs = {}
         for i in range(n):
+            print('job ', i)
             submit_time = self.arrive_generator.next_time(generation_stats)
             self._update_stats(generation_stats, submit_time)
             job_type, duration, nodes, request = self.job_generator.next_job()
