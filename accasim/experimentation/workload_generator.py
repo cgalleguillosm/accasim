@@ -82,7 +82,7 @@ class generator(ABC):
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore')
             dist = getattr(_statistical_distributions, dist_name)
-            return dist.ppf(_random(), **optional)
+            return dist.ppf(_random(), *dist_param, **optional)
 
 
     def _generate_dist_params(self, data, save=False, filepath=None):
