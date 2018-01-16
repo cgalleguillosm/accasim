@@ -82,7 +82,9 @@ class generator(ABC):
         :param data:
         :return:
         """
-        (dist_name, mle, param) = self.distribution_fit.auto_best_fit(data)
+        (dist_name, sse, param) = self.distribution_fit.auto_best_fit(data)
+        if sse < 0:
+            raise Exception('SSE negative.')
         params = {
             'dist_name': dist_name,
             'dist_param': param[:-2],
@@ -357,7 +359,7 @@ class arrive_generator(generator):
         avg_iatimes = sum(ia_times) / len(ia_times)
         avg_percentile = _percentileofscore(ia_times, avg_iatimes)
         iatimes_stdev = _pstdev(ia_times)
-        # print('Avg. ', avg_iatimes, ', Max diff', max_arrive_time_diff, ', Percentile', avg_percentile, 'Std', iatimes_stdev)
+        
         _log_arrive_time = _log(max_arrive_time_diff)
         
         if self.TOO_MUCH_ARRIVE_TIME > _log_arrive_time:
@@ -369,7 +371,6 @@ class arrive_generator(generator):
                     continue
                 if name not in self.params:
                     self.params[name] = {}
-                print('calculate')
                 self.params[name][type] = self._generate_dist_params(data[type])
     
                 if self.distribution_plot:
@@ -496,7 +497,7 @@ class workload_generator:
         :param kwargs:
         """
         show_msg = False
-        save_distributions = False
+        save_parameters = False
         job_parameters = {}
         arrive_parameters = {}
         job_gen_optional = {}
@@ -528,7 +529,7 @@ class workload_generator:
         self.arrive_generator = arrive_generator(init_time, day_prob, month_prob, arrive_parameters)
         if show_msg:
             print('Arrive generator samples...')
-        self.arrive_generator.add_sample(_submissiont_times, save=save_distributions)
+        self.arrive_generator.add_sample(_submissiont_times, save=save_parameters)
         if show_msg:
             print('Arrive generator samples... Loaded')
         total_nodes = sum([d['nodes'] for d in resources.definition])
@@ -578,6 +579,7 @@ class workload_generator:
             duration = int(_dict['duration'])
             requested_nodes = int(_dict['requested_nodes'])
             requested_resources = _dict['requested_resources']
+
             requested_proc_units = {k: v for k, v in requested_resources.items() if k in proc_units}
 
             _job_runtimes.append(duration)
@@ -623,10 +625,8 @@ class workload_generator:
         jobs = {}
         for i in range(n):
             submit_time = self.arrive_generator.next_time(generation_stats)
-            print("{}: submit time generated".format(i + 1))
             self._update_stats(generation_stats, submit_time)
             job_type, duration, nodes, request = self.job_generator.next_job()
-            print("{}: Job description generated".format(i + 1))
             jobs[i + 1] = {
                 'job_number': i + 1,
                 'submit_time': submit_time,

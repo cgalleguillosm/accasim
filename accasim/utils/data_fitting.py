@@ -24,7 +24,7 @@ SOFTWARE.
 import warnings
 from multiprocessing import Pool as _Pool, cpu_count as _cpu_count
 from scipy import stats as _statistical_distributions
-from numpy import isinf as _isinf, isnan as _isnan
+from numpy import sum as _sum, power as _power
 
 
 class distribution_fit:
@@ -157,7 +157,7 @@ class distribution_fit:
                     p.apply_async(self._best_fit, (dist_name,), callback=results.append)
                 p.close()
                 p.join()
-            return sorted(results, key=lambda r: abs(r[1]))[0]
+            return sorted(results, key=lambda r: r[1])[0]
         except IndexError:
             return self._best_fit(self.default_distribution)
 
@@ -185,7 +185,6 @@ class distribution_fit:
             warnings.filterwarnings('ignore')
             dist = getattr(_statistical_distributions, dist_name)
             param = dist.fit(self.y)
-            mle = dist.nnlf(param, self.y)
-        if _isinf(mle) or _isnan(mle):
-            mle = self.KINT64MAX
-        return (dist_name, mle, param)
+            pdf = dist.pdf(self.y, *param)
+            sse = _sum(_power(self.y - pdf, 2.0))
+        return (dist_name, sse, param)
