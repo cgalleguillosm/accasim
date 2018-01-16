@@ -30,6 +30,7 @@ from abc import ABC
 from scipy import stats as _statistical_distributions
 from scipy.stats import percentileofscore as _percentileofscore
 from statistics import pstdev as _pstdev
+from numpy import histogram as _histogram
 from sys import float_info as _min_float
 from math import exp as _exp, log as _log
 from random import random as _random
@@ -37,6 +38,7 @@ import warnings
 from collections import Counter
 import json
 import time
+from sortedcontainers import SortedList as _sorted_list
 
 
 class generator(ABC):
@@ -136,7 +138,8 @@ class job_generator(generator):
         :return:
         """
         if not self.params:
-            self.params = self._generate_dist_params(log_runtimes)
+            hist = _histogram(log_runtimes, bins='auto')
+            self.params = self._generate_dist_params(hist)
             if save:
                 filename = 'job_params-{}'.format(int(time.time()))
                 self._save_parameters(filename, self.params)
@@ -562,7 +565,7 @@ class workload_generator:
         _job_runtimes = []
         _job_submission_times = []
         _job_types = {'serial': 0, 'parallel': 0}
-        _job_total_opers = []
+        _job_total_opers = _sorted_list()
         _job_days = [0 for i in range(7)]
         _job_months = [0 for i in range(12)]
         _nodes_requested = {n + 1: 0 for n in range(total_nodes)}
@@ -585,7 +588,7 @@ class workload_generator:
             _job_runtimes.append(duration)
             _job_submission_times.append(submisison_time)
             _job_type = self._define_job_type(requested_nodes, requested_proc_units)
-            _job_total_opers.append(self._job_operations(duration, requested_nodes, requested_proc_units, performance))
+            _job_total_opers.add(self._job_operations(duration, requested_nodes, requested_proc_units, performance))
 
             _job_types[_job_type] += 1
             if _job_type == 'parallel':
