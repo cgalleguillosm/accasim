@@ -123,6 +123,7 @@ class allocator_weighted(ffp_alloc):
         :param res: the list of currently available resources for the system
         """
         self._avl_resources = res
+        self._sorted_keys = self._trim_nodes(list(self._avl_resources.keys()))
 
     def set_attr(self, **kwargs):
         """
@@ -173,6 +174,8 @@ class allocator_weighted(ffp_alloc):
         allocation = []
         success_counter = 0
         event_counter = 0
+        # Create aux resources for this allocation
+        self._set_aux_resources()
 
         # The required resources' counters are initialized according to the event queue given as input
         self._initialize_counters(es)
@@ -421,8 +424,9 @@ class allocator_weighted(ffp_alloc):
         """
         assert self._avl_resources is not None, 'The dictionary of available resources must be non-empty.'
         nodelist = []
+        s_nodes = self._find_sat_nodes(e.requested_resources)
         # For each node in the system, the job "fit", which is the number of job units fitting the node, is computed
-        for node in self._avl_resources.keys():
+        for node in s_nodes: #self._avl_resources.keys():
             fits = self._event_fits_node(self._avl_resources[node], e.requested_resources)
             # If the node has not enough resources to fit the job, it is simply discarded
             if fits == 0:
