@@ -174,7 +174,7 @@ class plot_factory:
 
         return self._preprocessed
 
-    def producePlot(self, type, title='', scale='linear', xlim=(None,None), ylim=(None,None), legend=True, figsize=(7,5), meansonly=False, alpha=0.005, smooth=30, output='Output.pdf'):
+    def producePlot(self, type, title='', scale='linear', xlim=(None,None), ylim=(None,None), legend=True, figsize=(7,5), meansonly=False, alpha=0.005, smooth=30, output='Output.pdf', groups = 1):
         """
         Produces a single plot on the pre-processed files.
         
@@ -203,13 +203,13 @@ class plot_factory:
         """
         if self._preprocessed:
             if type == self.SLOWDOWN_PLOT and self._plot_class == self.SCHEDULE_CLASS:
-                self.boxPlot(self._slowdowns,title,'Slowdown', scale, xlim, (1, None), figsize, meansonly, output)
+                self.boxPlot(self._slowdowns, title, 'Slowdown', scale, xlim, ylim, figsize, meansonly, output, groups)
             elif type == self.QUEUE_SIZE_PLOT and self._plot_class == self.SCHEDULE_CLASS:
-                self.boxPlot(self._queuesizes, title, 'Queue size', scale, xlim, (0, None), figsize, meansonly, output)
+                self.boxPlot(self._queuesizes, title, 'Queue size', scale, xlim, (0, None), figsize, meansonly, output, groups)
             elif type == self.LOAD_RATIO_PLOT and self._plot_class == self.SCHEDULE_CLASS:
                 self.distributionScatterPlot(self._loadratiosX, self._loadratiosY, title, scale, xlim, ylim, figsize, alpha, output)
             elif type == self.EFFICIENCY_PLOT and self._plot_class == self.SCHEDULE_CLASS:
-                self.boxPlot(self._efficiencies, title, 'Resource efficiency', scale, xlim, ylim, figsize, meansonly, output)
+                self.boxPlot(self._efficiencies, title, 'Resource efficiency', scale, xlim, ylim, figsize, meansonly, output, groups)
             elif type == self.SCALABILITY_PLOT and self._plot_class == self.BENCHMARK_CLASS:
                 self.scalabilityPlot(self._scalabilitydataX, self._scalabilitydataY, title, scale, xlim, ylim, figsize, legend, smooth, output)
             elif type == self.SIMULATION_TIME_PLOT and self._plot_class == self.BENCHMARK_CLASS:
@@ -339,7 +339,7 @@ class plot_factory:
 
             jobs = []
             slowdowns = []
-            timePoints = []
+            timePoints = #[]
             if self._debug:
                 print("Loading jobs...")
             while True:
@@ -596,7 +596,7 @@ class plot_factory:
         stats['quartiles'] = np.percentile(data, range(0, 100, 25))
         return stats
 
-    def boxPlot(self, data, title='', ylabel='', scale='linear', xlim=(None,None), ylim=(None,None), figsize=(7,5), meansonly=False, output='Output.pdf'):
+    def boxPlot(self, data, title='', ylabel='', scale='linear', xlim=(None,None), ylim=(None,None), figsize=(7,5), meansonly=False, output='Output.pdf', groups=1):
         """
         Produces a box-and-whiskers plot for the input data's distributions.
         
@@ -611,6 +611,7 @@ class plot_factory:
         :param meansonly: if True only the mean values for each distribution are depicted;
         :param output: the path to the output PDF file;
         """
+        cycler = ['b', 'r', 'y', 'g', 'c', 'm', 'k', 'w']
         fontsize = 12
         plt.rc('xtick', labelsize=fontsize)
         plt.rc('ytick', labelsize=fontsize)
@@ -623,11 +624,14 @@ class plot_factory:
         linecol = 'black'
         tricol = 'black'
         vertlinecol = 'gray'
-        rectcol = 'blue'
+        #rectcol = 'blue'
 
         fig, ax = plt.subplots(figsize=figsize)
 
+        c_group = 0
+        c = groups
         for i,d in enumerate(data):
+            rectcol = cycler[c_group]
             mydata = self._getDistributionStats(d)
             if not meansonly:
                 ax.add_patch(patches.Rectangle((ind[i], mydata.get('quartiles')[1]), width,mydata.get('quartiles')[3] - mydata.get('quartiles')[1], facecolor=rectcol, alpha=0.75))
@@ -640,6 +644,10 @@ class plot_factory:
                 # If meansonly is True, only a path is drawn for the mean values.
                 ax.add_patch(patches.Rectangle((ind[i], 0), width,mydata.get('avg'), facecolor=rectcol, alpha=0.75))
                 ax.scatter(ind[i] + width / 2, mydata.get('avg'), marker='_', s=markersize / 4, zorder=0, color=linecol)
+            c -= 1
+            if c == 0:
+                c_group += 1
+                c = groups
 
         # add some text for labels, title and axes ticks
         ax.set_ylabel(ylabel, fontsize=fontsize)
@@ -694,7 +702,7 @@ class plot_factory:
             avgman = np.average(np.array(dataman[i]))
             avgsched = np.average(np.array(datasched[i]))
             if i == 0:
-                ax.add_patch(patches.Rectangle((ind[i], 0), width, avgman, facecolor='orange', edgecolor='black', hatch='//', alpha=0.75, label='Simulation'))
+                ax.add_patch(patches.Rectangle((ind[i], 0), width, avgman, facecolor='orange', edgecolor='black', hatch='//', alpha=0.75))#, label='Simulation'))
                 ax.add_patch(patches.Rectangle((ind[i], avgman), width, avgsched, facecolor='blue', edgecolor='black', hatch='\\', alpha=0.75, label='Dispatching decision'))
             else:
                 ax.add_patch(patches.Rectangle((ind[i], 0), width, avgman, facecolor='orange', edgecolor='black', hatch='//', alpha=0.75))
