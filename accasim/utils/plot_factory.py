@@ -339,7 +339,7 @@ class plot_factory:
 
             jobs = []
             slowdowns = []
-            timePoints = #[]
+            timePoints = []
             if self._debug:
                 print("Loading jobs...")
             while True:

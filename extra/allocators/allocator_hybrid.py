@@ -136,12 +136,13 @@ class allocator_hybrid(allocator_weighted):
 
         # All the nodes in the avl_resources dictionary are classified, according to the critical resources
         # they possess
-        for node, res in self._avl_resources.items():
-            res_lists[self._critical_list_select(res)].append(node)
+        s_nodes = self._find_sat_nodes(e.requested_resources)
+        for node in s_nodes: #self._avl_resources.items():
+            res_lists[self._critical_list_select(self._avl_resources[node])].append(node)
 
-        res_lists[self._noneID] = self._get_sorted_node_sublist(e,res_lists[self._noneID])
+        res_lists[self._noneID] = self._get_sorted_node_sublist(e, res_lists[self._noneID])
         for key in self._critical_resources:
-            res_lists[key] = self._get_sorted_node_sublist(e,res_lists[key])
+            res_lists[key] = self._get_sorted_node_sublist(e, res_lists[key])
 
         # The lists are then combined, by placing in front the 'none' list, which is a buffer for the critical res
         final_list = res_lists[self._noneID]
