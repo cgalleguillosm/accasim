@@ -39,6 +39,9 @@ from os.path import isfile
 import numpy as np
 
 
+from time import clock
+
+
 class plot_factory:
     """
     A class for plot production and schedule files pre-processing.
@@ -46,7 +49,7 @@ class plot_factory:
     In this class, some basic algorithms are implemented for pre-processing the schedule files produced through 
     simulation, and for producing some common evaluation plots.
     """
-    
+
     SCHEDULE_CLASS = 'schedule'
     BENCHMARK_CLASS = 'benchmark'
     SLOWDOWN_PLOT = 'slowdown'
@@ -56,7 +59,7 @@ class plot_factory:
     SCALABILITY_PLOT = 'scalability'
     SIMULATION_TIME_PLOT = 'sim_time'
     SIMULAION_MEMORY_PLOT ='sim_memory'
-    
+
     PLOT_TYPES = {
         SCHEDULE_CLASS: [SLOWDOWN_PLOT, QUEUE_SIZE_PLOT, LOAD_RATIO_PLOT, EFFICIENCY_PLOT],
         BENCHMARK_CLASS: [SCALABILITY_PLOT, SIMULATION_TIME_PLOT, SIMULAION_MEMORY_PLOT]
@@ -78,7 +81,7 @@ class plot_factory:
 
         if not (plot_class in self.PLOT_TYPES.keys()):
             if self._debug:
-                print('Wrong Plot plot_class chosen. Selecting schedule plot_class by default...') 
+                print('Wrong Plot plot_class chosen. Selecting schedule plot_class by default...')
             plot_class = self.SCHEDULE_CLASS
         self._plot_class = plot_class
 
@@ -109,6 +112,20 @@ class plot_factory:
         if self._sim_params_fname is None:
             self._resource_order = DEFAULT_SIMULATION().parameters['RESOURCE_ORDER']
 
+        # Base resource availability per-node (never changes)
+        self._base_res = {}
+        # Current resource availability per-node
+        self._sys_res = {}
+        # Aggregated used resources for all nodes
+        self._used_res_sum = {}
+        # Aggregate base resource availability for used nodes only
+        self._avl_res_sum = {}
+        # Aggregated base resource availability for all nodes
+        self._base_res_sum = {}
+        # Amount of currently used nodes
+        self._used_nodes = 0
+        # Number of total nodes in the system
+        self._total_nodes = 0
 
     def setFiles(self, paths, labels):
         """
@@ -131,13 +148,15 @@ class plot_factory:
             self._labels = []
             self._filepaths = []
 
-    def preProcess(self):
+    def preProcess(self, trimSlowdown=True):
         """
         Performs pre-processing on all specified files, according to their type.
         
         If the files are of the schedule type, a meta-simulation is run for each of them, computing data like slowdown,
         queue size, load ratios and such. If the data is of the benchmark type, the files are simply parsed and their
         information stored.
+        
+        :param: trimSlowdown: boolean flag. If True, slowdown values equal to 1 will be discarded. Default is True
         
         """
         if not self._preprocessed:
@@ -151,7 +170,7 @@ class plot_factory:
                 self._preprocessed = True
                 for f in self._filepaths:
                     # If an error is encountered on one of the files, the process is aborted
-                    if not self._getScheduleData(f, self._config, self._resource):
+                    if not self._getScheduleData(f, self._config, self._resource, trimSlowdown):
                         self._preprocessed = False
                         break
 
@@ -207,7 +226,7 @@ class plot_factory:
             elif type == self.QUEUE_SIZE_PLOT and self._plot_class == self.SCHEDULE_CLASS:
                 self.boxPlot(self._queuesizes, title, 'Queue size', scale, xlim, (0, None), figsize, meansonly, output, groups)
             elif type == self.LOAD_RATIO_PLOT and self._plot_class == self.SCHEDULE_CLASS:
-                self.distributionScatterPlot(self._loadratiosX, self._loadratiosY, title, scale, xlim, ylim, figsize, alpha, output)
+                self.distributionScatterPlot(self._loadratiosX, self._loadratiosY, title, scale, (-0.01, 1.01), (-0.01, 1.01), figsize, alpha, output)
             elif type == self.EFFICIENCY_PLOT and self._plot_class == self.SCHEDULE_CLASS:
                 self.boxPlot(self._efficiencies, title, 'Resource efficiency', scale, xlim, ylim, figsize, meansonly, output, groups)
             elif type == self.SCALABILITY_PLOT and self._plot_class == self.BENCHMARK_CLASS:
@@ -293,7 +312,7 @@ class plot_factory:
         self._scalabilitydataY.append(finallist)
         return True
 
-    def _getScheduleData(self, filepath, config, resource=None):
+    def _getScheduleData(self, filepath, config, resource=None, trimSlowdown=True):
         """
         Performs pre-processing on a schedule file through a meta-simulation process.
         
@@ -301,13 +320,15 @@ class plot_factory:
         :param config: The path to the system configuration file;
         :param resource: A resource to be considered for resource-related metrics; if none is specified, all resource
             types are used;
+        :param: trimSlowdown: boolean flag. If True, slowdown values equal to 1 will be discarded. Default is True
         :return: True if successful, False otherwise;
         """
         if self._debug:
             print("- Pre-processing file " + filepath + "...")
         # Generates the dictionary of system resources from the config file
         resobject, equiv = self._generateSystemConfig(config)
-        base_res = resobject.availability()
+        self._base_res = resobject.availability()
+        res_types = resobject.system_resource_types
 
         # Makes sure the resource type exists in the system
         if resource is not None and resource not in resobject.system_resource_types:
@@ -337,9 +358,10 @@ class plot_factory:
             else:
                 reader = default_reader_class(filepath, parser=define_result_parser(_sim_params_path), equivalence=equiv)
 
-            jobs = []
             slowdowns = []
-            timePoints = []
+            timePoints = set()
+            jobs = {}
+            rev_timePoints = {}
             if self._debug:
                 print("Loading jobs...")
             while True:
@@ -355,96 +377,104 @@ class plot_factory:
                     duration = _end_time - _start_time
                     wait = _start_time - _queued_time
                     slowdown = (wait + duration) / duration if duration != 0 else wait if wait != 0 else 1.0
-                    #===========================================================
-                    # What happen if there is only 1.0 slowdown values?? The chart must be skipped? or generated?
-                    # if slowdown > 1.0:
-                    #     slowdowns.append(slowdown)
-                    #===========================================================
-                    slowdowns.append(slowdown)
-                    jobs.append(job)
+                    if slowdown > 1.0 or not trimSlowdown:
+                        slowdowns.append(slowdown)
+
+                    job_id = job['job_id']
+                    jobs[job_id] = job
                     # Timepoints for use in the simulation are stored
-                    timePoints.append(_queued_time)
-                    timePoints.append(_start_time)
-                    timePoints.append(_end_time)
+                    timePoints.add(_queued_time)
+                    self._addToDictAsList(rev_timePoints, _queued_time, job_id, 'queue')
+                    timePoints.add(_start_time)
+                    self._addToDictAsList(rev_timePoints, _start_time, job_id, 'start')
+                    if duration > 0:
+                        timePoints.add(_end_time)
+                        self._addToDictAsList(rev_timePoints, _end_time, job_id, 'end')
                 else:
                     break
         except Exception as e:
             raise Exception("Error encountered while pre-processing: " + str(e))
 
+        # It may happen that the slowdown list is empty if all jobs have a value equal to 1. In this case we add
+        # a fake value, equal to 1 as well
+        if trimSlowdown and len(slowdowns) == 0:
+            slowdowns.append(1)
+
         if self._debug:
             print("Jobs loaded. Sorting...")
 
-        # Jobs are sorted by their submission time, like in the original simulation
-        jobs.sort(key=lambda x: x['queue_time'])
         # We compute the final set of distinct, ordered timepoints
-        timePoints = sorted(set(timePoints))
-
-        queued = []
-        resources = []
-
+        timePoints = sorted(timePoints)
         timePointsIDX = 0
-        jobIDX = 0
-        sys_res = deepcopy(base_res)
 
-        queue = []
-        run = []
-        efficiency = []
-        efficiencyperjob = []
-        running = []
+        self._sys_res = deepcopy(self._base_res)
+        self._base_res_sum = {k: sum(self._base_res[n][k] for n in self._base_res) for k in res_types}
+        self._used_res_sum = {k: 0 for k in res_types}
+        self._avl_res_sum = {k: 0 for k in res_types}
+        self._used_nodes = 0
+        self._total_nodes = len(self._base_res.values())
+
+        queue = set()
+        running = set()
+
+        # Pre-allocating the lists to store performance metrics, for efficiency
+        queued = [0] * len(timePoints)  # []
+        resources = [0] * len(timePoints)  # []
+        run = [0] * len(timePoints)  # []
+        efficiency = [0] * len(timePoints)  # []
+        efficiencyperjob = [0] * len(jobs)  # []
+        efficiencyIDX = 0
 
         if self._debug:
             print("Sorting done. Starting simulation...")
 
-        # Meta-simulations: goes on until there are no more timepoints to consider
+        # Meta-simulation: goes on until there are no more timepoints to consider
         while timePointsIDX < len(timePoints):
             point = timePoints[timePointsIDX]
             timePointsIDX += 1
 
-            # Adds to the queue jobs that were submitted in this timepoint; the index is persistent, for efficiency
-            while jobIDX < len(jobs):
-                j = jobs[jobIDX]
-                assert j['queue_time'] >= point
-                if j['queue_time'] == point:
-                    queue.append(jobs[jobIDX])
-                    jobIDX += 1
-                else:
-                    break
+            # Adds to the queue jobs that were submitted in this timepoint
+            jobstoqueue = rev_timePoints[point]['queue']
+            # queue += len(jobstoqueue)
+            queue.update(jobstoqueue)
 
             # System metrics are computed BEFORE dispatching
-            queued.append(len(queue) + 1)
-            run.append(len(running) + 1)
-            resources.append(self._getLoadRatio(base_res, sys_res, resource))
-            efficiency.append(self._getLoadRatioSelective(base_res, sys_res, resource))
-            
+            queued[timePointsIDX - 1] = (len(queue) + 1)  # queue + 1
+            run[timePointsIDX - 1] = (len(running) + 1)  # running + 1
+            resources[timePointsIDX - 1] = self._getLoadRatio(resource)
+            efficiency[timePointsIDX - 1] = self._getLoadRatioSelective(resource)
+
             # Jobs that have terminated release their resources
-            jobstoend = [j for j in running if j['end_time'] == point]
-            for j in jobstoend:
-                req, assignations = self._getRequestedResources(_resource_order, j['assignations'])
-                for node in assignations:
-                    for k,val in req.items():
-                        sys_res[node][k] += val
-                running.remove(j)
-            
+            jobstoend = rev_timePoints[point]['end']
+            if len(jobstoend) > 0:
+                for j_id in jobstoend:
+                    j = jobs[j_id]
+                    req, assignations = self._getRequestedResources(_resource_order, j['assignations'])
+                    self._deallocate_resources(req, assignations, resource)
+                # running -= len(jobstoend)
+                running = running - jobstoend
+
             # Jobs that have to start take their resources from the system
-            jobstostart = [j for j in queue if j['start_time'] == point]
-            for j in jobstostart:
-                if j['end_time'] - j['start_time'] > 0:
-                    req, assignations = self._getRequestedResources(_resource_order, j['assignations'])
-                    for node in assignations:
-                        for k, val in req.items():
-                            sys_res[node][k] -= val
-                            if sys_res[node][k] < 0:
-                                sys_res[node][k] = 0
-                                if self._debug:
-                                    print("Caution: resource " + k + " is going below zero.")
-                    running.append(j)
-                queue.remove(j)
-            # Additionally, we store for every started job its resource allocation efficiency
-            for j in jobstostart:
-                if j['end_time'] - j['start_time'] > 0:
-                    req, assignations = self._getRequestedResources(_resource_order, j['assignations'])
-                    eff = self._getResourceEfficiency(req, assignations, sys_res, resource)
-                    efficiencyperjob.append(eff)
+            jobstostart = rev_timePoints[point]['start']
+            if len(jobstostart) > 0:
+                for j_id in jobstostart:
+                    j = jobs[j_id]
+                    if j['end_time'] - j['start_time'] > 0:
+                        req, assignations = self._getRequestedResources(_resource_order, j['assignations'])
+                        self._allocate_resources(req, assignations, resource)
+                        # running += 1
+                        running.add(j_id)
+                # queue -= len(jobstostart)
+                queue = queue - jobstostart
+
+                # Additionally, we store for every started job its resource allocation efficiency
+                for j_id in jobstostart:
+                    j = jobs[j_id]
+                    if j['end_time'] - j['start_time'] > 0:
+                        req, assignations = self._getRequestedResources(_resource_order, j['assignations'])
+                        eff = self._getResourceEfficiency(req, assignations, self._sys_res, resource)
+                        efficiencyperjob[efficiencyIDX] = eff
+                        efficiencyIDX += 1
 
         if self._debug:
             print("Simulation done!")
@@ -456,6 +486,87 @@ class plot_factory:
         self._loadratiosX.append([el[0] for el in efficiency])
         self._loadratiosY.append([el[1] for el in efficiency])
         return True
+
+    def _addToDictAsList(self, dict, key, el, type):
+        """
+        Simple method that adds an element to a dictionary and creates sub-entries if needed.
+        
+        :param dict: The target dictionary 
+        :param key: The key of the element to add
+        :param el: The element to add
+        :param type: The type of the element to add, used in the sub-dictionary for the key entry
+        :return: None
+        """
+        if key not in dict:
+            dict[key] = {'queue': set(), 'start': set(), 'end': set()}
+        dict[key][type].add(el)
+
+    def _allocate_resources(self, req, assignations, resource=None):
+        """
+        Method that allocates the resources for a certain starting job and updates all data structures related to
+        resource usage
+        
+        :param req: The resource request of the job
+        :param assignations: The list of nodes assigned to the job
+        :param resource: A resource type to be considered for performance metrics (optional)
+        :return: None
+        """
+        for node in assignations:
+            # If the node goes from the unused to the used state, we update the number of used nodes and the amount
+            # of available resources among the used nodes, for the efficiency plots
+            if resource is None and all(self._sys_res[node][k] == self._base_res[node][k] for k in self._base_res[node].keys()):
+                self._used_nodes += 1
+                for k, v in self._base_res[node].items():
+                    self._avl_res_sum[k] += v
+            # If a specific resource type is considered, the same condition is triggered only if such resource is used
+            elif resource is not None and self._sys_res[node][resource] == self._base_res[node][resource] and req[resource] > 0:
+                self._used_nodes += 1
+                self._avl_res_sum[resource] += self._base_res[node][resource]
+            # Updating the per-node currently available resources
+            for k, val in req.items():
+                self._sys_res[node][k] -= val
+                if self._sys_res[node][k] < 0:
+                    self._sys_res[node][k] = 0
+                    if self._debug:
+                        print("Caution: resource " + k + " is going below zero.")
+
+        # Updating the dictionary of per-type currently used resources
+        for k, v in req.items():
+            self._used_res_sum[k] += v * len(assignations)
+            if self._used_res_sum[k] > self._avl_res_sum[k]:
+                self._used_res_sum[k] = self._avl_res_sum[k]
+
+    def _deallocate_resources(self, req, assignations, resource):
+        """
+        Method that de-allocates the resources for a certain starting job and updates all data structures related to
+        resource usage
+        
+        :param req: The resource request of the job
+        :param assignations: The list of nodes assigned to the job
+        :param resource: A resource type to be considered for performance metrics (optional)
+        :return: None
+        """
+        for node in assignations:
+            for k, val in req.items():
+                self._sys_res[node][k] += val
+                if self._sys_res[node][k] > self._base_res[node][k]:
+                    self._sys_res[node][k] = self._base_res[node][k]
+                    if self._debug:
+                        print("Caution: resource " + k + " is going beyond its base capacity.")
+        # In this case the check for used-unused nodes must be performed after the resources are de-allocated
+            if resource is None and all(self._sys_res[node][k] == self._base_res[node][k] for k in self._base_res[node].keys()):
+                self._used_nodes -= 1
+                for k, v in self._base_res[node].items():
+                    self._avl_res_sum[k] -= v
+            elif resource is not None and self._sys_res[node][resource] == self._base_res[node][resource] and req[resource] > 0:
+                self._used_nodes -= 1
+                self._avl_res_sum[resource] -= self._base_res[node][resource]
+
+        # The method is specular to allocate_resources and works identically
+        for k, v in req.items():
+            self._used_res_sum[k] -= v * len(assignations)
+            if self._used_res_sum[k] < 0:
+                self._used_res_sum[k] = 0
 
     def _generateSystemConfig(self, config_path):
         """
@@ -519,63 +630,39 @@ class plot_factory:
                 avl += sys_res[node][resource]
         return used / (avl + used)
 
-    def _getLoadRatio(self, base_res, sys_res, resource):
+    def _getLoadRatio(self, resource):
         """
         Returns the standard load ratio for the system.
         
-        :param base_res: the basic availability of resources in the system;
-        :param sys_res: the system resources dictionary;
         :param resource: the resource type to be considered (if present);
         :return: the load ratio;
         """
-        used = 0
-        available = 0
-        for k, node in sys_res.items():
-            if resource is None:
-                defaultavl = sum([r for r in base_res[k].values()])
-                used += defaultavl - sum([r for r in node.values()])
-                available += defaultavl
-            elif base_res[k][resource] > 0:
-                defaultavl = base_res[k][resource]
-                used += defaultavl - node[resource]
-                available += defaultavl
+        loadratio = 0
 
-        return used / available
+        if resource is None:
+            loadratio = sum(self._used_res_sum.values()) / sum(self._base_res_sum.values())
+        elif resource in self._base_res_sum:
+            loadratio = self._used_res_sum[resource] / self._base_res_sum[resource]
 
-    def _getLoadRatioSelective(self, base_res, sys_res, resource):
+        return loadratio
+
+    def _getLoadRatioSelective(self, resource):
         """
         Returns the per-step resource allocation efficiency.
         
         This is defined as a X,Y pair where X expresses the fraction of used nodes, and Y defines the fraction of used
         resources in such nodes.
-        
-        :param base_res: the basic resource availability in the system;
-        :param sys_res: the system resources dictionary;
+
         :param resource: the resource type to be considered (if present);
         :return: an X,Y pair expressing the per-step resource allocation efficiency;
         """
-        usednodes = 0
-        usedres = 0
-        avlres = 0
-        for k, node in sys_res.items():
+        loadratio = 0
+        if self._used_nodes > 0:
             if resource is None:
-                defaultavl = sum([r for r in base_res[k].values()])
-                used = defaultavl - sum([r for r in node.values()])
-                # Adding the node to the used set if there are used resources in it
-                if used > 0:
-                    usednodes += 1
-                    usedres += used
-                    avlres += defaultavl
-            elif base_res[k][resource] > 0:
-                defaultavl = base_res[k][resource]
-                used = defaultavl - node[resource]
-                if used > 0:
-                    usednodes += 1
-                    usedres += used
-                    avlres += defaultavl
-
-        if usednodes > 0:
-            return usednodes / len(base_res.values()), usedres / avlres
+                loadratio = sum(self._used_res_sum.values()) / sum(self._avl_res_sum.values())
+            elif resource in self._avl_res_sum:
+                loadratio = self._used_res_sum[resource] / self._avl_res_sum[resource]
+            return self._used_nodes / self._total_nodes, loadratio
         else:
             return 0, 0
 
@@ -870,7 +957,7 @@ class plot_factory:
 
         for i in range(len(xdata)):
             fig, ax = plt.subplots(figsize=figsize)
-            
+
             ax.scatter(xdata[i], ydata[i], color='black', alpha=alpha, s=5)
 
             ax.set_title(title)
