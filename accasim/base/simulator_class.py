@@ -42,6 +42,7 @@ from _functools import reduce
 import inspect
 import asyncio
 from builtins import exit as _exit
+from time import time as _time
 
 
 class simulator_base(ABC):
@@ -74,6 +75,9 @@ class simulator_base(ABC):
 
         self.mapper = event_mapper(self.resource_manager)
         self.additional_data = self.additional_data_init(_additional_data)
+
+        self.timeout = kwargs.pop('timeout', None)
+        self._id = kwargs.pop('id', None)
 
         self.show_config()
         if self.constants.OVERWRITE_PREVIOUS:
@@ -441,7 +445,8 @@ class hpc_simulator(simulator_base):
         :param debug: Debugging flag
         
         """
-
+        init_sim_time = _time()
+        ontime = True
         # =======================================================================
         # Load events corresponding at the "current time" and the next one
         # =======================================================================
@@ -534,9 +539,14 @@ class hpc_simulator(simulator_base):
                     self.write_to_benchmark(_actual_time, queuelen, benchEndTime - benchStartTime, scheduleTime,
                                             dispatchTime, benchMemUsage)
                 )
-
+                
+            if self.timeout <= int(_time() - init_sim_time):
+                ontime = False
+                break 
+            
         self.end_simulation_time = _clock()
-        assert (self.loaded_jobs == len(self.mapper.finished)), 'Loaded {} and Finished {}'.format(self.loaded_jobs,
+        if ontime:
+            assert (self.loaded_jobs == len(self.mapper.finished)), 'Loaded {} and Finished {}'.format(self.loaded_jobs,
                                                                                                    len(
                                                                                                        self.mapper.finished))
         self.statics_write_out(self.constants.SHOW_STATISTICS, self.constants.STATISTICS_OUTPUT)

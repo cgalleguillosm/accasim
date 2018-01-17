@@ -38,7 +38,7 @@ class experiment_class:
 
     SIMULATOR_ATTRIBUTES = {'scheduling_output': True, 'pprint_output': False, 'benchmark_output': True,
                             'statistics_output': True, 'job_factory': None, 'reader': None,
-                            'save_parameters': ['RESOURCE_ORDER']}
+                            'save_parameters': ['RESOURCE_ORDER'], 'timeout': None, 'id': None}
     _SEPARATOR = '_'
     _RESULTS_FOLDER = 'results/{}/{}'
     _SCHEDULE_PREFIX = 'sched-'
@@ -74,6 +74,7 @@ class experiment_class:
             - benchmark_output: True by default.
             - statistics_output: True by default.
             - save_parameters: ['resource_order']. A list of simulator parameters to be saved as simulator_parameters.json in results/{name}/{dispatching_instance}.
+            - timeout: Timeout in secs.
         """
         self.name = name
         self.dispatchers = {}
@@ -127,6 +128,13 @@ class experiment_class:
                 _name = self._generate_name(_dispatcher.name, _alloc.name)
                 self.add_dispatcher(_name, _dispatcher)
 
+
+    def _run_simulation(self, _dispatcher):
+        simulator = hpc_simulator(self.sys_config, _dispatcher, self.workload,
+            simulator_config=self.simulator_config, **
+            self.SIMULATOR_ATTRIBUTES)
+        simulator.start_simulation()
+
     def run_simulation(self, generate_plot=True):
         """
         Starts the simulation process. It's uses each instance of dispatching method to create the experiment.
@@ -140,12 +148,10 @@ class experiment_class:
         for i, (_name, _dispatcher) in enumerate(self.dispatchers.items()):
             result_folder = self.create_folders(self.name, _name)
             self.results[_name] = result_folder
+            self.SIMULATOR_ATTRIBUTES['id'] = '{}_{}'.format(self.name, _name)
             self.SIMULATOR_ATTRIBUTES['RESULTS_FOLDER_NAME'] = result_folder
             print('{}/{}: Starting simulation of {}'.format(i + 1, _total, _name))
-            simulator = hpc_simulator(self.sys_config, _dispatcher, self.workload,
-                                      simulator_config=self.simulator_config,
-                                      **self.SIMULATOR_ATTRIBUTES)
-            simulator.start_simulation()
+            self._run_simulation(_dispatcher)
             print('\n')
         
         # Generate all plots available in the plot factory class
