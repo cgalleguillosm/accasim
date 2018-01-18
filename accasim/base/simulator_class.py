@@ -286,6 +286,15 @@ class simulator_base(ABC):
             _param: getattr(self.constants, _param) for _param in _parameters 
         }
         save_jsonfile(filename_path, _dict)
+        
+    def _generated_filepaths(self):
+        possible_filepaths = [
+            (self.constants.STATISTICS_OUTPUT, self.constants.STATISTICS_PREFIX, _path.join(self.constants.RESULTS_FOLDER_PATH, self.constants.STATISTICS_PREFIX + self.constants.WORKLOAD_FILENAME)),
+            (self.constants.BENCHMARK_OUTPUT, self.constants.BENCHMARK_PREFIX, _path.join(self.constants.RESULTS_FOLDER_PATH, self.constants.BENCHMARK_PREFIX + self.constants.WORKLOAD_FILENAME)),
+            (self.constants.SCHEDULING_OUTPUT, self.constants.SCHED_PREFIX, _path.join(self.constants.RESULTS_FOLDER_PATH, self.constants.SCHED_PREFIX + self.constants.WORKLOAD_FILENAME)),
+            (self.constants.PPRINT_OUTPUT, self.constants.PPRINT_PREFIX, _path.join(self.constants.RESULTS_FOLDER_PATH, self.constants.PPRINT_PREFIX + self.constants.WORKLOAD_FILENAME))            
+        ]
+        return {f[1]:f[2] for f in possible_filepaths if f[0]}
 
 class hpc_simulator(simulator_base):
     """
@@ -434,8 +443,10 @@ class hpc_simulator(simulator_base):
         [d['object'].stop() for d in self.daemons.values() if d['object']]
         if visualization:
             _stop.set()
-        
+
+        filepaths = self._generated_filepaths()
         self._clean_simulator_constants()
+        return filepaths
 
     def start_hpc_simulation(self, debug=False):
         """
@@ -445,8 +456,9 @@ class hpc_simulator(simulator_base):
         :param debug: Debugging flag
         
         """
-        init_sim_time = _time()
-        ontime = True
+        if self.timeout:
+            init_sim_time = _time()
+            ontime = True
         # =======================================================================
         # Load events corresponding at the "current time" and the next one
         # =======================================================================
@@ -540,12 +552,12 @@ class hpc_simulator(simulator_base):
                                             dispatchTime, benchMemUsage)
                 )
                 
-            if self.timeout is not None and self.timeout <= int(_time() - init_sim_time):
+            if self.timeout and self.timeout <= int(_time() - init_sim_time):
                 ontime = False
                 break 
             
         self.end_simulation_time = _clock()
-        if ontime:
+        if self.timeout and ontime:
             assert (self.loaded_jobs == len(self.mapper.finished)), 'Loaded {} and Finished {}'.format(self.loaded_jobs,
                                                                                                    len(
                                                                                                        self.mapper.finished))
