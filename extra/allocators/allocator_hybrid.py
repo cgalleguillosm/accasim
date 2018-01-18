@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 from extra.allocators.allocator_weighted import allocator_weighted
-from accasim.base.allocator_class import ffp_alloc
+from accasim.base.allocator_class import ff_alloc
 
 
 class allocator_hybrid(allocator_weighted):
@@ -44,7 +44,7 @@ class allocator_hybrid(allocator_weighted):
         :param kwargs: critical_res = defines the set of resource types to be preserved (default mic,gpu); 
                        window_size = defines the window size for job resource analysis(default 100);            
         """
-        ffp_alloc.__init__(self, seed, res_man)
+        ff_alloc.__init__(self, seed, res_man)
 
         win_key = 'window_size'
         res_key = 'critical_res'

@@ -167,7 +167,7 @@ class allocator_base(ABC):
         """
         return self.get_id()
 
-class ffp_alloc(allocator_base):
+class ff_alloc(allocator_base):
     """
     
     A simple First-Fit allocator. Does not sort the resources.
@@ -506,7 +506,7 @@ class ffp_alloc(allocator_base):
         nodes = reduce(_sorted_set.intersection, sat_nodes.values())
         return nodes  # , tot_fitting_reqs
 
-class bfp_alloc(ffp_alloc):
+class bf_alloc(ff_alloc):
     """
     
     Best-Fit Allocator
@@ -529,7 +529,7 @@ class bfp_alloc(ffp_alloc):
         :param kwargs: None at the moment
         
         """
-        ffp_alloc.__init__(self, seed, resource_manager)
+        ff_alloc.__init__(self, seed, resource_manager)
 
         self.ranking = lambda x: sum(self._avl_resources[x].values())
         """

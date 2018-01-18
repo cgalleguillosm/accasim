@@ -540,7 +540,7 @@ class hpc_simulator(simulator_base):
                                             dispatchTime, benchMemUsage)
                 )
                 
-            if self.timeout <= int(_time() - init_sim_time):
+            if self.timeout is not None and self.timeout <= int(_time() - init_sim_time):
                 ontime = False
                 break 
             

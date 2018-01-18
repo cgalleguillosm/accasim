@@ -203,11 +203,11 @@ class experiment_class:
             resultlabel, resultpath = self.retrieve_filepaths(self.results, prefix=_prefix)
             _plot_factory = plot_factory(plot_class, self._SIMULATOR_PARAMS_FILENAME, config=self.sys_config,
                                          workload_parser=self.parser)
-            _plot_factory.setFiles(resultpath, resultlabel)
-            _plot_factory.preProcess()
+            _plot_factory.set_files(resultpath, resultlabel)
+            _plot_factory.pre_process()
             for plot_type in plot_types:
                 output_fpath_ = _join(experiment_folder, '{}.pdf'.format(plot_type))
-                _plot_factory.producePlot(type=plot_type, output=output_fpath_)
+                _plot_factory.produce_plot(type=plot_type, output=output_fpath_)
                 
     def _generate_name(self, _sched_name, _alloc_name):
         """

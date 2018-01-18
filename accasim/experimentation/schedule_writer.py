@@ -82,7 +82,7 @@ class workload_writer(ABC):
         if hasattr(self, 'file'):
             self.close_file()
         
-class swf_writer(workload_writer):
+class default_writer(workload_writer):
     
     JOB_NUMBER = ('job_number', 0)
     SUBMIT_TIME = ('submit_time', 0)

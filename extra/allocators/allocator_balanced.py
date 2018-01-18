@@ -21,11 +21,11 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-from accasim.base.allocator_class import ffp_alloc
+from accasim.base.allocator_class import ff_alloc
 from copy import copy
 
 
-class allocator_balanced(ffp_alloc):
+class allocator_balanced(ff_alloc):
     """
     An allocator which considers a set of critical and scarce resource types (like GPUs or MICs), and tries to balance 
     the allocation to the respective nodes in order to avoid fragmentation and waste.
@@ -47,7 +47,7 @@ class allocator_balanced(ffp_alloc):
         :param resource_manager: reference to the system resource manager
         :param kwargs: critical_res = defines the set of resource types to be balanced (default mic,gpu); 
         """
-        ffp_alloc.__init__(self, seed, res_man)
+        ff_alloc.__init__(self, seed, res_man)
 
         res_key = 'critical_res'
         # If the user doesn't supply the set of resources to balance, mic and gpu are used by default
@@ -117,7 +117,7 @@ class allocator_balanced(ffp_alloc):
             if rr_res is not self._noneID:
                 self._res_lists[self._critical_list_select(self._avl_resources[node])].remove(node)
                 temp_node_list.append(node)
-        ffp_alloc._update_resources(self, reserved_nodes, requested_resources)
+        ff_alloc._update_resources(self, reserved_nodes, requested_resources)
         # Again, nodes that are involved in the update are re-added to the lists, according to their new resources
         for node in temp_node_list:
             self._res_lists[self._critical_list_select(self._avl_resources[node])].append(node)

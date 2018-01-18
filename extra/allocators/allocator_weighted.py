@@ -21,10 +21,10 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-from accasim.base.allocator_class import ffp_alloc
+from accasim.base.allocator_class import ff_alloc
 
 
-class allocator_weighted(ffp_alloc):
+class allocator_weighted(ff_alloc):
     """
     An allocator which tries to perform optimization on the allocation of all events in the queue.
 
@@ -57,7 +57,7 @@ class allocator_weighted(ffp_alloc):
                        critical_steps = the number of steps in the scale between the critical_bounds (default 9);
                        window_size = defines the window size for job resource analysis(default 100);            
         """
-        ffp_alloc.__init__(self, seed, res_man)
+        ff_alloc.__init__(self, seed, res_man)
 
         win_key = 'window_size'
         res_key = 'critical_res'

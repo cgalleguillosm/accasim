@@ -29,7 +29,6 @@ from accasim.utils.reader_class import default_reader_class
 from accasim.utils.misc import load_config, from_isodatetime_2_timestamp as _timestamp, str_resources
 from accasim.utils.file import path_leaf, load_jsonfile
 from accasim.base.resource_manager_class import resources_class
-from accasim.utils.misc import CONSTANT
 from accasim.experimentation.schedule_parser import define_result_parser
 from accasim.utils.misc import DEFAULT_SIMULATION
 from copy import deepcopy
@@ -37,9 +36,6 @@ from os.path import splitext as _splitext, join as _join
 from scipy.signal import savgol_filter
 from os.path import isfile
 import numpy as np
-
-
-from time import clock
 
 
 class plot_factory:
@@ -127,7 +123,7 @@ class plot_factory:
         # Number of total nodes in the system
         self._total_nodes = 0
 
-    def setFiles(self, paths, labels):
+    def set_files(self, paths, labels):
         """
         Set the paths and labels of the files to be analyzed.
         
@@ -148,7 +144,7 @@ class plot_factory:
             self._labels = []
             self._filepaths = []
 
-    def preProcess(self, trimSlowdown=True):
+    def pre_process(self, trimSlowdown=True):
         """
         Performs pre-processing on all specified files, according to their type.
         
@@ -193,7 +189,7 @@ class plot_factory:
 
         return self._preprocessed
 
-    def producePlot(self, type, title='', scale='linear', xlim=(None,None), ylim=(None,None), legend=True, figsize=(7,5), meansonly=False, alpha=0.005, smooth=30, output='Output.pdf', groups = 1):
+    def produce_plot(self, type, title='', scale='linear', xlim=(None,None), ylim=(None,None), legend=True, figsize=(7,5), meansonly=False, alpha=0.005, smooth=30, output='Output.pdf', groups = 1):
         """
         Produces a single plot on the pre-processed files.
         
@@ -220,25 +216,27 @@ class plot_factory:
             the higher the smoothing;
         :param output: path of the output PDF file;
         """
-        if self._preprocessed:
-            if type == self.SLOWDOWN_PLOT and self._plot_class == self.SCHEDULE_CLASS:
-                self.boxPlot(self._slowdowns, title, 'Slowdown', scale, xlim, ylim, figsize, meansonly, output, groups)
-            elif type == self.QUEUE_SIZE_PLOT and self._plot_class == self.SCHEDULE_CLASS:
-                self.boxPlot(self._queuesizes, title, 'Queue size', scale, xlim, (0, None), figsize, meansonly, output, groups)
-            elif type == self.LOAD_RATIO_PLOT and self._plot_class == self.SCHEDULE_CLASS:
-                self.distributionScatterPlot(self._loadratiosX, self._loadratiosY, title, scale, (-0.01, 1.01), (-0.01, 1.01), figsize, alpha, output)
-            elif type == self.EFFICIENCY_PLOT and self._plot_class == self.SCHEDULE_CLASS:
-                self.boxPlot(self._efficiencies, title, 'Resource efficiency', scale, xlim, ylim, figsize, meansonly, output, groups)
-            elif type == self.SCALABILITY_PLOT and self._plot_class == self.BENCHMARK_CLASS:
-                self.scalabilityPlot(self._scalabilitydataX, self._scalabilitydataY, title, scale, xlim, ylim, figsize, legend, smooth, output)
-            elif type == self.SIMULATION_TIME_PLOT and self._plot_class == self.BENCHMARK_CLASS:
-                self.boxPlotTimes(self._mantimes, self._schedtimes, title, scale, xlim, ylim, figsize, legend, output)
-            elif type == self.SIMULAION_MEMORY_PLOT and self._plot_class == self.BENCHMARK_CLASS:
-                self.boxPlotMemory(self._simmemory, title, scale, xlim, ylim, figsize, legend, output)
-            else:
-                raise Exception("Plot type specified is not valid. Review the documentation for valid plot types.")
+        if not self._preprocessed:
+            self.pre_process()
+            print("Plot_factory: Files were not pre-processed yet. Calling the pre_process method.")
+
+        if type == self.SLOWDOWN_PLOT and self._plot_class == self.SCHEDULE_CLASS:
+            self.box_plot(self._slowdowns, title, 'Slowdown', scale, xlim, ylim, figsize, meansonly, output, groups)
+        elif type == self.QUEUE_SIZE_PLOT and self._plot_class == self.SCHEDULE_CLASS:
+            self.box_plot(self._queuesizes, title, 'Queue size', scale, xlim, (0, None), figsize, meansonly, output, groups)
+        elif type == self.LOAD_RATIO_PLOT and self._plot_class == self.SCHEDULE_CLASS:
+            self.distribution_scatter_plot(self._loadratiosX, self._loadratiosY, title, scale, (-0.01, 1.01), (-0.01, 1.01), figsize, alpha, output)
+        elif type == self.EFFICIENCY_PLOT and self._plot_class == self.SCHEDULE_CLASS:
+            self.box_plot(self._efficiencies, title, 'Resource efficiency', scale, xlim, ylim, figsize, meansonly, output, groups)
+        elif type == self.SCALABILITY_PLOT and self._plot_class == self.BENCHMARK_CLASS:
+            self.scalability_plot(self._scalabilitydataX, self._scalabilitydataY, title, scale, xlim, ylim, figsize, legend, smooth, output)
+        elif type == self.SIMULATION_TIME_PLOT and self._plot_class == self.BENCHMARK_CLASS:
+            self.box_plot_times(self._mantimes, self._schedtimes, title, scale, xlim, ylim, figsize, legend, output)
+        elif type == self.SIMULAION_MEMORY_PLOT and self._plot_class == self.BENCHMARK_CLASS:
+            self.box_plot_memory(self._simmemory, title, scale, xlim, ylim, figsize, legend, output)
         else:
-            print("Files were not pre-processed yet. Please call the preProcess method first.")
+            raise Exception("Plot type specified is not valid. Review the documentation for valid plot types.")
+
 
     def _getBenchmarkData(self, filepath):
         """
@@ -683,7 +681,7 @@ class plot_factory:
         stats['quartiles'] = np.percentile(data, range(0, 100, 25))
         return stats
 
-    def boxPlot(self, data, title='', ylabel='', scale='linear', xlim=(None,None), ylim=(None,None), figsize=(7,5), meansonly=False, output='Output.pdf', groups=1):
+    def box_plot(self, data, title='', ylabel='', scale='linear', xlim=(None,None), ylim=(None,None), figsize=(7,5), meansonly=False, output='Output.pdf', groups=1):
         """
         Produces a box-and-whiskers plot for the input data's distributions.
         
@@ -753,7 +751,7 @@ class plot_factory:
         ff.savefig(fig)
         ff.close()
 
-    def boxPlotTimes(self, dataman, datasched, title='', scale='linear', xlim=(None,None), ylim=(None,None), figsize=(7,5), legend=True, output='Output.pdf'):
+    def box_plot_times(self, dataman, datasched, title='', scale='linear', xlim=(None,None), ylim=(None,None), figsize=(7,5), legend=True, output='Output.pdf'):
         """
         Produces a bar plot for the timings in the simulations, across test instances.
         
@@ -816,7 +814,7 @@ class plot_factory:
         ff.savefig(fig)
         ff.close()
 
-    def boxPlotMemory(self, data, title='', scale='linear', xlim=(None,None), ylim=(None,None), figsize=(7,5), legend=True, output='Output.pdf'):
+    def box_plot_memory(self, data, title='', scale='linear', xlim=(None,None), ylim=(None,None), figsize=(7,5), legend=True, output='Output.pdf'):
         """
         Produces a bar plot for the memory usage in the simulations, across test instances.
         
@@ -874,7 +872,7 @@ class plot_factory:
         ff.savefig(fig)
         ff.close()
 
-    def scalabilityPlot(self, xdata, ydata, title='', scale='linear', xlim=(None,None), ylim=(None,None), figsize=(7,5), legend=True, smooth=30, output='Output.pdf'):
+    def scalability_plot(self, xdata, ydata, title='', scale='linear', xlim=(None,None), ylim=(None,None), figsize=(7,5), legend=True, smooth=30, output='Output.pdf'):
         """
         Creates a scalability plot for all test instances, where X represents the queue size, and Y the average
         time required by each dispatching method in the instances.
@@ -935,7 +933,7 @@ class plot_factory:
         ff.savefig(fig)
         ff.close()
 
-    def distributionScatterPlot(self, xdata, ydata, title='', scale='linear', xlim=(0,1.05), ylim=(0,1.05), figsize=(7,5), alpha=0.005, output='Output.pdf'):
+    def distribution_scatter_plot(self, xdata, ydata, title='', scale='linear', xlim=(0,1.05), ylim=(0,1.05), figsize=(7,5), alpha=0.005, output='Output.pdf'):
         """
         Creates a distribution scatter plot for the system's resource efficiency. 
         
@@ -974,7 +972,7 @@ class plot_factory:
             ff.savefig(fig)
             ff.close()
 
-    def getPreprocessedBenchmarkData(self):
+    def get_preprocessed_benchmark_data(self):
         """
         Returns all of the pre-processed benchmark-related data.
         
@@ -998,7 +996,7 @@ class plot_factory:
         else:
             return self._simdata, self._schedtimes, self._mantimes, self._simmemory, self._scalabilitydataX, self._scalabilitydataY
 
-    def getPreprocessedScheduleData(self):
+    def get_preprocessed_schedule_data(self):
         """
         Returns all of the pre-processed schedule-related data.
 
@@ -1028,7 +1026,7 @@ if __name__=='__main__':
                   'Path/to/benchmark/file2']
     resultlabel = ['Label',
                    'Label2']
-    plots = plot_factory(type='benchmark')
-    plots.setFiles(resultpath,resultlabel)
-    plots.preProcess()
-    plots.producePlot(type='scalability', title='My Scalability Plot')
+    plots = plot_factory('benchmark')
+    plots.set_files(resultpath,resultlabel)
+    plots.pre_process()
+    plots.produce_plot(type='scalability', title='My Scalability Plot')
