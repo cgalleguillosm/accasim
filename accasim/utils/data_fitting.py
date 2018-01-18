@@ -24,7 +24,7 @@ SOFTWARE.
 import warnings
 from multiprocessing import Pool as _Pool, cpu_count as _cpu_count
 from scipy import stats as _statistical_distributions
-from numpy import sum as _sum, power as _power
+from numpy import sum as _sum, power as _power, roll as _roll, histogram as _histogram
 
 
 class distribution_fit:
@@ -143,13 +143,16 @@ class distribution_fit:
         self.default_distribution = default
         self._set_cpus(cpus)
 
-    def auto_best_fit(self, y):
+    def auto_best_fit(self, data):
         """
 
         :param y:
         :return:
         """
+        y, x = _histogram(data, bins='auto', density=True)
+        self.data = data
         self.y = y
+        self.x = (x + _roll(x, -1))[:-1] / 2.0
         try:
             results = []
             with _Pool(self.cpus) as p:
@@ -184,10 +187,10 @@ class distribution_fit:
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore')
             dist = getattr(_statistical_distributions, dist_name)
-            params = dist.fit(self.y)
+            params = dist.fit(self.data)
             arg = params[:-2]
             loc = params[-2]
             scale = params[-1]
-            pdf = dist.pdf(self.y, loc=loc, scale=scale, *arg)
+            pdf = dist.pdf(self.x, loc=loc, scale=scale, *arg)
             sse = _sum(_power(self.y - pdf, 2.0))
         return (dist_name, sse, params)
