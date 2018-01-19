@@ -26,7 +26,7 @@ from os.path import join as _join
 from accasim.base.allocator_class import allocator_base
 from accasim.base.scheduler_class import scheduler_base
 from accasim.base.simulator_class import hpc_simulator
-from accasim.utils.file import file_exists, dir_exists, remove_dir, find_file_by, path_leaf
+from accasim.utils.file import file_exists, dir_exists, remove_dir, find_file_by
 from accasim.utils.misc import obj_assertion, list_class_assertion
 from accasim.utils.plot_factory import plot_factory
 from accasim.experimentation.schedule_parser import define_result_parser
@@ -106,7 +106,7 @@ class experiment_class:
             print('Dispatcher {} already set. Skipping it'.format(name))
         self.dispatchers[name] = dispatcher
 
-    def add_dispatchers(self, scheduler_list, allocator_list):
+    def generate_dispatchers(self, scheduler_list, allocator_list):
         """
         Generate a set of dispatchers from a combination of scheduler and allocation lists.
 
