@@ -160,9 +160,9 @@ class distribution_fit:
                     p.apply_async(self._best_fit, (dist_name,), callback=results.append)
                 p.close()
                 p.join()
-            return sorted(results, key=lambda r: r[1])[0]
+            return (sorted(results, key=lambda r: r[1])[0], self.x, self.y,)
         except IndexError:
-            return self._best_fit(self.default_distribution)
+            return (self._best_fit(self.default_distribution), self.x, self.y,)
 
     def _set_cpus(self, cpus):
         """

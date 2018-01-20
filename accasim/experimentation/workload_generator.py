@@ -30,7 +30,7 @@ from abc import ABC
 from scipy import stats as _statistical_distributions
 from scipy.stats import percentileofscore as _percentileofscore
 from statistics import pstdev as _pstdev
-from numpy import histogram as _histogram
+from numpy import histogram as _histogram, mean
 from sys import float_info as _min_float
 from math import exp as _exp, log as _log
 from random import random as _random
@@ -91,7 +91,7 @@ class generator(ABC):
         :param data:
         :return:
         """
-        (dist_name, sse, param) = self.distribution_fit.auto_best_fit(data)
+        ((dist_name, sse, param), bins, hist) = self.distribution_fit.auto_best_fit(data)
         if sse < 0:
             raise Exception('SSE negative.')
         params = {
@@ -102,7 +102,7 @@ class generator(ABC):
                 'scale': param[-1]
             }
         }
-        return params 
+        return (params, bins, hist,) 
         
     def _save_parameters(self, filepath, dist_params, **kwargs):
         if not filepath:
@@ -141,26 +141,28 @@ class job_generator(generator):
         self.maximal_request = max_request
         generator.__init__(self, distributions)
         self._init_probabilities(serial_prob, parallel_prob, parallel_node_prob)
-        self.max_opers = _exp(params['max_opers']) if 'max_opers' in params else 0
+        self.max_opers = params['max_opers'] if 'max_opers' in params else 0
         self.max_opers_serial = max_opers_serial 
         self.max_parallel_duration = max_parallel_duration
 
-    def add_sample(self, log_runtimes, save=False):
+    def add_sample(self, jobs_flops, save=False):
         """
 
-        :param log_runtimes:
+        :param jobs_flops:
         :return:
         """
+        print(min(jobs_flops), mean(jobs_flops), max(jobs_flops))
         if not self.params:
-            max_opers = max(log_runtimes)
+            max_opers = max(jobs_flops)
             if not hasattr(self, 'max_opers') or self.max_opers < max_opers:
-                self.max_opers = _log(_exp(max_opers) * 1.2)  # at max 20% as in the sample
-            hist, bins = _histogram(log_runtimes, bins='auto')
-            self.params = self._generate_dist_params(hist)
+                self.max_opers = max_opers * 1.2  # at max 20% as in the sample
+            hist, bins = _histogram(jobs_flops, bins=100, density=True)
+            
+            self.params = self._generate_dist_params([bins[:-1], hist])
+            
             if save:
                 filename = 'job_params-{}'.format(int(time.time()))
-                self._save_parameters(filename, self.params, max_opers=self.max_opers)
-
+                self._save_parameters(filename, self.params, max_opers=self.max_opers, hist_bins=bins.tolist())
 
     def next_job(self):
         """
@@ -168,19 +170,25 @@ class job_generator(generator):
         :return:
         """
         assert (self.params), 'Sample data must be added first!'
-        while True:
-            gflops = 0
-            while True:
-                try:
-                    gflops = _exp(self.hist_rand(**self.params))  # Distribution saves data in log format
-                    if gflops <= self.max_opers: 
-                        break
-                except OverflowError:
-                    pass 
-            type, nodes, request = self._generate_request(gflops)
-            runtime = int(self._calc_runtime(gflops, nodes, request))
-            if runtime <= self.max_parallel_duration * 1.1:
-                break
+        #=======================================================================
+        # while True:
+        #     gflops = 0
+        #     while True:
+        #         try:
+        #             log_gflops = self.hist_rand(**self.params)  # Distribution saves data in log format
+        #             if log_gflops <= self.max_opers:
+        #                 gflops = _exp(log_gflops) 
+        #                 break
+        #         except OverflowError:
+        #             pass 
+        #     type, nodes, request = self._generate_request(gflops)
+        #     runtime = int(self._calc_runtime(gflops, nodes, request))
+        #     if runtime <= self.max_parallel_duration * 1.1:
+        #         break
+        #=======================================================================
+        gflops = self.hist_rand(**self.params)
+        type, nodes, request = self._generate_request(gflops)
+        runtime = int(self._calc_runtime(gflops, nodes, request))
         return type, runtime, nodes, request
 
     def _central_node_prob(self, par_node_prob):
@@ -539,6 +547,12 @@ class workload_generator:
                                                                                                   resources,
                                                                                                   non_processing_resources)
         
+        # Remove
+        with open('SETH-opers.json', 'w') as f:
+            json.dump(list(_job_total_opers), f)
+            
+        exit()
+        
         if 'show_msg' in kwargs:
             show_msg = kwargs['show_msg']
         
@@ -661,7 +675,6 @@ class workload_generator:
         }
         jobs = {}
         for i in range(n):
-            print('job ', i)
             submit_time = self.arrive_generator.next_time(generation_stats)
             self._update_stats(generation_stats, submit_time)
             job_type, duration, nodes, request = self.job_generator.next_job()
@@ -726,8 +739,5 @@ class workload_generator:
         :param performance:
         :return:
         """
-        try:
-            used_gflops = _log(duration * nodes * sum([v * performance[k] for k, v in proc_units.items()]))
-            return used_gflops
-        except ValueError:
-            return _log(_min_float.min)
+        used_gflops = int(duration * nodes * sum([v * performance[k] for k, v in proc_units.items()]))
+        return used_gflops
