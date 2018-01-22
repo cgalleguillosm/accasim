@@ -144,7 +144,7 @@ class plot_factory:
             self._labels = []
             self._filepaths = []
 
-    def pre_process(self, trimSlowdown=True):
+    def pre_process(self, trimSlowdown=True, trimQueueSize=False):
         """
         Performs pre-processing on all specified files, according to their type.
         
@@ -153,6 +153,7 @@ class plot_factory:
         information stored.
         
         :param: trimSlowdown: boolean flag. If True, slowdown values equal to 1 will be discarded. Default is True
+        :param: trimQueueSize: boolean flag. If True, queue size values equal to 0 will be discarded. Default is False
         
         """
         if not self._preprocessed:
@@ -166,7 +167,7 @@ class plot_factory:
                 self._preprocessed = True
                 for f in self._filepaths:
                     # If an error is encountered on one of the files, the process is aborted
-                    if not self._getScheduleData(f, self._config, self._resource, trimSlowdown):
+                    if not self._getScheduleData(f, self._config, self._resource, trimSlowdown, trimQueueSize):
                         self._preprocessed = False
                         break
 
@@ -310,7 +311,7 @@ class plot_factory:
         self._scalabilitydataY.append(finallist)
         return True
 
-    def _getScheduleData(self, filepath, config, resource=None, trimSlowdown=True):
+    def _getScheduleData(self, filepath, config, resource=None, trimSlowdown=True, trimQueueSize=False):
         """
         Performs pre-processing on a schedule file through a meta-simulation process.
         
@@ -319,6 +320,7 @@ class plot_factory:
         :param resource: A resource to be considered for resource-related metrics; if none is specified, all resource
             types are used;
         :param: trimSlowdown: boolean flag. If True, slowdown values equal to 1 will be discarded. Default is True
+        :param: trimQueueSize: boolean flag. If True, queue size values equal to 0 will be discarded. Default is False
         :return: True if successful, False otherwise;
         """
         if self._debug:
@@ -436,12 +438,6 @@ class plot_factory:
             # queue += len(jobstoqueue)
             queue.update(jobstoqueue)
 
-            # System metrics are computed BEFORE dispatching
-            queued[timePointsIDX - 1] = (len(queue) + 1)  # queue + 1
-            run[timePointsIDX - 1] = (len(running) + 1)  # running + 1
-            resources[timePointsIDX - 1] = self._getLoadRatio(resource)
-            efficiency[timePointsIDX - 1] = self._getLoadRatioSelective(resource)
-
             # Jobs that have terminated release their resources
             jobstoend = rev_timePoints[point]['end']
             if len(jobstoend) > 0:
@@ -474,8 +470,18 @@ class plot_factory:
                         efficiencyperjob[efficiencyIDX] = eff
                         efficiencyIDX += 1
 
+            # System metrics are computed AFTER dispatching
+            queued[timePointsIDX - 1] = len(queue)  # queue
+            run[timePointsIDX - 1] = len(running)  # running
+            resources[timePointsIDX - 1] = self._getLoadRatio(resource)
+            efficiency[timePointsIDX - 1] = self._getLoadRatioSelective(resource)
+
         if self._debug:
             print("Simulation done!")
+
+        if trimQueueSize:
+            queued = [q for q in queued if q != 0]
+            run = [r for r in run if r != 0]
 
         # The metrics values for this instance are added to the internal variables
         self._slowdowns.append(slowdowns)
