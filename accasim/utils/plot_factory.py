@@ -74,14 +74,13 @@ class plot_factory:
         :param workload_parser: 
         :param debug: Debug flag.
         """
-
+        self._debug = debug
         if not (plot_class in self.PLOT_TYPES.keys()):
             if self._debug:
                 print('Wrong Plot plot_class chosen. Selecting schedule plot_class by default...')
             plot_class = self.SCHEDULE_CLASS
         self._plot_class = plot_class
 
-        self._debug = debug
         self._sim_params_fname = sim_params_fname #if sim_params_fname is not None and isfile(sim_params_fname) else None
         self._config = config
         self._resource = resource
