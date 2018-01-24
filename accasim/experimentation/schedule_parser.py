@@ -44,6 +44,7 @@ def define_result_parser(simulator_config=None):
     except KeyError as e:
         print(
             'Schedule output format not identified. Please check the simulator configuration file for the key \'schedule_output\'.')
+        exit()
 
     for _attr_name, _data_type in _attributes.items():
         _format = _format.replace('{' + _attr_name + '}', type_regexp(_data_type[-1]).format(_attr_name))
