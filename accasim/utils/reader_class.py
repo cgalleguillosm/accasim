@@ -187,7 +187,7 @@ class reader_class(ABC):
         """
         
         This method must return a dictionary with all the required keys for covering the job attributes. 
-        None must be returned If the data is not valid or complete.   
+        None must be returned If the data is not valid or incomplete.   
         
         :param current_time: The current time if it's needed
         
@@ -260,7 +260,7 @@ class default_reader_class(reader_class):
 
         :return:
         """
-        if self.file:
+        if hasattr(self, 'file') and self.file:
             self.file.close()
             self.file = None   
             self.EOF = True 

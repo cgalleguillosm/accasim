@@ -189,7 +189,7 @@ class plot_factory:
 
         return self._preprocessed
 
-    def produce_plot(self, type, title='', scale='linear', xlim=(None,None), ylim=(None,None), legend=True, figsize=(7,5), meansonly=False, alpha=0.005, smooth=30, output='Output.pdf', groups = 1):
+    def produce_plot(self, type, title='', scale='linear', xlim=(None,None), ylim=(None,None), legend=True, figsize=(7,5), meansonly=False, alpha=0.005, smooth=30, output='Output.pdf', groups = 1, **kwargs):
         """
         Produces a single plot on the pre-processed files.
         
@@ -221,19 +221,19 @@ class plot_factory:
             print("Plot_factory: Files were not pre-processed yet. Calling the pre_process method.")
 
         if type == self.SLOWDOWN_PLOT and self._plot_class == self.SCHEDULE_CLASS:
-            self.box_plot(self._slowdowns, title, 'Slowdown', scale, xlim, ylim, figsize, meansonly, output, groups)
+            self.box_plot(self._slowdowns, title=title, ylabel='Slowdown', scale=scale, xlim=xlim, ylim=ylim, figsize=figsize, meansonly=meansonly, output=output, groups=groups, **kwargs)
         elif type == self.QUEUE_SIZE_PLOT and self._plot_class == self.SCHEDULE_CLASS:
-            self.box_plot(self._queuesizes, title, 'Queue size', scale, xlim, (0, None), figsize, meansonly, output, groups)
+            self.box_plot(self._queuesizes, title=title, ylabel='Queue size', scale=scale, xlim=xlim, ylim=(0, None), figsize=figsize, meansonly=meansonly, output=output, groups=groups, **kwargs)
         elif type == self.LOAD_RATIO_PLOT and self._plot_class == self.SCHEDULE_CLASS:
-            self.distribution_scatter_plot(self._loadratiosX, self._loadratiosY, title, scale, (-0.01, 1.01), (-0.01, 1.01), figsize, alpha, output)
+            self.distribution_scatter_plot(self._loadratiosX, self._loadratiosY, title=title, scale=scale, xlim=(-0.01, 1.01), ylim=(-0.01, 1.01), figsize=figsize, alpha=alpha, output=output, **kwargs)
         elif type == self.EFFICIENCY_PLOT and self._plot_class == self.SCHEDULE_CLASS:
-            self.box_plot(self._efficiencies, title, 'Resource efficiency', scale, xlim, ylim, figsize, meansonly, output, groups)
+            self.box_plot(self._efficiencies, title=title, ylabel='Resource efficiency', scale=scale, xlim=xlim, ylim=ylim, figsize=figsize, meansonly=meansonly, output=output, groups=groups, **kwargs)
         elif type == self.SCALABILITY_PLOT and self._plot_class == self.BENCHMARK_CLASS:
-            self.scalability_plot(self._scalabilitydataX, self._scalabilitydataY, title, scale, xlim, ylim, figsize, legend, smooth, output)
+            self.scalability_plot(self._scalabilitydataX, self._scalabilitydataY, title, scale=scale, xlim=xlim, ylim=ylim, figsize=figsize, legend=legend, smooth=smooth, output=output, **kwargs)
         elif type == self.SIMULATION_TIME_PLOT and self._plot_class == self.BENCHMARK_CLASS:
-            self.box_plot_times(self._mantimes, self._schedtimes, title, scale, xlim, ylim, figsize, legend, output)
+            self.box_plot_times(self._mantimes, self._schedtimes, title=title, scale=scale, xlim=xlim, ylim=ylim, figsize=figsize, legend=legend, output=output, **kwargs)
         elif type == self.SIMULAION_MEMORY_PLOT and self._plot_class == self.BENCHMARK_CLASS:
-            self.box_plot_memory(self._simmemory, title, scale, xlim, ylim, figsize, legend, output)
+            self.box_plot_memory(self._simmemory, title=title, scale=scale, xlim=xlim, ylim=ylim, figsize=figsize, legend=legend, output=output, **kwargs)
         else:
             raise Exception("Plot type specified is not valid. Review the documentation for valid plot types.")
 
@@ -877,7 +877,7 @@ class plot_factory:
         ff.savefig(fig)
         ff.close()
 
-    def scalability_plot(self, xdata, ydata, title='', scale='linear', xlim=(None,None), ylim=(None,None), figsize=(7,5), legend=True, smooth=30, output='Output.pdf'):
+    def scalability_plot(self, xdata, ydata, title='', scale='linear', xlim=(None, None), ylim=(None, None), figsize=(7, 5), legend=True, smooth=30, linestyles=None, markers=None, output='Output.pdf'):
         """
         Creates a scalability plot for all test instances, where X represents the queue size, and Y the average
         time required by each dispatching method in the instances.
@@ -899,9 +899,11 @@ class plot_factory:
         fontsize = 12
         plt.rc('xtick', labelsize=fontsize)
         plt.rc('ytick', labelsize=fontsize)
-
-        linestyles = ('-', '-', '--', '--', '-.', '-.', ':', ':')
-        markers = (None, 'o', None, '^', None, 's', None, 'p')
+        if not linestyles:
+            linestyles = ('-', '-', '--', '--', '-.', '-.', ':', ':')
+        if not markers:
+            markers = (None, 'o', None, '^', None, 's', None, 'p')
+        
         numstyles = len(linestyles)
 
         fig, ax = plt.subplots(figsize=figsize)
