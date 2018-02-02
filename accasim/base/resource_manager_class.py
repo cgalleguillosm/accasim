@@ -132,6 +132,7 @@ class resources_class:
                     _resources[key] -= req
                 return False, e
             # _used[k] = _rem_attr - v
+        self.update_full(node_name)
         return True, 'OK'
 
     def release(self, node_name, **kwargs):
@@ -150,7 +151,8 @@ class resources_class:
         for k, v in kwargs.items():
             _resources['%s%s' % (self.used_prefix, k)] -= v
             assert(_resources['%s%s' % (self.used_prefix, k)] >= 0), 'The event was request to release %i %s, but there is only %i available. It is impossible less than 0 resources' % (v, k, _resources['%s%s' % (self.used_prefix, k)])
-
+        self.update_full(node_name)
+        
     def availability(self):
         """
         
@@ -191,7 +193,7 @@ class resources_class:
 
             return (_str + ', '.join(_str_usage))
         elif type == 'dict':
-            return {_attr: usage['%s%s' % (self.used_prefix, _attr)] / usage['%s%s' % (self.available_prefix, _attr)] * 100  for _attr in self.system_resource_types}
+            return {_attr: usage['%s%s' % (self.used_prefix, _attr)] / usage['%s%s' % (self.available_prefix, _attr)] * 100 if usage['%s%s' % (self.available_prefix, _attr)] > 0 else 0 for _attr in self.system_resource_types}
         else:
             raise NotImplementedError()
 
@@ -242,19 +244,22 @@ class resources_class:
             _str += '- %s: %s\n' % (node, formatted_attrs)
         return _str
     
-    def update_full(self):
+    def update_full(self, node):
         _system_resource_types = list(self.full.keys())
+        for res in _system_resource_types:
+            self.full[res] = True
         for node, attrs in self.resources.items():
             if self.resources_status[node] == self.OFF:
                 continue
             for attr in _system_resource_types:
                 if (attrs['%s%s' % (self.available_prefix, attr)] - attrs['%s%s' % (self.used_prefix, attr)]) > 0:
                     _system_resource_types.remove(attr)
-                    self.full[attr] = False
-                    break
-        for res in _system_resource_types:
-            self.full[res] = True  
-             
+            if not _system_resource_types:
+                break
+
+        for res in self.full:
+            if not (res in _system_resource_types):
+                self.full[res] = False
 
 class resource_manager:
 
@@ -298,15 +303,13 @@ class resource_manager:
                 _rollback.append((node_name, values))
             else:
                 _allocated = False
+                self.actual_events.pop(event.id)
                 break
             
         while not _allocated and _rollback:
             node_name, values = _rollback.pop()
             self.resources.release(node_name, **values)
-        
-        if _allocated:
-            self.resources.update_full()
-        
+               
         return _allocated, message
 
     def remove_event(self, id):
@@ -319,7 +322,6 @@ class resource_manager:
         """
         for node_name, values in self.actual_events.pop(id).items():
             self.resources.release(node_name, **values)
-        self.resources.update_full()
 
     def node_resources(self, *args):
         """

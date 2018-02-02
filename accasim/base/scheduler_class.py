@@ -53,6 +53,7 @@ class scheduler_base(ABC):
                  
         """
         random.seed(seed)
+        self._counter = 0
         self.constants = CONSTANT()
         self.allocator = None
         if allocator:
@@ -138,6 +139,9 @@ class scheduler_base(ABC):
         dispatching_plan = self.scheduling_method(cur_time, es_dict, es, _debug)
         if self.allocator:
             dispatching_plan = self.allocator.allocate(dispatching_plan, cur_time, _debug)
+        self._counter += 1
+        if _debug:
+            print("################## Dispatching decision n: {} #######################".format(self._counter))
         return dispatching_plan
     
     def __str__(self):
@@ -344,29 +348,31 @@ class easybf_sched(scheduler_base):
         # if reserved_time is not None and (reserved_time == cur_time or self.blocked_resources):  # Continue waiting until it finishes, for a more stricted it must kill the jobs when ==
         if (reserved_time is not None and (reserved_time == cur_time or reserved_time < cur_time and self.blocked_resources)):  # Continue waiting until it finishes, for a more stricted it must kill the jobs when ==
             if _debug:
-                print(cur_time, ': Allocating the blocked node')
+                print('{}: Allocating the blocked node'.format(cur_time))
             _e = es_dict[self.blocked_job_id]
             blocked_job_allocation = self.nonauto_allocator.allocate(_e, cur_time, skip=False)
             if blocked_job_allocation[0] is not None:
                 _jobs_allocated.append(blocked_job_allocation)
-                assert(es[0] == self.blocked_job_id), '%s' % es
+                assert(es[0] == self.blocked_job_id), '{}'.format(es)
                 self.blocked_job_id = None
                 self.reserved_slot = (None, [])
                 self.blocked_resources = False
                 _removed_id = es.pop(0)
                 if _debug:
-                    print(cur_time, 'Removing the blocked job (%s) from the queue list ' % _removed_id)
+                    print('{}: Removing the blocked job ({}) from the queue list '.format(cur_time, _removed_id))
                     print('The resources were unblocked')
             else:
                 if _debug:
-                    print(cur_time, ': Nodes ', reserved_nodes, ', are not already free for the blocked node.')
+                    print('{}: Nodes {}, are not already free for the blocked node.'.format(cur_time, reserved_nodes))
                     for _node in reserved_nodes:
-                        print(cur_time, ': Resources ', avl_resources[_node])
+                        print('{}: Resources {}'.format(cur_time, avl_resources[_node]))
         
         # This var stores the info for allocated jobs
         _ready_dispatch = []
         # If there is no blocked job, we execute the first part of the schedule, same as in the simple scheduler
-        if not self.blocked_resources:            
+        if not self.blocked_resources:     
+            if _debug:
+                print('{}: there is not a blocked job. The algorithms performs FIFO Scheduling'.format(cur_time))       
             _tmp_jobs_allocated, _id_jobs_nallocated = self._job_allocation(cur_time, es, es_dict, _debug)
             _jobs_allocated += [_j[0] for _j in _tmp_jobs_allocated]
             _ready_dispatch += [_j[1] for _j in _tmp_jobs_allocated]
@@ -379,9 +385,6 @@ class easybf_sched(scheduler_base):
         # to_dispatch corresponds to the recently jobs to be dispatched and revent corresponds to actual running events
         # The next avl slot is searched into a sorted list of expected ending times based on the walltime
         #=======================================================================
-        if _debug:
-            print(cur_time, ': Blocked: ', self.blocked_job_id)
-            print('To dispatch: ', _jobs_allocated)
 
         # We refresh the info on the blocked job and prepare the remaining ones for backfilling
         self.blocked_job_id = _id_jobs_nallocated[0]
@@ -389,9 +392,16 @@ class easybf_sched(scheduler_base):
         for_backfilling = _id_jobs_nallocated[1:]
         running_events = self.resource_manager.actual_events
 
+        if _debug:
+            print('{}: Blocked Job: {} Request: {} x {}'.format(cur_time, self.blocked_job_id, es_dict[self.blocked_job_id].requested_nodes, es_dict[self.blocked_job_id].requested_resources))
+            print('{}: Jobs Available to Fill the GAP {}'.format(cur_time, _jobs_allocated))
+
+
         # If no reservation was already made for the blocked job, we make one
         if reserved_time is None:
             # All running events are computed, and the earliest slot in which the blocked job fits is computed.
+            print("{}: Reserved time {}".format(cur_time, reserved_time))
+            print("{}: Running events {}".format(cur_time, running_events))
             revents = [(job_id, es_dict[job_id].start_time + es_dict[job_id].expected_duration, assigns) for job_id, assigns in running_events.items()]
             future_endings = revents + _ready_dispatch
             # Sorting by soonest finishing
@@ -403,7 +413,7 @@ class easybf_sched(scheduler_base):
         # Backfilling the schedule
         # running_events is a dict with the job id as key. Its value corresponds to the assignation {node: {resource: value}}
         if _debug:
-            print('Blocked node ', self.blocked_job_id, ', until ', self.reserved_slot)
+            print('{}: Blocked node {} until {}'.format(cur_time, self.blocked_job_id, self.reserved_slot))
         
         _jobs_allocated = [(None, self.blocked_job_id, []) ] + _jobs_allocated
         
@@ -412,7 +422,7 @@ class easybf_sched(scheduler_base):
             return _jobs_allocated  
         
         if _debug:
-            print(cur_time, ': To fill', for_backfilling)
+            print('{}: To fill: {}'.format(cur_time, for_backfilling))
 
         # Trying to backfill the remaining jobs in the queue
         to_schedule_e_backfill = [es_dict[_id] for _id in for_backfilling]
@@ -442,8 +452,11 @@ class easybf_sched(scheduler_base):
         virtual_resources = deepcopy(avl_resources)
         virtual_allocator = copy(self.nonauto_allocator)
 
+        print(e.requested_nodes, e.requested_resources)
+        print('Running: ', len(future_endings))
         for fe in future_endings:
             # print('FE: ', fe[0], fe[1], fe[2])
+            print(fe)
             _time = fe[1]
             for node, used_resources in fe[2].items():
                 for attr, attr_value in used_resources.items(): 

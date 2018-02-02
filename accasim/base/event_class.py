@@ -30,7 +30,8 @@ from pydoc import locate
 import asyncio
 from builtins import str, filter
 from inspect import signature
-from accasim.utils.misc import CONSTANT, sorted_list, default_swf_mapper
+from accasim.utils.misc import CONSTANT, default_swf_mapper
+from sortedcontainers import SortedSet as sorted_list
 from accasim.base.resource_manager_class import resource_manager as resource_manager_class
 import copy
 
@@ -287,7 +288,7 @@ class job_factory:
             
 class event_mapper:
     
-    def __init__(self, resource_manager, **kwargs):
+    def __init__(self, resource_manager, debug=False, **kwargs):
         """
 
         This class coordinates events submission, queueing and ending. 
@@ -299,13 +300,14 @@ class event_mapper:
         assert(isinstance(resource_manager, resource_manager_class)), 'Wrong type for the resource_manager argument.'
         self.resource_manager = resource_manager
         self.constants = CONSTANT()
+        self.debug = debug
         # Stats
         self.first_time_dispatch = None
         self.last_run_time = None
         self.slowdowns = []
         self.wtimes = []
         
-        self.current_time = 0
+        self.current_time = None
         self.time_points = sorted_list()
         # self.ending_time_points = sorted_list()
         self.events = {}
@@ -340,16 +342,19 @@ class event_mapper:
           
         """
         assert(isinstance(e, event)), 'Using %s, expecting a single %s' % (e.__class__, event.__name__)
+        # print('load event', self.time_points)
+        if not self.current_time:
+            self.current_time = e.queued_time - 1
+            self.time_points.add(self.current_time)
         if self.current_time == e.queued_time:
-            self.submit_event(e)
+            self.submit_event(e.id)
         elif self.current_time < e.queued_time:
             if e.queued_time not in self.loaded:
                  self.loaded[e.queued_time] = []
             self.loaded[e.queued_time].append(e.id)
             self.time_points.add(e.queued_time)
         else:
-            raise Exception('Time sync problem, the actual event was loaded after the real submit time. This a programming error, must be checked.')
-                        
+            raise Exception('Time sync problem, the actual event was loaded after the real submit time. This a programming error, must be checked.')        
 
     def move_to_finished(self, events_dict):
         """
@@ -420,10 +425,12 @@ class event_mapper:
             self.first_time_dispatch = start_time
 
         if _job.duration == 0:
-            logging.debug('%s: %s Dispatched and Finished at the same moment. Job Lenght 0' % (self.current_time, id))
+            if self.debug:
+                print('{}: {} Dispatched and Finished at the same moment. Job Lenght 0'.format(self.current_time, id))
             self.finish_event(_job)
-            self.time_points.add(self.current_time)
+            # self.time_points.add(self.current_time)
             return False
+
         # Move to running jobs 
         self.running.append(id)
         
@@ -431,8 +438,9 @@ class event_mapper:
         
         expected_end_time = _job.start_time + _job.expected_duration
         real_end_time = _job.start_time + _job.duration
-        # self.ending_time_points.add(expected_end_time, real_end_time)
-        self.time_points.add(expected_end_time)
+
+        if expected_end_time != self.current_time:
+            self.time_points.add(expected_end_time)
         self.time_points.add(real_end_time)
 
         if real_end_time not in self.real_ending:
@@ -457,13 +465,18 @@ class event_mapper:
         :return: Array of jobs recently submitted + queued available at current time. 
 
         """
-        self.current_time = self.time_points.pop()
-        if self.current_time is None:
-            return []
+        if len(self.time_points) > 0:
+            self.current_time = self.time_points.pop(0)
+        else:
+            if self.debug:
+                print('No more time points... but there still jobs in the queue')
+            self.current_time += 1
         submitted = self.loaded.pop(self.current_time, [])
         new_queue = self.queued + submitted 
-        logging.debug('Next events: \n-Recently submited: %s\n-Already queued: %s' % (submitted, self.queued))
+        if self.debug:
+            print('{} Next events: \n-Recently submited: {}\n-Already queued: {}'.format(self.current_time, submitted, self.queued))
         self.queued.clear()
+        
         return new_queue
         
     def has_events(self):
@@ -486,6 +499,7 @@ class event_mapper:
 
         """
         for (_time, _id, _nodes) in to_dispatch:
+            assert(isinstance(_id, str)), 'Please check your return tuple in your Dispatching method. _id must be a str type. Received wrong type: {}'.format(e.__class__)
             assert(_time is None or _time >= self.current_time), 'Receiving wrong schedules.'
             
             #===================================================================
@@ -503,12 +517,6 @@ class event_mapper:
                 self.submit_event(_id)
                 continue
             _e = copy.deepcopy(event_dict[_id])
-            #===================================================================
-            # if self.dispatch_event(_e, _time, time_diff, _nodes):
-            #     done, msg = self.resource_manager.allocate_event(_e, _nodes)
-            #     if not done:
-            #         print('{}. If you see this message many times, probably you have to check your allocation heuristic.'.format(msg))
-            #===================================================================
             if self.dispatch_event(_e, _time, time_diff, _nodes):
                 done, msg = self.resource_manager.allocate_event(_e, _nodes)
                 if not done:

@@ -43,6 +43,7 @@ import inspect
 import asyncio
 from builtins import exit as _exit
 from time import time as _time
+from sortedcontainers.sortedset import SortedSet
 
 
 class simulator_base(ABC):
@@ -303,17 +304,17 @@ class hpc_simulator(simulator_base):
     
     """
 
-    def __init__(self, sys_config, scheduler, workload=None, resource_manager=None, reader=None, job_factory=None,
+    def __init__(self, workload, sys_config, scheduler, resource_manager=None, reader=None, job_factory=None,
                  additional_data=[], simulator_config=None, overwrite_previous=True,
                  scheduling_output=True, pprint_output=False, benchmark_output=False, statistics_output=True, save_parameters=None,
-                 show_statistics=True, **kwargs):
+                 show_statistics=True, skip=False, **kwargs):
         """
     
         Constructor of the HPC Simulator class.
     
+        :param workload: Filepath to the workload, it is used by the reader. If a reader is not given, the default one is used.
         :param sys_config: Filepath to the synthetic system configuration. Used by the resource manager to create the system.
         :param scheduler: Dispatching method
-        :param workload: Filepath to the workload, it is used by the reader. If a reader is not given, the default one is used.
         :param resource_manager: Optional. Instantiation of the resource_manager class.
         :param reader: Optional. Instantiation of the reader class.
         :param job_factory: Optional. Instantiation of the job_factory class.
@@ -339,7 +340,7 @@ class hpc_simulator(simulator_base):
         kwargs['SHOW_STATISTICS'] = show_statistics
 
         _uargs = []
-
+        
         if not resource_manager:
             resource_manager, equiv, start_time = self.generate_enviroment(sys_config)
             kwargs['equivalence'] = equiv
@@ -371,6 +372,7 @@ class hpc_simulator(simulator_base):
 
         if save_parameters: 
             self._save_parameters(save_parameters)
+        self._skip = skip
 
         self.start_simulation_time = None
         self.end_simulation_time = None
@@ -471,30 +473,26 @@ class hpc_simulator(simulator_base):
         time_stuck_counter = 0
         self.load_events(self.mapper.current_time, event_dict, self.mapper, debug, self.max_sample)
         events = self.mapper.next_events()
-
         # =======================================================================
         # Loop until there are not loaded, queued and running jobs
         # =======================================================================
         while events or self.mapper.has_events():
-            if self.mapper.current_time:
-                _actual_time = self.mapper.current_time
-            else:
-                # If there are not more timepoints, the last timepoint is increased in 1.
-                _actual_time += 1
+            _actual_time = self.mapper.current_time
 
             benchStartTime = _clock() * 1000
-
             self.mapper.release_ended_events(event_dict)
-            cur_stats = (len(self.mapper.queued) + len(events), len(self.mapper.running), len(self.mapper.finished))
             if debug:
-                print('{} INI: Loaded {}, Queued {}, Running {}, Finished {}'.format(_actual_time, len(self.mapper.loaded), *prev_stats))
-            cur_stats += tuple(self.resource_manager.resources.usage('dict').values())
+                print('{} INI: Loaded {}, Queued {}, Running {}, Finished {}'.format(_actual_time, self._loaded_jobs(), *prev_stats))
+
+            if self._skip:
+                cur_stats = (len(self.mapper.queued) + len(events), len(self.mapper.running), len(self.mapper.finished))
+                cur_stats += tuple(self.resource_manager.resources.usage('dict').values())
             
-            # Stats are different or, the queue is still small to process in short time. By defautl 250 jobs.
-            if any([ c != p for c, p in zip(cur_stats[1:], prev_stats[1:])]) or (prev_stats[0] != cur_stats[0] and cur_stats[0] < 250):
-                time_stuck_counter = 0
-            else:
-                time_stuck_counter += 1
+                # Stats are different or, the queue is still small to process in short time. By defautl 250 jobs.
+                if any([ c != p for c, p in zip(cur_stats[1:], prev_stats[1:])]) or (prev_stats[0] != cur_stats[0] and cur_stats[0] < 250):
+                    time_stuck_counter = 0
+                else:
+                    time_stuck_counter += 1
             # ===================================================================
             # External behavior
             # ===================================================================
@@ -504,7 +502,7 @@ class hpc_simulator(simulator_base):
             schedStartTime = _clock() * 1000
             schedEndTime = schedStartTime
 
-            if events and time_stuck_counter <= 1:
+            if events and (not self._skip or self._skip and time_stuck_counter <= 1):
                 if debug:
                     print('{} DUR: To Schedule {}'.format(_actual_time, len(events)))
                 to_dispatch = self.dispatcher.schedule(self.mapper.current_time, event_dict, events, debug)
@@ -518,7 +516,7 @@ class hpc_simulator(simulator_base):
                 except AssertionError as e:
                     print('{} DUR: {}'.format(_actual_time, e))
                     print('{} DUR: Loaded {}, Queued {}, Running {}, Finished {}'.format(_actual_time,
-                                                                                         len(self.mapper.loaded),
+                                                                                         self._loaded_jobs(),
                                                                                          len(self.mapper.queued),
                                                                                          len(self.mapper.running),
                                                                                          len(self.mapper.finished)))
@@ -527,11 +525,13 @@ class hpc_simulator(simulator_base):
                 for e in events:
                     self.mapper.submit_event(e)
             prev_stats = (len(self.mapper.queued), len(self.mapper.running), len(self.mapper.finished))
+            if self._skip:
+                prev_stats += tuple(self.resource_manager.resources.usage('dict').values())
             if debug:
-                print('{} END: Loaded {}, Queued {}, Running {}, Finished {}'.format(_actual_time, len(self.mapper.loaded), *prev_stats))
-            prev_stats += tuple(self.resource_manager.resources.usage('dict').values())
+                print('{} END: Loaded {}, Queued {}, Running {}, Finished {}'.format(_actual_time, self._loaded_jobs(), *prev_stats))
+
             # ===================================================================
-            # Loading next jobs
+            # Loading next jobs based on Time points
             # ===================================================================
             if len(self.mapper.loaded) < 10:
                 sample = self.max_sample if (len(self.mapper.loaded) < self.max_sample) else 2
@@ -561,6 +561,7 @@ class hpc_simulator(simulator_base):
             assert (self.loaded_jobs == len(self.mapper.finished)), 'Loaded {} and Finished {}'.format(self.loaded_jobs,
                                                                                                    len(
                                                                                                        self.mapper.finished))
+        
         self.statics_write_out(self.constants.SHOW_STATISTICS, self.constants.STATISTICS_OUTPUT)
         print('Simulation process completed.')
         self.mapper.current_time = None
@@ -639,7 +640,7 @@ class hpc_simulator(simulator_base):
         job_list = []
         for nt_point, jobs in ps_jobs.items():
             for job in jobs:
-                if self.check_job_validity(job):
+                if self._check_job_validity(job):
                     self.loaded_jobs += 1
                     tmp_dict[job.id] = job
                     job_list.append(job)
@@ -653,8 +654,12 @@ class hpc_simulator(simulator_base):
                         print(error_msg)
         mapper.load_events(job_list)
         jobs_dict.update(tmp_dict)
+        
+    def _loaded_jobs(self):
+        return sum([len(jobs) for _, jobs in self.mapper.loaded.items()])
 
-    def check_job_validity(self, job):
+
+    def _check_job_validity(self, job):
         """
         
         Simple method that checks if the loaded job violates the system's resource constraints.

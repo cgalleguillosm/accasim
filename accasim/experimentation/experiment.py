@@ -38,7 +38,9 @@ class experiment_class:
 
     SIMULATOR_ATTRIBUTES = {'scheduling_output': True, 'pprint_output': False, 'benchmark_output': True,
                             'statistics_output': True, 'job_factory': None, 'reader': None,
-                            'save_parameters': ['RESOURCE_ORDER'], 'timeout': None, 'id': None}
+                            'save_parameters': ['RESOURCE_ORDER'], 'timeout': None, 'id': None, 'skip':False}
+    RUN_SIMULATOR_ATTRIBUTES = {'debug': False}
+    
     _SEPARATOR = '_'
     _RESULTS_FOLDER = 'results/{}/{}'
     _SCHEDULE_PREFIX = 'sched-'
@@ -49,7 +51,7 @@ class experiment_class:
         plot_factory.BENCHMARK_CLASS: _BENCHMARK_PREFIX
     }
 
-    def __init__(self, name, _sys_config, _workload, simulator_config=None, job_factory=None,
+    def __init__(self, name, workload, sys_config, simulator_config=None, job_factory=None,
                  reader=None, **kwargs):
         """
         Experiment class constructor.
@@ -58,8 +60,8 @@ class experiment_class:
         scheduling_output and benchmark_output must be True (by default).
 
         :param name: Experiment name. The results of each simulator will be placed in the results/\'name\' folder.
-        :param _sys_config: System configuration in json format.
-        :param _workload: Workload file to be used in the simulation. Directly readed or used as workload generation input. This depends on the reader object.
+        :param workload: Workload file to be used in the simulation. Directly readed or used as workload generation input. This depends on the reader object.
+        :param sys_config: System configuration in json format.
         :param simulator_config: Configuration of the simulator parameters.
         :param job_factory: Optional. A job factory object.
         :param reader: Optional. A workload reader object for a custom reader. A SWF workload reader is defined as default.
@@ -79,8 +81,8 @@ class experiment_class:
         self.name = name
         self.dispatchers = {}
         self.results = {}
-        self.sys_config = file_exists(_sys_config, head_message='System configuration file: ')
-        self.workload = file_exists(_workload, head_message='Workload file: ')
+        self.sys_config = file_exists(sys_config, head_message='System configuration file: ')
+        self.workload = file_exists(workload, head_message='Workload file: ')
         if simulator_config is not None:
             self.simulator_config = file_exists(simulator_config, head_message='Simulator configuration file: ')
         else:
@@ -89,6 +91,7 @@ class experiment_class:
         self.parser = define_result_parser(self.simulator_config)
         self._customize(**kwargs)
         self._update_simulator_attrs(**kwargs)
+        self._update_run_simulator_attrs(**kwargs)
 
     def add_dispatcher(self, name, dispatcher):
         """
@@ -129,11 +132,11 @@ class experiment_class:
                 self.add_dispatcher(_name, _dispatcher)
 
 
-    def _run_simulation(self, _dispatcher):
-        simulator = hpc_simulator(self.sys_config, _dispatcher, self.workload,
+    def _run_simulation(self, dispatcher):
+        simulator = hpc_simulator(self.workload, self.sys_config, dispatcher,
             simulator_config=self.simulator_config, **
             self.SIMULATOR_ATTRIBUTES)
-        simulator.start_simulation()
+        simulator.start_simulation(**self.RUN_SIMULATOR_ATTRIBUTES)
 
     def run_simulation(self, generate_plot=True):
         """
@@ -228,5 +231,10 @@ class experiment_class:
         for k, v in kwargs.items():
             if k in self.SIMULATOR_ATTRIBUTES:
                 self.SIMULATOR_ATTRIBUTES[k] = v
+                
+    def _update_run_simulator_attrs(self, **kwargs):
+        for k, v in kwargs.items():
+            if k in self.RUN_SIMULATOR_ATTRIBUTES:
+                self.RUN_SIMULATOR_ATTRIBUTES[k] = v
                 
     
