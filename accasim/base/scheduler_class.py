@@ -400,8 +400,9 @@ class easybf_sched(scheduler_base):
         # If no reservation was already made for the blocked job, we make one
         if reserved_time is None:
             # All running events are computed, and the earliest slot in which the blocked job fits is computed.
-            print("{}: Reserved time {}".format(cur_time, reserved_time))
-            print("{}: Running events {}".format(cur_time, running_events))
+            if _debug:
+                print("{}: Reserved time {}".format(cur_time, reserved_time))
+                print("{}: Running events {}".format(cur_time, running_events))
             revents = [(job_id, es_dict[job_id].start_time + es_dict[job_id].expected_duration, assigns) for job_id, assigns in running_events.items()]
             future_endings = revents + _ready_dispatch
             # Sorting by soonest finishing
@@ -451,12 +452,14 @@ class easybf_sched(scheduler_base):
         """
         virtual_resources = deepcopy(avl_resources)
         virtual_allocator = copy(self.nonauto_allocator)
-
-        print(e.requested_nodes, e.requested_resources)
-        print('Running: ', len(future_endings))
+        
+        if _debug:
+            print(e.requested_nodes, e.requested_resources)
+            print('Running: ', len(future_endings))
         for fe in future_endings:
             # print('FE: ', fe[0], fe[1], fe[2])
-            print(fe)
+            if _debug:
+                print(fe)
             _time = fe[1]
             for node, used_resources in fe[2].items():
                 for attr, attr_value in used_resources.items(): 
