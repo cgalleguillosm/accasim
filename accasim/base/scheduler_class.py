@@ -343,6 +343,7 @@ class easybf_sched(scheduler_base):
         reserved_time = self.reserved_slot[0]
         reserved_nodes = self.reserved_slot[1]
         _jobs_allocated = []
+        _ready_dispatch = []
 
         # Trying to allocate the blocked job on the reserved resources
         # if reserved_time is not None and (reserved_time == cur_time or self.blocked_resources):  # Continue waiting until it finishes, for a more stricted it must kill the jobs when ==
@@ -353,9 +354,12 @@ class easybf_sched(scheduler_base):
             blocked_job_allocation = self.nonauto_allocator.allocate(_e, cur_time, skip=False)
             if blocked_job_allocation[0] is not None:
                 _jobs_allocated.append(blocked_job_allocation)
+                assigned_nodes = blocked_job_allocation[2]
+                requested_resources = _e.requested_resources
+                _ready_dispatch.append((_e.id, cur_time + _e.expected_duration, {node: requested_resources for node in assigned_nodes}))
                 assert(es[0] == self.blocked_job_id), '{}'.format(es)
                 self.blocked_job_id = None
-                self.reserved_slot = (None, [])
+                reserved_time, reserved_nodes = self.reserved_slot = (None, []) 
                 self.blocked_resources = False
                 _removed_id = es.pop(0)
                 if _debug:
@@ -366,9 +370,7 @@ class easybf_sched(scheduler_base):
                     print('{}: Nodes {}, are not already free for the blocked node.'.format(cur_time, reserved_nodes))
                     for _node in reserved_nodes:
                         print('{}: Resources {}'.format(cur_time, avl_resources[_node]))
-        
         # This var stores the info for allocated jobs
-        _ready_dispatch = []
         # If there is no blocked job, we execute the first part of the schedule, same as in the simple scheduler
         if not self.blocked_resources:     
             if _debug:
@@ -380,6 +382,7 @@ class easybf_sched(scheduler_base):
                 return  _jobs_allocated
         else:
             _id_jobs_nallocated = es
+
         #=======================================================================
         # Finding next available slot
         # to_dispatch corresponds to the recently jobs to be dispatched and revent corresponds to actual running events
@@ -394,11 +397,11 @@ class easybf_sched(scheduler_base):
 
         if _debug:
             print('{}: Blocked Job: {} Request: {} x {}'.format(cur_time, self.blocked_job_id, es_dict[self.blocked_job_id].requested_nodes, es_dict[self.blocked_job_id].requested_resources))
-            print('{}: Jobs Available to Fill the GAP {}'.format(cur_time, _jobs_allocated))
+            print('{}: Jobs Allocated: {} Available to Fill the GAP {}'.format(cur_time, _jobs_allocated, for_backfilling))
 
 
         # If no reservation was already made for the blocked job, we make one
-        if reserved_time is None:
+        if not reserved_time:
             # All running events are computed, and the earliest slot in which the blocked job fits is computed.
             if _debug:
                 print("{}: Reserved time {}".format(cur_time, reserved_time))
@@ -410,7 +413,7 @@ class easybf_sched(scheduler_base):
             self.reserved_slot = self._search_slot(avl_resources, future_endings, es_dict[self.blocked_job_id], _debug)
             reserved_time = self.reserved_slot[0]
             reserved_nodes = self.reserved_slot[1]
-            
+        assert(self.reserved_slot[0]), 'There is no reserved time!'
         # Backfilling the schedule
         # running_events is a dict with the job id as key. Its value corresponds to the assignation {node: {resource: value}}
         if _debug:
@@ -456,10 +459,9 @@ class easybf_sched(scheduler_base):
         if _debug:
             print(e.requested_nodes, e.requested_resources)
             print('Running: ', len(future_endings))
-        for fe in future_endings:
-            # print('FE: ', fe[0], fe[1], fe[2])
+        for i, fe in enumerate(future_endings):
             if _debug:
-                print(fe)
+                print('{} future ending: {}'.format(i, fe))
             _time = fe[1]
             for node, used_resources in fe[2].items():
                 for attr, attr_value in used_resources.items(): 
