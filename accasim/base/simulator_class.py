@@ -560,7 +560,7 @@ class hpc_simulator(simulator_base):
                 break 
             
         self.end_simulation_time = _clock()
-        if not self.timeout or self.timeout and onetime:
+        if not self.timeout or self.timeout and ontime:
             assert (self.loaded_jobs == len(self.mapper.finished)), 'Loaded {} and Finished {}'.format(self.loaded_jobs,
                                                                                                    len(
                                                                                                        self.mapper.finished))
