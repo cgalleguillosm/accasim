@@ -321,14 +321,14 @@ class easybf_sched(scheduler_base):
         """
         return '-'.join([self.name, self.nonauto_allocator.name])
 
-    def scheduling_method(self, cur_time, es_dict, es, _debug=False):
+    def scheduling_method(self, cur_time, jobs_dict, queued_jobs, _debug=False):
         """
 
         This function must map the queued events to available nodes at the current time.
         
         :param cur_time: current time
-        :param es_dict: dictionary with full data of the events
-        :param es: events to be scheduled
+        :param jobs_dict: dictionary with full data of the events
+        :param queued_jobs: events to be scheduled
         :param _debug: Flag to debug
         
         :return: a tuple of (time to schedule, event id, list of assigned nodes)  
@@ -350,18 +350,19 @@ class easybf_sched(scheduler_base):
         if (reserved_time is not None and (reserved_time == cur_time or reserved_time < cur_time and self.blocked_resources)):  # Continue waiting until it finishes, for a more stricted it must kill the jobs when ==
             if _debug:
                 print('{}: Allocating the blocked node'.format(cur_time))
-            _e = es_dict[self.blocked_job_id]
+            _e = jobs_dict[self.blocked_job_id]
             blocked_job_allocation = self.nonauto_allocator.allocate(_e, cur_time, skip=False)
             if blocked_job_allocation[0] is not None:
                 _jobs_allocated.append(blocked_job_allocation)
                 assigned_nodes = blocked_job_allocation[2]
                 requested_resources = _e.requested_resources
                 _ready_dispatch.append((_e.id, cur_time + _e.expected_duration, {node: requested_resources for node in assigned_nodes}))
-                assert(es[0] == self.blocked_job_id), '{}'.format(es)
+                assert(queued_jobs[0] == self.blocked_job_id), '{}'.format(queued_jobs)
                 self.blocked_job_id = None
                 reserved_time, reserved_nodes = self.reserved_slot = (None, []) 
                 self.blocked_resources = False
-                _removed_id = es.pop(0)
+                _removed_id = queued_jobs[0]  # queued_jobs.pop(0)
+                queued_jobs = queued_jobs[1:]
                 if _debug:
                     print('{}: Removing the blocked job ({}) from the queue list '.format(cur_time, _removed_id))
                     print('The resources were unblocked')
@@ -375,13 +376,13 @@ class easybf_sched(scheduler_base):
         if not self.blocked_resources:     
             if _debug:
                 print('{}: there is not a blocked job. The algorithms performs FIFO Scheduling'.format(cur_time))       
-            _tmp_jobs_allocated, _id_jobs_nallocated = self._job_allocation(cur_time, es, es_dict, _debug)
+            _tmp_jobs_allocated, _id_jobs_nallocated = self._job_allocation(cur_time, queued_jobs, jobs_dict, _debug)
             _jobs_allocated += [_j[0] for _j in _tmp_jobs_allocated]
             _ready_dispatch += [_j[1] for _j in _tmp_jobs_allocated]
             if not _id_jobs_nallocated:
                 return  _jobs_allocated
         else:
-            _id_jobs_nallocated = es
+            _id_jobs_nallocated = queued_jobs
 
         #=======================================================================
         # Finding next available slot
@@ -396,7 +397,7 @@ class easybf_sched(scheduler_base):
         running_events = self.resource_manager.actual_events
 
         if _debug:
-            print('{}: Blocked Job: {} Request: {} x {}'.format(cur_time, self.blocked_job_id, es_dict[self.blocked_job_id].requested_nodes, es_dict[self.blocked_job_id].requested_resources))
+            print('{}: Blocked Job: {} Request: {} x {}'.format(cur_time, self.blocked_job_id, jobs_dict[self.blocked_job_id].requested_nodes, jobs_dict[self.blocked_job_id].requested_resources))
             print('{}: Jobs Allocated: {} Available to Fill the GAP {}'.format(cur_time, _jobs_allocated, for_backfilling))
 
 
@@ -406,11 +407,11 @@ class easybf_sched(scheduler_base):
             if _debug:
                 print("{}: Reserved time {}".format(cur_time, reserved_time))
                 print("{}: Running events {}".format(cur_time, running_events))
-            revents = [(job_id, es_dict[job_id].start_time + es_dict[job_id].expected_duration, assigns) for job_id, assigns in running_events.items()]
+            revents = [(job_id, jobs_dict[job_id].start_time + jobs_dict[job_id].expected_duration, assigns) for job_id, assigns in running_events.items()]
             future_endings = revents + _ready_dispatch
             # Sorting by soonest finishing
             future_endings.sort(key=lambda x: x[1], reverse=False)
-            self.reserved_slot = self._search_slot(avl_resources, future_endings, es_dict[self.blocked_job_id], _debug)
+            self.reserved_slot = self._search_slot(avl_resources, future_endings, jobs_dict[self.blocked_job_id], _debug)
             reserved_time = self.reserved_slot[0]
             reserved_nodes = self.reserved_slot[1]
         assert(self.reserved_slot[0]), 'There is no reserved time!'
@@ -429,7 +430,7 @@ class easybf_sched(scheduler_base):
             print('{}: To fill: {}'.format(cur_time, for_backfilling))
 
         # Trying to backfill the remaining jobs in the queue
-        to_schedule_e_backfill = [es_dict[_id] for _id in for_backfilling]
+        to_schedule_e_backfill = [jobs_dict[_id] for _id in for_backfilling]
         backfill_allocation = self.nonauto_allocator.allocate(to_schedule_e_backfill,
                                                                cur_time,
                                                                reserved_time=reserved_time,

@@ -478,7 +478,6 @@ class hpc_simulator(simulator_base):
         # =======================================================================
         while events or self.mapper.has_events():
             _actual_time = self.mapper.current_time
-
             benchStartTime = _clock() * 1000
             self.mapper.release_ended_events(event_dict)
             if debug:
@@ -505,14 +504,18 @@ class hpc_simulator(simulator_base):
             if events and (not self._skip or self._skip and time_stuck_counter <= 1):
                 if debug:
                     print('{} DUR: To Schedule {}'.format(_actual_time, len(events)))
+                simulated_jobs = (self._loaded_jobs() + len(self.mapper.queued) + len(events) + len(self.mapper.running) + len(self.mapper.finished))
+                assert(self.loaded_jobs == simulated_jobs), 'Some jobs were lost. {} != {}'.format(self.loaded_jobs, simulated_jobs)
                 to_dispatch = self.dispatcher.schedule(self.mapper.current_time, event_dict, events, debug)
+                assert(len(events) == len(to_dispatch)), 'Some queued jobs ({}/{}) were not included in the dispatching decision. Check the Dispatching algorithm:\nQueued: {}\nDispatching decision: {}'.format(len(to_dispatch), len(events), events, to_dispatch)
                 if debug:
                     print('{} DUR: To Dispatch {}. {}'.format(_actual_time, len(to_dispatch),
                                                               self.resource_manager.resources.usage()))
                 time_diff = 0
                 schedEndTime = _clock() * 1000
                 try:
-                    self.mapper.dispatch_events(event_dict, to_dispatch, time_diff, debug)
+                    (n_disp, n_disp_finish, n_post) = self.mapper.dispatch_events(event_dict, to_dispatch, time_diff, debug)
+                    assert(n_disp + n_disp_finish + n_post == len(to_dispatch)), 'Some jobs ({}/{}) of the dispatching decision are lost! Dispached: {}, Dispatched but Finished (0 Dur.): {}, Postponed: {}'.format(n_disp + n_disp_finish + n_post, len(to_dispatch), n_disp, n_disp_finish, n_post)
                 except AssertionError as e:
                     print('{} DUR: {}'.format(_actual_time, e))
                     print('{} DUR: Loaded {}, Queued {}, Running {}, Finished {}'.format(_actual_time,
@@ -557,7 +560,7 @@ class hpc_simulator(simulator_base):
                 break 
             
         self.end_simulation_time = _clock()
-        if self.timeout and ontime:
+        if not self.timeout or self.timeout and onetime:
             assert (self.loaded_jobs == len(self.mapper.finished)), 'Loaded {} and Finished {}'.format(self.loaded_jobs,
                                                                                                    len(
                                                                                                        self.mapper.finished))

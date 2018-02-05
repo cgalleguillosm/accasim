@@ -497,7 +497,11 @@ class event_mapper:
         :param time_diff: Time which takes the dispatching processing time. Default 0. 
         :param _debug: Debug flag    
 
+        :return return a tuple of (#dispatched, #Dispatched + Finished (0 duration), #postponed)
         """
+        n_disp = 0
+        n_disp_finish = 0
+        n_post = 0
         for (_time, _id, _nodes) in to_dispatch:
             assert(isinstance(_id, str)), 'Please check your return tuple in your Dispatching method. _id must be a str type. Received wrong type: {}'.format(e.__class__)
             assert(_time is None or _time >= self.current_time), 'Receiving wrong schedules.'
@@ -515,6 +519,7 @@ class event_mapper:
                 # Maintaining the event in the queue 
                 #==============================================================
                 self.submit_event(_id)
+                n_post += 1
                 continue
             _e = copy.deepcopy(event_dict[_id])
             if self.dispatch_event(_e, _time, time_diff, _nodes):
@@ -523,8 +528,14 @@ class event_mapper:
                     print('{} Must be postponed. Reason: {}. If you see this message many times, probably you have to check your allocation heuristic.'.format(_id, msg))
                     self.running.remove(_id)
                     self.submit_event(_id)
+                    n_post += 1
                 else:
                     event_dict[_id] = _e
+                    n_disp += 1
+            else:
+                # Since the job duration was 0 it was dispatched and finished at the same time 
+                n_disp_finish += 1
+        return (n_disp, n_disp_finish, n_post)
                 
     def release_ended_events(self, event_dict):
         """
