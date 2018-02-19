@@ -32,7 +32,7 @@ from accasim.utils.misc import sorted_object_list, str_datetime
 from collections import namedtuple
 from threading import Thread
 
-class scheduling_visualization:
+class system_utilization:
     """
     Using the matplotlib animation feature, this class will create a plot and update it during the simulation execution.
     """

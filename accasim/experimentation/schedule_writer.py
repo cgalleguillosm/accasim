@@ -29,10 +29,11 @@ class workload_writer(ABC):
     
     def __init__(self, path, overwrite=False, append=False):
         """
+        Abstract class used to write workload files.
 
-        :param path:
-        :param overwrite:
-        :param append:
+        :param path: Path to the target file
+        :param overwrite: If True, any existing files with the same name will be overwritten
+        :param append: If True, the new workload will be appended to a file with the same name, if it exists
         """
         exists = file_exists(path, True)
         if exists and not (overwrite or append):
@@ -49,9 +50,9 @@ class workload_writer(ABC):
         
     def add_newline(self, job_dict):
         """
+        Writes a new line corresponding to a job dictionary given as input
 
-        :param job_dict:
-        :return:
+        :param job_dict: The input job dictionary
         """
         line = self.process_dictionary(job_dict)
         if line[-1] != '\n':
@@ -61,29 +62,33 @@ class workload_writer(ABC):
     @abstractclassmethod
     def process_dictionary(self, job_dict):
         """
+        This method must convert the job dictionary to a string formatted in a specific way, according to the implementation
 
-        :param job_dict:
-        :return:
+        :param job_dict: Dictionary related to one specific job
+        :return: The string corresponding to the input dictionary
         """
         raise NotImplementedError()
     
     def close_file(self):
         """
-
-        :return:
+        Closes the output file stream
         """
         self.file.close()
     
     def __del__(self):
         """
-
-        :return:
+        If present, closes the file stream.
         """
         if hasattr(self, 'file'):
             self.close_file()
-        
+
+
 class default_writer(workload_writer):
-    
+    """
+    Implementation of the workload_writer class targeted at writing workload files in SWF format
+    """
+
+    # A list of attributes used to identify and form SWF job entries
     JOB_NUMBER = ('job_number', 0)
     SUBMIT_TIME = ('submit_time', 0)
     WAIT_TIME = ('wait_time', -1)
@@ -111,31 +116,34 @@ class default_writer(workload_writer):
     
     def __init__(self, path, max_time=14400, overwrite=False, append=False):
         """
+        Constructor for the class
 
-        :param path:
-        :param max_time:
-        :param overwrite:
-        :param append:
+        :param path: Path of the target workload file
+        :param max_time: Represents a wall-time value for jobs to be used in the workload
+        :param overwrite: If True, any existing files with the same name will be overwritten
+        :param append: If True, the new workload will be appended to a file with the same name, if it exists
         """
         workload_writer.__init__(self, path, overwrite, append)
         self.max_time = max_time
         
     def process_dictionary(self, job_dict):
         """
+        Converts a job dictionary to a string to be written in the workload.
 
-        :param job_dict:
-        :return:
+        :param job_dict: The job dictionary
+        :return: A properly formatted SWF string entry
         """
         line = [str(self.prepare_data(job_dict, attr_name, default_value)) for attr_name, default_value in self.SWF_ATTRIBUTES]
         return '\t'.join(line) 
         
     def prepare_data(self, job_dict, attr_name, default_value):
         """
+        Method used to prepare specific SWF attributes, by converting entries from the original job dictionary
 
-        :param job_dict:
-        :param attr_name:
-        :param default_value:
-        :return:
+        :param job_dict: The job dictionary
+        :param attr_name: The name of the attribute to be processed
+        :param default_value: Default value to be used for the attribute, if not present in job_dict
+        :return: The processed value for attr_name, if present, or default_value otherwise
         """
         total_processors = job_dict['resources']['core'] * job_dict['nodes']
         total_mem = job_dict['resources']['mem'] * job_dict['nodes']

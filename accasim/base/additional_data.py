@@ -52,8 +52,10 @@ class additional_data_type:
         
 class additional_data(ABC):
     """
+
     Additional data class enables to add new behavior to the system, by executing a custom process which can use the current state of the system to create new data
-    The current state of the system is maintained in the :class:`accasim.base.event_class.event_mapper` object.  
+    The current state of the system is maintained in the :class:`accasim.base.event_class.event_mapper` object.
+
     """
     
     def __init__(self, event_manager=None):
@@ -70,18 +72,20 @@ class additional_data(ABC):
     @abstractmethod
     def execute(self):
         """
+
         This method is called at every simulation step by the simulator to update the aditional data. 
         The user must ensure that any current existent variable will be overwritten by using the add_data function to update/create a single variable.
+
         """
         pass
     
     def add_timepoint(self, timepoint):
         """
-        
+
         Add a new time point for the events that activate the simulation steps.
         
-        :param timepoint: New time point, it must be equal or later than the current time.         
-        
+        :param timepoint: New time point, it must be equal or later than the current time.
+
         """
         assert(isinstance(timepoint, int)), 'The time point must be an int'
         current_time = self.event_mapper.current_time
@@ -91,13 +95,13 @@ class additional_data(ABC):
         
     def add_data(self, name, value):
         """
-        
+
         Adds a new attribute and the respective value to the event manager.
         The new variable corresponds to a :class:`.additional_data_type`. If the variable already exists, it is updated through its update method.
         
         :param name: The name of the new attribute
         :param value: The value for the new attribute
-        
+
         """
         if hasattr(self.event_mapper, name):
             var = getattr(self.event_mapper, name)
@@ -109,10 +113,11 @@ class additional_data(ABC):
         
     def set_event_manager(self, event_manager):
         """
-            Set the system event manager
+
+        Set the system event manager
             
-            :param event_manager: An instantiation of a :class:`accasim.base.event_class.event_mapper` class or None
-             
+        :param event_manager: An instantiation of a :class:`accasim.base.event_class.event_mapper` class or None
+
         """       
         if self.event_mapper:
             return

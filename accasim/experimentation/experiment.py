@@ -97,6 +97,9 @@ class experiment_class:
         """
         Add a dispatcher to the set of dispatchers.
 
+        The dispatcher must be supplied in the form of a fully instanced scheduler_base object, which includes an
+        allocator as well.
+
         :param name: Dispatcher name.
         :param dispatcher: Dispatcher instantiation.
 
@@ -112,6 +115,9 @@ class experiment_class:
     def generate_dispatchers(self, scheduler_list, allocator_list):
         """
         Generate a set of dispatchers from a combination of scheduler and allocation lists.
+
+        The input is given as a list of class names for schedulers and allocators: the method will then automatically
+        generate all objects corresponding to all possible combinations of the supplied schedulers and allocators.
 
         :param scheduler_list: List of schedulers (:class:`accasim.base.scheduler_class.scheduler_base`).
         :param allocator_list: List of allocators (:class:`accasim.base.allocator_class.allocator_base`).
@@ -133,6 +139,11 @@ class experiment_class:
 
 
     def _run_simulation(self, dispatcher):
+        """
+        Runs a single simulation instance, with a specified dispatcher
+
+        :param dispatcher: A dispatcher instantiation
+        """
         simulator = hpc_simulator(self.workload, self.sys_config, dispatcher,
             simulator_config=self.simulator_config, **
             self.SIMULATOR_ATTRIBUTES)
@@ -140,7 +151,7 @@ class experiment_class:
 
     def run_simulation(self, generate_plot=True):
         """
-        Starts the simulation process. It's uses each instance of dispatching method to create the experiment.
+        Starts the simulation process. Its uses each instance of dispatching method to create the experiment.
         After that all experiments are run, the comparing plots are generated the :attr:`.generate_plot` option is set as True.
 
         :param generate_plot: `True` if plots must be generated, otherwise `False`. 
@@ -164,7 +175,7 @@ class experiment_class:
 
     def create_folders(self, name, instance_name, OVERWRITE=True):
         """
-        Create a folder if does not exists. If :attr:`.OVERWRITE` is True, the existing folder will be deleted and then created.        
+        Create a folder if does not exists. If :attr:`.OVERWRITE` is True, the existing folder will be deleted and then created.
         
         :param name: Corresponds to the experiment name.
         :param instance_name: Name of the current simulation. By default is the name of the dispatcher.
@@ -197,7 +208,11 @@ class experiment_class:
 
     def generate_plots(self, experiment_folder):
         """
-        Generate the all plots available in the :class:`accasim.utils.plot_factory` class. 
+        Generate the all plots available in the :class:`accasim.utils.plot_factory` class.
+
+        All plots are generated using the default parameters for each plot type. If users wish to produce plots with
+        custom features and attributes, a plot_factory object with its produce_plot method must be explicitly used,
+        pointing at the result files produced by the simulations.
         
         :param experiment_folder: Path where the plots will be placed.
         """

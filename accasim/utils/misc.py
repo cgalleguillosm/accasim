@@ -261,7 +261,7 @@ def from_isodatetime_2_timestamp(dtime):
     return int(t.timestamp())
 
 
-class watcher_daemon:
+class system_status:
     """
     
     Wathcer Daemon allows to track the simulation process through command line querying.
@@ -272,13 +272,13 @@ class watcher_daemon:
     def __init__(self, port, functions):
         """
     
-        Watcher daemon constructor
+        System_status daemon constructor
         
-        :param port: Port of the watcher   
+        :param port: Port of the system_status daemon
         :param functions: Available functions to call for data.
     
         """
-        self.server_address = ('', port)
+        self.server_address = ['', port]
         af = socket.AF_INET
         self.sock = socket.socket(af, socket.SOCK_STREAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -305,8 +305,14 @@ class watcher_daemon:
     
         """
         # Listen for incoming connections
-        # Reusing
-        self.sock.bind(self.server_address)
+        # We retry binding the socket as long as we don't find a valid, unused port
+        while True:
+            try:
+                self.sock.bind(tuple(self.server_address))
+                break
+            except socket.error:
+                self.server_address[1] += 1
+
         self.sock.listen(5)
 
         while not self.hastofinish:
@@ -1030,7 +1036,7 @@ class DEFAULT_SIMULATION:
             * "SUBMISSION_ERROR_PREFIX": "suberror-"
         * RESOURCE_ORDER: How resource are sorted for printing purposes.
             * "RESOURCE_ORDER": ["core", "mem"]
-        * WATCH_PORT: Port used for the watcher daemon.
+        * WATCH_PORT: Port used for the system status daemon.
             * "WATCH_PORT": 8999
     
     """

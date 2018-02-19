@@ -23,12 +23,12 @@ SOFTWARE.
 """
 from accasim.base.simulator_class import hpc_simulator
 from accasim.base.scheduler_class import fifo_sched
-from accasim.base.allocator_class import ffp_alloc
+from accasim.base.allocator_class import ff_alloc
 
 workload = 'workloads/HPC2N-2002-2.2.1-cln.swf'
 sys_cfg = 'config/HPC2N.config'
 
-allocator = ffp_alloc()
+allocator = ff_alloc()
 dispatcher = fifo_sched(allocator)
-simulator = hpc_simulator(sys_cfg, dispatcher, workload, RESULTS_FOLDER_NAME='results') 
-simulator.start_simulation(visualization=False, watcher=False, debug=False)
+simulator = hpc_simulator(workload, sys_cfg, dispatcher, RESULTS_FOLDER_NAME='results')
+simulator.start_simulation(system_utilization=False, system_status=False, debug=False)

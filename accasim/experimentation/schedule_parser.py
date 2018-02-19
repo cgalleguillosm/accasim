@@ -29,8 +29,11 @@ from re import compile as _compile
 
 def define_result_parser(simulator_config=None):
     """
+    This function creates a schedule_parser instance enabled for parsing AccaSim schedule files.
 
-    :return:
+    The objects produced by this function are used for post-processing simulation results.
+
+    :return: A schedule_parser object
     """
     try:
         if simulator_config is not None:
@@ -50,13 +53,22 @@ def define_result_parser(simulator_config=None):
         _format = _format.replace('{' + _attr_name + '}', type_regexp(_data_type[-1]).format(_attr_name))
     return schedule_parser(_format, [])
 
+
 class schedule_parser(workload_parser_base):
+    """
+    This class can read and parse schedule files produced by different sources, by personalizing the underlying parser
+    object.
+
+    schedule_parser class is an implementation of the :class:`accasim.utils.reader_class.workload_parser_base`
+    """
+
     def __init__(self, regexp, updater=[]):
         """
-        schedule_parser class is an implementation of the :class:`accasim.utils.reader_class.workload_parser_base`
-         
-        :param regexp:
-        
+        Constructor for the class.
+
+        :param regexp: Regular expression that allows to perform the parsing of lines in the schedule file
+        :param updater: A list of functions used by the parser to perform automatic update operations over the lines
+            that are read in the schedule file
         """
         workload_parser_base.__init__(self)
         self.regexp = _compile(regexp)
@@ -64,9 +76,10 @@ class schedule_parser(workload_parser_base):
 
     def parse_line(self, line):
         """
+        This method performs parsing over a single line in the schedule file, and returns a corresponding dict object.
 
-        :param line:
-        :return:
+        :param line: The line that must be parsed
+        :return: A dict object is successful, None otherwise
         """
         _matches = self.regexp.match(line)
         if not _matches:
@@ -75,16 +88,25 @@ class schedule_parser(workload_parser_base):
         for u in self.updater:
             u(_dict)
         return _dict
-    
+
+
 class workload_file_reader:
+    """
+    Class that allows to read and parse schedule files produced by various sources.
+
+    This class employs a schedule_parser object in order to parse the lines that are read from the schedule file.
+
+    """
     
     def __init__(self, workload, reg_exp, tweak_class, updater=[]):
         """
+        Constructor for the class.
 
-        :param workload:
-        :param reg_exp:
-        :param tweak_class:
-        :param updater:
+        :param workload: Path to the file to be read
+        :param reg_exp: Regular expression used to instance the underlying schedule_parser object
+        :param tweak_class: tweak_class instance used to filter the entries read from the schedule file
+        :param updater: A list of functions used by the parser to perform automatic update operations over the lines
+            that are read in the schedule file
         """
         self.reader = plain_file_reader(workload)
         self.parser = schedule_parser(reg_exp, updater)
@@ -92,9 +114,10 @@ class workload_file_reader:
         
     def next(self, omit_startwith=';'):
         """
+        Reads and parses one line from the workload file that is being read.
 
-        :param omit_startwith:
-        :return:
+        :param omit_startwith: All lines starting with this character are skipped, and not returned
+        :return: A dictionary corresponding to the read line
         """
         if self.reader.EOF:
             return None

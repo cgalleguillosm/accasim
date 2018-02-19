@@ -26,10 +26,11 @@ from sys import path as _path
 from datetime import datetime
 from abc import abstractmethod, ABC
 from accasim.utils.reader_class import default_reader_class, reader_class
-from accasim.utils.misc import CONSTANT, watcher_daemon, DEFAULT_SIMULATION, load_config, clean_results, \
+from accasim.utils.misc import CONSTANT, DEFAULT_SIMULATION, load_config, clean_results, \
     default_swf_mapper
+from accasim.utils.misc import system_status as system_status_class
 from accasim.utils.file import path_leaf, save_jsonfile
-from accasim.utils.visualization_class import scheduling_visualization
+from accasim.utils.visualization_class import system_utilization as system_utilization_class
 from accasim.base.event_class import event_mapper, attribute_type
 from accasim.base.resource_manager_class import resources_class, resource_manager
 from accasim.base.scheduler_class import scheduler_base
@@ -394,18 +395,18 @@ class hpc_simulator(simulator_base):
             self.constants.running_at['running_jobs'] = {x: self.mapper.events[x] for x in self.mapper.running}
             _sleep(self.constants.running_at['interval'])
 
-    def start_simulation(self, watcher=False, visualization=False, **kwargs):
+    def start_simulation(self, system_status=False, system_utilization=False, **kwargs):
         """
         
         Initializes the simulation
                 
         :param init_unix_time: Adjustement for job timings. If the first job corresponds to 0, the init_unix_time must corresponds to the real submit time of the workload. Otherwise, if the job contains the real submit time, init_unix_time is 0.
-        :param watcher: Initializes the watcher. 
-        :param visualization: Initializes the running jobs visualization using matplotlib.
+        :param system_status: Initializes the system status daemon.
+        :param system_utilization: Initializes the running jobs visualization using matplotlib.
         :param \*\*kwargs: a 'tweak_function' to deal with the workloads.
          
         """
-        if visualization:
+        if system_utilization:
             running_at = {
                 'interval': 1,
                 'current_time': self.mapper.current_time,
@@ -415,22 +416,22 @@ class hpc_simulator(simulator_base):
             _stop = THEvent()
             monitor = Thread(target=self.monitor_datasource, args=[_stop])
             monitor.daemon = True
-            self.daemons['visualization'] = {
-                'class': scheduling_visualization,
+            self.daemons['system_utilization'] = {
+                'class': system_utilization_class,
                 'args': [(None, 'constants.running_at'), (None, 'resource_manager.resources.system_capacity',)],
                 'object': None
             }
             monitor.start()
 
-        if watcher:
+        if system_status:
             functions = {
                 'usage_function': self.mapper.usage,
                 'availability_function': self.mapper.availability,
                 'simulated_status_function': self.mapper.simulated_status,
                 'current_time_function': self.mapper.simulated_current_time
             }
-            self.daemons['watcher'] = {
-                'class': watcher_daemon,
+            self.daemons['system_status'] = {
+                'class': system_status_class,
                 'args': [self.constants.WATCH_PORT, functions],
                 'object': None
             }
@@ -443,7 +444,7 @@ class hpc_simulator(simulator_base):
         simulation.join()
         # Stopping the daemons    
         [d['object'].stop() for d in self.daemons.values() if d['object']]
-        if visualization:
+        if system_utilization:
             _stop.set()
 
         filepaths = self._generated_filepaths()
@@ -697,7 +698,7 @@ class hpc_simulator(simulator_base):
     def daemon_init(self):
         """
 
-        Initialization of the simulation daemons. I.e. visualization or watcher
+        Initialization of the simulation daemons. I.e. system_utilization or system_status
 
         """
         _iter_func = lambda act, next: act.get(next) if isinstance(act, dict) else (
