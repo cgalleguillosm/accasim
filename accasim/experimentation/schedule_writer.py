@@ -40,12 +40,14 @@ class workload_writer(ABC):
             raise Exception('File already exists. Overwrite option is False. Set True to overwrite or change the filename/filepath.')
         if overwrite and append:
             raise Exception('Only one mode (append or overwrite) can be True. ')
-                
+        
+        mode = None     
         if overwrite:
             mode = 'w'
         elif append:
             mode = 'a'
-                    
+        
+        assert(mode), 'File exists and the overwrite and append modes are False'
         self.file = open(path, mode)
         
     def add_newline(self, job_dict):
@@ -152,7 +154,8 @@ class default_writer(workload_writer):
         job_dict['allocated_processors'] = total_processors
         job_dict['requested_memory'] = total_mem
         job_dict['used_memory'] = total_mem
-        job_dict['requested_time'] = self.max_time
+        if not job_dict['requested_time']:
+            job_dict['requested_time'] = self.max_time
         
         if attr_name in job_dict:
             return job_dict[attr_name]

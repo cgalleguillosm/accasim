@@ -174,7 +174,7 @@ class reader_class(ABC):
         time_points = []
         for _job in self.loaded_jobs:
             _subt_job = getattr(_job, stime_name)
-            assert(_subt_job >= current_time), 'Error of the loading jobs process. The submission time belongs to the past. ({} < {})'.format(_subt_job, current_time)
+            assert(_subt_job >= current_time), 'Error of the loading jobs process. The submission time belongs to the past. ({} is previous to {})'.format(_subt_job, current_time)
             if _subt_job not in jobs_dict:
                 jobs_dict[_subt_job] = []
                 time_points.append(_subt_job)

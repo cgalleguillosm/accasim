@@ -22,15 +22,19 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 from accasim.base.resource_manager_class import resources_class
-from accasim.utils.misc import obj_assertion, str_datetime
+from accasim.utils.misc import obj_assertion, str_datetime, load_config
 from accasim.utils.data_fitting import distribution_fit
-from accasim.experimentation.schedule_writer import workload_writer
+from accasim.experimentation.schedule_writer import workload_writer, default_writer
+from accasim.experimentation.schedule_parser import workload_file_reader
+from accasim.utils.reader_class import default_tweak_class
+
 
 from abc import ABC
 from scipy import stats as _statistical_distributions
 from scipy.stats import percentileofscore as _percentileofscore
 from statistics import pstdev as _pstdev
-from numpy import histogram as _histogram, mean
+from numpy import average, percentile, cumsum, searchsorted
+from numpy import histogram as _histogram, mean, ndarray
 from sys import float_info as _min_float
 from math import exp as _exp, log as _log
 from random import random as _random
@@ -39,9 +43,12 @@ from collections import Counter
 import json
 import time
 from sortedcontainers import SortedList as _sorted_list
+from _functools import reduce
+import os
 
 
 class generator(ABC):
+    
     def __init__(self, distributions):
         """
         
@@ -65,7 +72,7 @@ class generator(ABC):
             dist = getattr(_statistical_distributions, dist_name)
             return dist.cdf(x, *dist_param, **optional)
 
-    def dist_rand(self, dist_name, dist_param, optional):
+    def dist_rand(self, dist_name, dist_param, optional, size=1):
         """
 
         :param dist_name:
@@ -76,9 +83,16 @@ class generator(ABC):
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore')
             dist = getattr(_statistical_distributions, dist_name)
-            return dist.rvs(*dist_param, **optional)
+            return dist.rvs(*dist_param, size=size, **optional)
         
     def hist_rand(self, dist_name, dist_param, optional):
+        """
+
+        :param dist_name:
+        :param dist_param:
+        :param optional:
+        :return:
+        """
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore')
             dist = getattr(_statistical_distributions, dist_name)
@@ -89,6 +103,8 @@ class generator(ABC):
         """
 
         :param data:
+        :param save:
+        :param filepath:
         :return:
         """
         ((dist_name, sse, param), bins, hist) = self.distribution_fit.auto_best_fit(data)
@@ -105,11 +121,20 @@ class generator(ABC):
         return (params, bins, hist,) 
         
     def _save_parameters(self, filepath, dist_params, **kwargs):
+        """
+
+        :param filepath:
+        :param dist_params:
+        :param kwargs:
+        :return:
+        """
         if not filepath:
             filepath = 'dist-params_{}.json'.format(int(time.time()))
         
         gen_parameters = {'params': dist_params}
         for k, v in kwargs.items():
+            if isinstance(v, ndarray):
+                v = v.tolist()
             gen_parameters[k] = v
         with open(filepath, 'w') as fp:
             json.dump(gen_parameters, fp)        
@@ -131,6 +156,10 @@ class job_generator(generator):
         :param performance:
         :param min_request:
         :param max_request:
+        :param params:
+        :param max_opers_serial:
+        :param max_parallel_duration:
+        :param distributions:
         """
 
         self.total_nodes = total_nodes
@@ -149,47 +178,43 @@ class job_generator(generator):
         """
 
         :param jobs_flops:
+        :param save:
         :return:
         """
-        print(min(jobs_flops), mean(jobs_flops), max(jobs_flops))
         if not self.params:
             max_opers = max(jobs_flops)
+            self.min_opers = min(jobs_flops)
             if not hasattr(self, 'max_opers') or self.max_opers < max_opers:
                 self.max_opers = max_opers * 1.2  # at max 20% as in the sample
-            hist, bins = _histogram(jobs_flops, bins=100, density=True)
-            
-            self.params = self._generate_dist_params([bins[:-1], hist])
-            
+            self.params, self.density, self.bins = self._generate_dist_params(jobs_flops)
             if save:
                 filename = 'job_params-{}'.format(int(time.time()))
-                self._save_parameters(filename, self.params, max_opers=self.max_opers, hist_bins=bins.tolist())
+                self._save_parameters(filename, self.params, min_opers=self.min_opers, max_opers=self.max_opers, density=self.density.tolist(), bins=self.bins.tolist())
 
-    def next_job(self):
+    def next_job(self, size=1):
         """
 
+        :param size:
         :return:
         """
         assert (self.params), 'Sample data must be added first!'
-        #=======================================================================
-        # while True:
-        #     gflops = 0
-        #     while True:
-        #         try:
-        #             log_gflops = self.hist_rand(**self.params)  # Distribution saves data in log format
-        #             if log_gflops <= self.max_opers:
-        #                 gflops = _exp(log_gflops) 
-        #                 break
-        #         except OverflowError:
-        #             pass 
-        #     type, nodes, request = self._generate_request(gflops)
-        #     runtime = int(self._calc_runtime(gflops, nodes, request))
-        #     if runtime <= self.max_parallel_duration * 1.1:
-        #         break
-        #=======================================================================
-        gflops = self.hist_rand(**self.params)
-        type, nodes, request = self._generate_request(gflops)
-        runtime = int(self._calc_runtime(gflops, nodes, request))
-        return type, runtime, nodes, request
+        values = []
+        while len(values) < size:
+            rnds = self.dist_rand(size=size - len(values), **self.params)
+        
+            i_rnds = searchsorted(self.bins, rnds)
+            for i, rnd in zip(i_rnds, rnds): 
+                if self.min_opers <= rnd <= self.max_opers:
+                    if self.density[i - 1] > 0:
+                        values.append(int(rnd))
+                    elif random() < 0.05:
+                        values.append(int(rnd))
+        job_features = []
+        for flops in values:
+            type, nodes, request = self._generate_request(flops)
+            runtime = int(self._calc_runtime(flops, nodes, request))
+            job_features.append((type, runtime, nodes, request))
+        return job_features
 
     def _central_node_prob(self, par_node_prob):
         """
@@ -268,6 +293,7 @@ class job_generator(generator):
     def _generate_request(self, gflops, job_profiles=None):
         """
 
+        :param gflops:
         :param job_profiles:
         :return:
         """
@@ -326,19 +352,27 @@ class arrive_generator(generator):
     SECONDS_IN_BUCKET = SECONDS_PER_DAY / BUCKETS
     DISTRIBUTIONS = ['gamma', 'dweibull', 'lognorm', 'genexpon', 'expon', 'exponnorm', 'exponweib', 'exponpow', 'truncexpon']
 
-    def __init__(self, initial_time, day_prob, month_prob, param, cyclic_day_start=0, max_arrive_time=5 * 24 * 3600, distributions=[]):
+    def __init__(self, initial_time, hour_prob, day_prob, month_prob, param, total_jobs, cyclic_day_start=0, max_arrive_time=5 * 24 * 3600, distributions=[]):
         """
 
         :param initial_time:
+        :param hour_prob:
+        :param day_prob:
+        :param month_prob:
+        :param param:
+        :param total_jobs:
         :param cyclic_day_start:
-        :param max_arrive_time: in secs
+        :param max_arrive_time:
+        :param distributions:
         """
         assert (0 <= cyclic_day_start < 24), 'The cicle must start between [0, 23].'
 
         self.initial_time = initial_time
+        self.hour_prob = hour_prob
         self.day_prob = day_prob
         self.month_prob = month_prob
         self.cyclic_day_start = cyclic_day_start
+        self.total_jobs = total_jobs
         self.initial_bucket = int(
             round((str_datetime(self.initial_time).get_hours() * self.BUCKETS) / self.HOURS_PER_DAY))
         self.distribution_plot = False
@@ -358,17 +392,17 @@ class arrive_generator(generator):
         self.initialized = False
         self.TOO_MUCH_ARRIVE_TIME = _log(max_arrive_time)
 
-    def add_sample(self, submission_times, name='general', rush_hours=(8, 17), save=False):
+    def add_sample(self, submission_times, rush_hours=(8, 17), save=False):
         """
 
         :param submission_times:
-        :param name:
         :param rush_hours:
+        :param save:
         :return:
         """
+        
         total_jobs = len(submission_times)
         assert(total_jobs >= 1000), 'Data might no be representative. There are just {} jobs.'.format(total_jobs)
-        
         _bucket_number = lambda _dtime: _dtime.get_hours() * (self.BUCKETS // self.HOURS_PER_DAY) + (
         _dtime.get_minutes() // 30)
         submission_times = sorted(submission_times)
@@ -407,52 +441,52 @@ class arrive_generator(generator):
             for type in data:
                 if not data[type]:
                     continue
-                if name not in self.params:
-                    self.params[name] = {}
-                self.params[name][type] = self._generate_dist_params(data[type])
+                self.params[type], _, _ = self._generate_dist_params(data[type])
     
                 if self.distribution_plot:
-                    self._save_distribution_plot(name, data, type)
+                    self._save_distribution_plot('arrive distribution', data, type)
             if save:
                 filename = 'arrive_params-{}'.format(int(time.time()))
                 self._save_parameters(filename, self.params)
 
-    def next_time(self, generation_stats, sample_name='general'):
+    def next_time(self, generation_stats):
         """
 
-        :param sample_name:
+        :param generation_stats:
         :return:
         """
         assert (len(self.params) > 0), 'Data samples must be added before try to generate a next time arrive.'
 
         if not self.initialized:
             self._initialize()
-        dist_params = self.params[sample_name]['total']
+        sample_name = 'total'
+        dist_params = self.params[sample_name]
+        dist = {'dist_name': dist_params['dist_name'], 'dist_param': dist_params['dist_param'], 'optional':dist_params['optional']}
         
-        current_day, current_month = self._date_info(self.time_from_begin[sample_name]) 
-        
-        cur_day_jobs = generation_stats['current_d'][current_day - 1]
-        cur_month_jobs = generation_stats['current_m'][current_month - 1]
-        dprob = self.day_prob[current_day - 1]
-        mprob = self.month_prob[current_month - 1]
-        try:
-            if cur_day_jobs / generation_stats['current_jobs'] < dprob: 
-                current_rate = (cur_day_jobs / generation_stats['total_jobs']) 
-            elif cur_month_jobs / generation_stats['current_jobs'] < mprob:
-                current_rate = (cur_month_jobs / generation_stats['total_jobs']) 
-            else:
-                current_rate = 1
-        except ZeroDivisionError:
+        current_hour, current_day, current_month = self._date_info(self.time_from_begin[sample_name])
+                
+        current_jobs = generation_stats['current_jobs']
+        togen_jobs = generation_stats['total_jobs']
+        if current_jobs == 0:
             current_rate = 1
+        else:
+            cur = [generation_stats['current_h'][current_hour - 1] / current_jobs, generation_stats['current_d'][current_day - 1] / current_jobs, generation_stats['current_m'][current_month - 1] / current_jobs]
+            prob = [self.hour_prob[current_hour - 1], self.day_prob[current_day - 1], self.month_prob[current_month - 1]]
+            progress = [ ((c * current_jobs) / (togen_jobs * p)) for c, p in zip(cur, prob)]
+            progress = [p for p in progress if 0 < p <= 1]
+            if not progress:
+                current_rate = 1
+            else:
+                current_rate = reduce(lambda x, y: x * y, progress)
+                
         factor = (1 - current_rate)
-        
         cur_max_ia_time = self.TOO_MUCH_ARRIVE_TIME - (self.TOO_MUCH_ARRIVE_TIME - _log(self.SECONDS_IN_BUCKET)) * factor
         
+        assert(cur_max_ia_time <= self.TOO_MUCH_ARRIVE_TIME), 'wrong cur max ia time {} > {} ({} days)'.format(cur_max_ia_time, self.TOO_MUCH_ARRIVE_TIME, _exp(cur_max_ia_time) / (3600 * 24))
         while True:
-            rnd_value = self.dist_rand(**dist_params)
+            rnd_value = self.dist_rand(**dist)
             if rnd_value <= cur_max_ia_time: 
                 break
-            
         current_bucket = self.current[sample_name]
         weights = self.weights[sample_name]
         
@@ -463,12 +497,12 @@ class arrive_generator(generator):
             self.points[sample_name] -= weights[current_bucket]
             current_bucket = (current_bucket + 1) % self.BUCKETS
             next_arrive += self.SECONDS_IN_BUCKET
-
+        
         new_reminder = self.points[sample_name] / weights[current_bucket]
         more_time = self.SECONDS_IN_BUCKET * (new_reminder - self.reminders[sample_name])
         next_arrive += more_time
         self.reminders[sample_name] = new_reminder
-        self.time_from_begin[sample_name] += int(next_arrive)  # int(round(next_arrive))
+        self.time_from_begin[sample_name] += int(next_arrive)
 
         # Update all attributes
         self.current[sample_name] = current_bucket
@@ -477,7 +511,7 @@ class arrive_generator(generator):
 
     def _date_info(self, timestamp):
         dtime = str_datetime(timestamp)
-        return dtime.get_weekday(), dtime.get_month()
+        return dtime.get_hours(), dtime.get_weekday(), dtime.get_month()
 
 
     def _save_distribution_plot(self, name, data, data_type):
@@ -492,12 +526,12 @@ class arrive_generator(generator):
         x = range(self.BUCKETS)
         _data = data[data_type]
         plt.hist(_data, self.BUCKETS, normed=True)
-        _param = self.params[name][data_type]
+        _param = self.params[data_type]
         dist_name = _param['dist_name']
         dist_param = _param['dist_param']
         optional = _param['optional']
         dist = getattr(_statistical_distributions, dist_name)
-        pdf_fitted = dist.pdf(x, *dist_param, **optional)  # * len(_data)
+        pdf_fitted = dist.pdf(x, *dist_param, **optional)
         plt.plot(pdf_fitted, label=dist_name)
         plt.show()
 
@@ -506,9 +540,9 @@ class arrive_generator(generator):
 
         :return:
         """
-        for _name, params in self.params.items():
-            dist_params = params['total']
-            self.weights[_name] = [self.dist_cdf(i + 0.5, **dist_params) - self.dist_cdf(i - 0.5, **dist_params) for i
+        for _name, dist_params in self.params.items():
+            dist = {'dist_name': dist_params['dist_name'], 'dist_param': dist_params['dist_param'], 'optional':dist_params['optional']}
+            self.weights[_name] = [self.dist_cdf(i + 0.5, **dist) - self.dist_cdf(i - 0.5, **dist) for i
                                    in range(self.BUCKETS)]
             self.means[_name] = sum(self.weights[_name]) / self.BUCKETS
             self.weights[_name] = [w / self.means[_name] for w in self.weights[_name]]
@@ -520,39 +554,48 @@ class arrive_generator(generator):
 
 
 class workload_generator:
-    def __init__(self, init_time, base_reader, performance, min_request, max_request, resources_obj=None,
-                 sys_config=None, non_processing_resources=['mem'], **kwargs):
+    
+    def __init__(self, workload, sys_config, performance, request_limits, reader_class=None, resources_target=None, user_behavior=None, walltime_calculation=None, non_processing_resources=['mem'], **kwargs):
         """
 
-        :param init_time:
-        :param base_reader:
-        :param performance:
-        :param min_request:
-        :param max_request:
-        :param resources_obj:
+        :param workload:
         :param sys_config:
+        :param performance:
+        :param request_limits:
+        :param reader_class:
+        :param resources_target:
+        :param user_behavior:
+        :param walltime_calculation:
         :param non_processing_resources:
         :param kwargs:
         """
+        self.walltime_calculation = walltime_calculation
         show_msg = False
         save_parameters = False
         job_parameters = {}
         arrive_parameters = {}
         job_gen_optional = {}
         arrive_gen_optional = {}
+        
+        config = load_config(sys_config)
+        
+        resources = self._set_resources(None, sys_config)
+        equivalence = config.pop('equivalence', {})
+        start_time = config.pop('start_time', int(time.time()))
+        
+        if not reader_class:
+            reader_class = self._default_simple_swf_reader(workload, start_time, equivalence, resources)
                
-        resources = self._set_resources(resources_obj, sys_config)
-        _submissiont_times, _job_total_opers, serial_prob, nodes_parallel_prob, day_prob, month_prob, max_opers_serial, max_parallel_duration = self._initialize(base_reader,
+        if not hasattr(reader_class, "next"):
+            raise Exception('The reader_class must implement the next method.')
+        
+        if not resources_target:
+            resources_target = self._set_resources(None, sys_config)
+        
+        total_jobs, _submissiont_times, _job_total_opers, serial_prob, nodes_parallel_prob, hour_prob, day_prob, month_prob, max_opers_serial, max_parallel_duration = self._initialize(reader_class,
                                                                                                   performance,
                                                                                                   resources,
-                                                                                                  non_processing_resources)
-        
-        # Remove
-        with open('SETH-opers.json', 'w') as f:
-            json.dump(list(_job_total_opers), f)
-            
-        exit()
-        
+                                                                                                  non_processing_resources)                
         if 'show_msg' in kwargs:
             show_msg = kwargs['show_msg']
         
@@ -570,15 +613,18 @@ class workload_generator:
             
         parallel_prob = 1 - serial_prob
 
-        self.arrive_generator = arrive_generator(init_time, day_prob, month_prob, arrive_parameters)
+        self.arrive_generator = arrive_generator(start_time, hour_prob, day_prob, month_prob, arrive_parameters, total_jobs)
+        
         if show_msg:
             print('Arrive generator samples...')
         self.arrive_generator.add_sample(_submissiont_times, save=save_parameters)
         if show_msg:
             print('Arrive generator samples... Loaded')
+            
         total_nodes = sum([d['nodes'] for d in resources.definition])
         total_resources = resources.total_resources()
         resource_types = list(resources.total_resources().keys())
+        min_request, max_request = request_limits['min'], request_limits['max'] 
 
         self.job_generator = job_generator(total_nodes, resource_types, serial_prob, parallel_prob, nodes_parallel_prob,
                                            performance, min_request, max_request, job_parameters, max_opers_serial, max_parallel_duration, **job_gen_optional)
@@ -607,6 +653,7 @@ class workload_generator:
         _job_submission_times = []
         _job_types = {'serial': 0, 'parallel': 0}
         _job_total_opers = _sorted_list()
+        _job_hours = [0 for i in range(24)]
         _job_days = [0 for i in range(7)]
         _job_months = [0 for i in range(12)]
         _nodes_requested = {n + 1: 0 for n in range(total_nodes)}
@@ -619,7 +666,8 @@ class workload_generator:
             if not _dict:
                 break
             submisison_time = _dict['queued_time']
-            weekday, month = self._date_info(submisison_time)
+            hour, weekday, month = self._date_info(submisison_time)
+            _job_hours[hour - 1] += 1
             _job_days[weekday - 1] += 1
             _job_months[month - 1] += 1
             duration = int(_dict['duration'])
@@ -648,56 +696,83 @@ class workload_generator:
             total_jobs += 1
 
         _job_types.update((k, v / total_jobs) for k, v in _job_types.items())
+        _job_hours = [h / total_jobs for h in _job_hours]
         _job_days = [d / total_jobs for d in _job_days]
         _job_months = [m / total_jobs for m in _job_months]
 
         if _n_parallel_requests > 1:
             nodes_parallel_prob = {n: _nodes_requested[n] / _n_parallel_requests for n in _nodes_requested}
+        
+        return total_jobs, _job_submission_times, _job_total_opers, _job_types['serial'], nodes_parallel_prob, _job_hours, _job_days, _job_months, _max_opers_serial, _max_parallel_duration
 
-        return _job_submission_times, _job_total_opers, _job_types['serial'], nodes_parallel_prob, _job_days, _job_months, _max_opers_serial, _max_parallel_duration
-
-    def generate_jobs(self, n, writer=None):
+    def generate_jobs(self, n, filename, overwrite=True, writer=None):
         """
 
         :param n:
+        :param filename:
+        :param overwrite:
         :param writer:
         :return:
         """
         if not writer:
+            writer = default_writer(filename, overwrite=overwrite)
+        else:
             obj_assertion(writer, workload_writer,
                           'Received {} type as system resource. resources_class type expected.',
                           [workload_writer.__class__.__name__])
+                
         generation_stats = {
             'current_jobs': 0,
             'total_jobs': n,
+            'current_h': [0 for i in range(24)],
             'current_d': [0 for i in range(7)],
             'current_m': [0 for i in range(12)]
         }
+        
         jobs = {}
+        sub_times = []
         for i in range(n):
+            if (i + 1) % 1000 == 0 :
+                print('Generated {} jobs'.format(i + 1))
             submit_time = self.arrive_generator.next_time(generation_stats)
+            sub_times.append(submit_time)
             self._update_stats(generation_stats, submit_time)
-            job_type, duration, nodes, request = self.job_generator.next_job()
+            job_type, duration, nodes, request = self.job_generator.next_job()[0]
             jobs[i + 1] = {
                 'job_number': i + 1,
                 'submit_time': submit_time,
                 'duration': duration,
                 'nodes': nodes,
-                'resources': request
-            }
+                'resources': request,
+                # Calculate walltime if method exists...
+                'requested_time': self.walltime_calculation(i + 1, job_type, duration, nodes, request) if self.walltime_calculation else None 
+            }                       
             writer.add_newline(jobs[i + 1])
-        print(generation_stats)
+        writer.close_file()
+        print('Done. {} generated jobs.'.format(n))
         return jobs
 
     def _update_stats(self, stats, stime):
-        day, month = self._date_info(stime)
+        """
+
+        :param stats:
+        :param stime:
+        :return:
+        """
+        hour, day, month = self._date_info(stime)
         stats['current_jobs'] += 1
+        stats['current_h'][hour - 1] += 1
         stats['current_d'][day - 1] += 1
         stats['current_m'][month - 1] += 1
 
     def _date_info(self, submission_date):
+        """
+
+        :param submission_date:
+        :return:
+        """
         dtime = str_datetime(submission_date)
-        return dtime.get_weekday(), dtime.get_month()
+        return dtime.get_hours(), dtime.get_weekday(), dtime.get_month()
 
     def _set_resources(self, resources_obj, sys_config):
         """
@@ -741,3 +816,44 @@ class workload_generator:
         """
         used_gflops = int(duration * nodes * sum([v * performance[k] for k, v in proc_units.items()]))
         return used_gflops
+    
+    def _update_distinct_woption(self, name, main_value, value, default_value, converter):
+        """
+
+        :param name:
+        :param main_value:
+        :param value:
+        :param default_value:
+        :param converter:
+        :return:
+        """
+        return lambda _dict: _dict.update({name: converter(_dict.pop(main_value) if _dict[main_value] != value else _dict.pop(default_value))}) or _dict
+
+    def _update_name(self, current, new, converter):
+        """
+
+        :param current:
+        :param new:
+        :param converter:
+        :return:
+        """
+        return lambda _dict: _dict.update({new: converter(_dict.pop(current))}) or _dict
+
+    def _default_simple_swf_reader(self, workload, start_time, equivalence, resources):
+        """
+
+        :param workload:
+        :param start_time:
+        :param equivalence:
+        :param resources:
+        :return:
+        """
+        reg_exp = '\s*(?P<job_id>[-+]?\d+)\s*(?P<queue_time>[-+]?\d+)\s*([-+]?\d+)\s*(?P<duration>[-+]?\d+)\s*(?P<allocated_processors>[-+]?\d+)\s*([-+]?\d+\.\d+|[-+]?\d+)\s*(?P<used_memory>[-+]?\d+)\s*(?P<requested_number_processors>[-+]?\d+)\s*(?P<expected_duration>[-+]?\d+)\s*(?P<requested_memory>[-+]?\d+)\s*([-+]?\d+)\s*(?P<user>[-+]?\d+)\s*([-+]?\d+)\s*([-+]?\d+)\s*(?P<queue_number>[-+]?\d+)\s*([-+]?\d+)\s*([-+]?\d+)\s*([-+]?\d+)'
+        
+        _func1 = self._update_distinct_woption('total_processors', 'requested_number_processors', '-1', 'allocated_processors', int)
+        _func2 = self._update_distinct_woption('mem', 'requested_memory', '-1', 'used_memory', int)
+        _func3 = self._update_name('queue_time', 'queued_time', int)
+   
+        tweaker = default_tweak_class(start_time, equivalence, resources)
+        
+        return workload_file_reader(workload, reg_exp, tweaker, [_func1, _func2, _func3])
