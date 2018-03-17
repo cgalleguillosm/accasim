@@ -200,8 +200,16 @@ class job_factory:
         :param job_attrs: Array of job attribute names
         """
         _req_resources = job_attrs['requested_resources']
-        missing_res = [r for r in self.system_resources if r not in _req_resources.keys()]
-        assert(len(missing_res) == 0), 'Missing resources in the readed jobs: {}'.format(missing_res)
+        missing_res = {r for r in self.system_resources if r not in _req_resources.keys()}
+        # assert(len(missing_res) == 0), 'Missing resources in the readed jobs: {}'.format(missing_res)
+        if missing_res:
+            print('Some resources has not been included in the parser, assigning 0 to the {} resources in the job request.'.format(missing_res))
+            required = {'core', 'mem'}
+            inter = missing_res & required
+            if inter and len(inter) != len(required):
+                print('Some mandatory attributes are missing: {}. The simulation will stop.'.format(inter))
+                exit()
+            self.missing_resources = missing_res
         self.checked = True
         
     def resource_manager_setup(self):
@@ -237,10 +245,15 @@ class job_factory:
             kwargs[_new] = value
         _missing = list(filter(lambda x:x not in kwargs, set(self.obj_parameters + list(self.mandatory_attrs))))
         assert(not _missing), 'Missing attributes: {}'.format(', '.join(_missing))
-        _obj_attr = {k:kwargs[k] for k in self.obj_parameters}
         
+        _obj_attr = {k:kwargs[k] for k in self.obj_parameters}
+
         if not self.checked:
             self.check_requested_resources(_obj_attr)
+                
+        if hasattr(self, 'missing_resources'):
+            for r in self.missing_resources:
+                _obj_attr['requested_resources'][r] = 0 
         
         _tmp = self.obj_type(**_obj_attr)
         setattr(_tmp, '_dict', kwargs)

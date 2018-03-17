@@ -56,10 +56,19 @@ class resources_class:
         self.available_prefix = kwargs['available_prefix'] if 'available_prefix' in kwargs else 'a_'
         self.used_prefix = kwargs['used_prefix'] if 'available_prefix' in kwargs else 'u_'
 
+        # List all attributes of all groups
         for group_name, group_values in groups.items():
             self.system_resource_types += filter(lambda x: x not in self.system_resource_types, list(group_values.keys()))
-            resource_group = { '%s%s' % (p, attr): q if p == self.available_prefix else 0
-                for attr, q in group_values.items() for p in [self.available_prefix, self.used_prefix]
+        
+        #=======================================================================
+        # Create the corresponding group attributes and add 0 to absent attribute.
+        # This is performed in case that the user doesn't assign an absent attribute in the system config.
+        # For instance when a group has gpu and an another group hasn't and that attribute must be 0. 
+        #=======================================================================
+        for group_name, group_values in groups.items():
+            resource_group = { '%s%s' % (p, attr): group_values.get(attr, 0) if p == self.available_prefix else 0
+#                for attr, q in group_values.items() for p in [self.available_prefix, self.used_prefix]
+                for attr in self.system_resource_types for p in [self.available_prefix, self.used_prefix]
             }
             self.define_group(group_name, resource_group)
 

@@ -89,9 +89,19 @@ class default_workload_parser(workload_parser_base):
         if not _matches:
             return None
         _dict = {k:self.reg_exp_dict[k][1](v) for k, v in _matches.groupdict().items()}
-        _dict['total_processors'] = _dict.pop('requested_number_processors') if _dict['requested_number_processors'] != -1 else _dict.pop(
-            'allocated_processors')
-        _dict['mem'] = _dict.pop('requested_memory') if _dict['requested_memory'] != -1 else _dict.pop('used_memory')
+        
+        if _dict['requested_number_processors'] != -1:
+            _dict['total_processors'] = _dict.pop('requested_number_processors')
+        elif  _dict['allocated_processors'] != -1:
+            _dict['total_processors'] = _dict.pop('allocated_processors')
+        else:
+            return None
+        if _dict['requested_memory'] != -1:
+            _dict['mem'] = _dict.pop('requested_memory')
+        elif _dict['used_memory'] != -1:  
+            _dict['mem'] = _dict.pop('used_memory')
+        else:
+            return None 
         return _dict
 
 class reader_class(ABC):
@@ -378,20 +388,27 @@ class default_tweak_class(tweak_class):
         _processors = _dict['total_processors']
         _dict['requested_resources'] = {}
         for k, v in self.equivalence.items():
+            #===================================================================
+            # if k == 'processor':
+            #     for k2, v2 in v.items():
+            #         total_cores = _processors * v2
+            #         cores_per_node = self.generic_request[k2]
+            #         if cores_per_node > total_cores:
+            #             cores_per_node = total_cores  
+            #         _dict[k2] = total_cores  
+            #         _dict['requested_resources'][k2] = cores_per_node
+            #         _processors = _dict[k2] // cores_per_node
+            #===================================================================
             if k == 'processor':
                 for k2, v2 in v.items():
-                    total_cores = _processors * v2
-                    cores_per_node = self.generic_request[k2]
-                    if cores_per_node > total_cores:
-                        cores_per_node = total_cores  
-                    _dict[k2] = total_cores  
-                    _dict['requested_resources'][k2] = cores_per_node
-                    _processors = _dict[k2] // cores_per_node
+                    _dict[k2] = v2 * _processors
+                    _dict['requested_resources'][k2] = v2
         _dict['requested_nodes'] = _processors
         _dict['requested_resources']['mem'] = _dict['mem'] 
-        
+        _dict['mem'] = _dict['mem'] * _processors
+                
         _dict['queued_time'] = _dict.pop('queued_time') + self.start_time
-
+        
         assert (
         _dict['core'] >= 0), 'Please consider to clean your data cannot exists requests with any info about core request.'
         assert (
