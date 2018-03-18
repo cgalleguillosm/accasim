@@ -259,7 +259,7 @@ class job_factory:
         setattr(_tmp, '_dict', kwargs)
         self.add_attrs(_tmp, self.mandatory_attrs, kwargs)
         self.add_attrs(_tmp, self.optional_attrs, kwargs)
-        # self.add_request(_tmp)
+
         return _tmp
         
     def add_attrs(self, obj, reference, values):

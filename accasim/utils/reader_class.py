@@ -27,6 +27,8 @@ from accasim.utils.misc import CONSTANT, default_swf_parse_config, obj_assertion
 from accasim.base.resource_manager_class import resources_class
 import sys
 from builtins import issubclass
+from math import gcd
+from _functools import reduce
 
 class workload_parser_base(ABC):
     """
@@ -357,9 +359,17 @@ class default_tweak_class(tweak_class):
         self.generic_request = self._min_max_generic_request([d['resources'] for d in system_resources.definition])
         
     def _min_max_generic_request(self, system_resources):
+        """
+            Finds the GCD for all the node groups in the system. It will be useful to pack job in less requested nodes.             
+        """
         _min = { r: 0 for r in list(set().union(*(d.keys() for d in system_resources)))}
-        for k in _min:
-            _min[k] = min([d.get(k, 0) for d in system_resources])
+        for res in _min:
+            if len(system_resources) > 2:
+            
+                node_res = [node.get(res, 0) for node in system_resources]
+                _min[res] = 0 if 0 in node_res else reduce(gcd, node_res)
+            else:
+                _min[res] = d.get(res, 0)
         return _min
         
         
@@ -386,26 +396,37 @@ class default_tweak_class(tweak_class):
         
         """
         _processors = _dict['total_processors']
+        debug = False
+        if debug:
+            max_min_request = self.generic_request
+            print('Core Requested {} - MaxMin {}'.format(_processors, max_min_request['core']))
+            min_core = gcd(max_min_request['core'], _processors)
+            print('Core Requested {} - MaxMin {}: {} Fit'.format(_processors, max_min_request['core'], min_core))
+
+            print('Mem Requested {} - MaxMin {}'.format(_dict['mem'], max_min_request['mem']))
+            min_mem = gcd(max_min_request['mem'], _dict['mem'] * _processors)
+            print('Mem Requested {} - MaxMin {}: {} Fit'.format(_dict['mem'], max_min_request['mem'], min_mem))
+            
+            _min = gcd(min_core, min_mem)
+            print('Job packing {}'.format(_min))
+            raise Exception('Testing')            
+        
         _dict['requested_resources'] = {}
         for k, v in self.equivalence.items():
             #===================================================================
-            # if k == 'processor':
-            #     for k2, v2 in v.items():
-            #         total_cores = _processors * v2
-            #         cores_per_node = self.generic_request[k2]
-            #         if cores_per_node > total_cores:
-            #             cores_per_node = total_cores  
-            #         _dict[k2] = total_cores  
-            #         _dict['requested_resources'][k2] = cores_per_node
-            #         _processors = _dict[k2] // cores_per_node
+            # Since SWF doesn't provide any information about nodes request
+            # every single processor request is considered as a node request.
+            # An specific tweak class has to be implemented to specify a conversion of this value. 
             #===================================================================
             if k == 'processor':
                 for k2, v2 in v.items():
+                    cores_per_node = self.generic_request[k2]
                     _dict[k2] = v2 * _processors
                     _dict['requested_resources'][k2] = v2
         _dict['requested_nodes'] = _processors
         _dict['requested_resources']['mem'] = _dict['mem'] 
         _dict['mem'] = _dict['mem'] * _processors
+        _dict['queue'] = _dict.pop('queue_number')
                 
         _dict['queued_time'] = _dict.pop('queued_time') + self.start_time
         

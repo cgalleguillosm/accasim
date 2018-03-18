@@ -739,9 +739,10 @@ class hpc_simulator(simulator_base):
 
         # New attributes required by the Dispatching methods.
         expected_duration = attribute_type('expected_duration', int)
+        queue = attribute_type('queue', int)
 
         # Default system resources: core and mem.
         total_cores = attribute_type('core', int)
         total_mem = attribute_type('mem', int)
 
-        return [total_cores, total_mem, expected_duration, user_id]
+        return [total_cores, total_mem, expected_duration, queue, user_id]

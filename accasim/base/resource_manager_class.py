@@ -59,9 +59,8 @@ class resources_class:
         # List all attributes of all groups
         for group_name, group_values in groups.items():
             self.system_resource_types += filter(lambda x: x not in self.system_resource_types, list(group_values.keys()))
-        
         #=======================================================================
-        # Create the corresponding group attributes and add 0 to absent attribute.
+        # Create the corresponding group attributes and add 0 to absent attributes.
         # This is performed in case that the user doesn't assign an absent attribute in the system config.
         # For instance when a group has gpu and an another group hasn't and that attribute must be 0. 
         #=======================================================================
@@ -80,7 +79,6 @@ class resources_class:
                 self.resources[_node_name] = deepcopy(_attrs_values)
                 self.resources_status[_node_name] = self.ON
                 j += 1              
-
         self.full = { r:False for r in self.system_resource_types}
 
     def total_resources(self):
