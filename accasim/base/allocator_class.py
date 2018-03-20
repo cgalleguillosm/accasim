@@ -29,6 +29,7 @@ from accasim.base.resource_manager_class import resource_manager
 from _functools import reduce
 from sortedcontainers import SortedSet as _sorted_set
 import time
+from re import split as _split
 
 
 
@@ -378,6 +379,8 @@ class ff_alloc(allocator_base):
         for node in reserved_nodes:
             resource = self._avl_resources[node]
             for attr, v in requested_resources.items():
+                if v == 0:
+                    continue
                 cur_q = resource[attr]
                 assert cur_q - v >= 0, 'In node {}, the resource {} is going below to 0'.format(node, attr)
                 # Remove node from the current quantity of resource
@@ -419,7 +422,6 @@ class ff_alloc(allocator_base):
     def _set_aux_resources(self):
         # Generate an aux structure to speedup the allocation process
         resource_types = self.resource_manager.resources.system_resource_types        
-        # self.aux_resources = {'nodes': {}}
         self.aux_resources = {}
         for res_type in resource_types:
             if not (res_type in self.aux_resources):
@@ -484,14 +486,26 @@ class ff_alloc(allocator_base):
         trimNodes = [n for n in nodes if all(self._avl_resources[n][r] > 0 for r in self.nec_res_types)]
         return trimNodes
     
+    def _atoi(self, text):
+        return int(text) if text.isdigit() else text
+
+    def _natural_keys(self, text):
+        '''
+        alist.sort(key=natural_keys) sorts in human order
+        http://nedbatchelder.com/blog/200712/human_sorting.html
+        (See Toothy's implementation in the comments)
+        '''
+        return [ self._atoi(c) for c in _split('(\d+)', text) ]
     
     # New function to find nodes that satisfies the node request, this is used in conjuction with the sorted node keys.
     def _find_sat_nodes(self, req_resources):
         sat_nodes = {}
         # fitting_nodes = {}
         for t_res, n_res in req_resources.items():
+            if n_res == 0:
+                continue
             if not(t_res in sat_nodes):
-                sat_nodes[t_res] = _sorted_set()
+                sat_nodes[t_res] = _sorted_set(key=self._natural_keys)
             for n, nodes in self.aux_resources[t_res].items():
                 if n >= n_res:
                     sat_nodes[t_res].update(nodes)
