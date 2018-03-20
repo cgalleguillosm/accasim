@@ -356,21 +356,23 @@ class default_tweak_class(tweak_class):
         obj_assertion(system_resources, resources_class)
         self.start_time = start_time
         self.equivalence = equivalence
-        self.generic_request = self._min_max_generic_request([d['resources'] for d in system_resources.definition])
+        #self.generic_request = self._min_max_generic_request([d['resources'] for d in system_resources.definition])
         
-    def _min_max_generic_request(self, system_resources):
-        """
-            Finds the GCD for all the node groups in the system. It will be useful to pack job in less requested nodes.             
-        """
-        _min = { r: 0 for r in list(set().union(*(d.keys() for d in system_resources)))}
-        for res in _min:
-            if len(system_resources) > 2:
-            
-                node_res = [node.get(res, 0) for node in system_resources]
-                _min[res] = 0 if 0 in node_res else reduce(gcd, node_res)
-            else:
-                _min[res] = d.get(res, 0)
-        return _min
+    #===========================================================================
+    # def _min_max_generic_request(self, system_resources):
+    #     """
+    #         Finds the GCD for all the node groups in the system. It will be useful to pack job in less requested nodes.             
+    #     """
+    #     _min = { r: 0 for r in list(set().union(*(d.keys() for d in system_resources)))}
+    #     for res in _min:
+    #         if len(system_resources) > 2:
+    #         
+    #             node_res = [node.get(res, 0) for node in system_resources]
+    #             _min[res] = 0 if 0 in node_res else reduce(gcd, node_res)
+    #         else:
+    #             _min[res] = d.get(res, 0)
+    #     return _min
+    #===========================================================================
         
         
     def tweak_function(self, _dict):
@@ -396,20 +398,22 @@ class default_tweak_class(tweak_class):
         
         """
         _processors = _dict['total_processors']
-        debug = False
-        if debug:
-            max_min_request = self.generic_request
-            print('Core Requested {} - MaxMin {}'.format(_processors, max_min_request['core']))
-            min_core = gcd(max_min_request['core'], _processors)
-            print('Core Requested {} - MaxMin {}: {} Fit'.format(_processors, max_min_request['core'], min_core))
-
-            print('Mem Requested {} - MaxMin {}'.format(_dict['mem'], max_min_request['mem']))
-            min_mem = gcd(max_min_request['mem'], _dict['mem'] * _processors)
-            print('Mem Requested {} - MaxMin {}: {} Fit'.format(_dict['mem'], max_min_request['mem'], min_mem))
-            
-            _min = gcd(min_core, min_mem)
-            print('Job packing {}'.format(_min))
-            raise Exception('Testing')            
+#===============================================================================
+#         debug = False
+#         if debug:
+#             max_min_request = self.generic_request
+#             print('Core Requested {} - MaxMin {}'.format(_processors, max_min_request['core']))
+#             min_core = gcd(max_min_request['core'], _processors)
+#             print('Core Requested {} - MaxMin {}: {} Fit'.format(_processors, max_min_request['core'], min_core))
+# 
+#             print('Mem Requested {} - MaxMin {}'.format(_dict['mem'], max_min_request['mem']))
+#             min_mem = gcd(max_min_request['mem'], _dict['mem'] * _processors)
+#             print('Mem Requested {} - MaxMin {}: {} Fit'.format(_dict['mem'], max_min_request['mem'], min_mem))
+#             
+#             _min = gcd(min_core, min_mem)
+#             print('Job packing {}'.format(_min))
+#             raise Exception('Testing')            
+#===============================================================================
         
         _dict['requested_resources'] = {}
         for k, v in self.equivalence.items():
@@ -420,7 +424,7 @@ class default_tweak_class(tweak_class):
             #===================================================================
             if k == 'processor':
                 for k2, v2 in v.items():
-                    cores_per_node = self.generic_request[k2]
+                    # cores_per_node = self.generic_request[k2]
                     _dict[k2] = v2 * _processors
                     _dict['requested_resources'][k2] = v2
         _dict['requested_nodes'] = _processors
