@@ -452,8 +452,10 @@ class event_mapper:
         expected_end_time = _job.start_time + _job.expected_duration
         real_end_time = _job.start_time + _job.duration
 
-        if expected_end_time != self.current_time:
-            self.time_points.add(expected_end_time)
+        #=======================================================================
+        # if expected_end_time != self.current_time:
+        #     self.time_points.add(expected_end_time)
+        #=======================================================================
         self.time_points.add(real_end_time)
 
         if real_end_time not in self.real_ending:
