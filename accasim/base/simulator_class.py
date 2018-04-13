@@ -21,7 +21,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-from time import clock as _clock, sleep as _sleep
+from time import perf_counter as _clock, sleep as _sleep
 from sys import path as _path
 from datetime import datetime
 from abc import abstractmethod, ABC
@@ -470,10 +470,17 @@ class hpc_simulator(simulator_base):
         self.constants.load_constant('start_simulation_time', self.start_simulation_time)
 
         print('Starting the simulation process.')
-        prev_stats = (len(self.mapper.queued), len(self.mapper.running), len(self.mapper.finished)) + tuple(self.resource_manager.resources.usage('dict').values())
-        time_stuck_counter = 0
         self.load_events(self.mapper.current_time, event_dict, self.mapper, debug, self.max_sample)
         events = self.mapper.next_events()
+        
+        if self._skip:
+            sys_usage_dict = self.resource_manager.resources.usage('dict')
+            sys_keys = sys_usage_dict.keys()
+            sys_usage = [ sys_usage_dict[key] for key in sys_keys]
+            
+            prev_stats = (events, tuple(sys_usage))
+            time_stuck_counter = 0
+
         # =======================================================================
         # Loop until there are not loaded, queued and running jobs
         # =======================================================================
@@ -483,16 +490,22 @@ class hpc_simulator(simulator_base):
             self.mapper.release_ended_events(event_dict)
             if debug:
                 print('{} INI: Loaded {}, Queued {}, Running {}, Finished {}'.format(_actual_time, self._loaded_jobs(), *prev_stats))
-
-            if self._skip:
-                cur_stats = (len(self.mapper.queued) + len(events), len(self.mapper.running), len(self.mapper.finished))
-                cur_stats += tuple(self.resource_manager.resources.usage('dict').values())
-            
-                # Stats are different or, the queue is still small to process in short time. By defautl 250 jobs.
-                if any([ c != p for c, p in zip(cur_stats[1:], prev_stats[1:])]) or (prev_stats[0] != cur_stats[0] and cur_stats[0] < 250):
+            if self._skip and events:
+                sys_usage_dict = self.resource_manager.resources.usage('dict')
+                sys_keys = sys_usage_dict.keys()
+                sys_usage = [ sys_usage_dict[key] for key in sys_keys]
+                
+                cur_stats = (events, tuple(sys_usage))
+                
+                # Current jobs were included wrt the previous iteration
+                if all([j1 in prev_stats[0] for j1 in cur_stats[0]]):
+                    # Stats are geq than the previous one:
+                    if all([ c >= p for c, p in zip(cur_stats[1], prev_stats[1])]):                     
+                        time_stuck_counter += 1
+                    else:  # Less system usage
+                        time_stuck_counter = 0
+                else:  # New jobs wrt the previous one
                     time_stuck_counter = 0
-                else:
-                    time_stuck_counter += 1
             # ===================================================================
             # External behavior
             # ===================================================================
@@ -502,7 +515,7 @@ class hpc_simulator(simulator_base):
             schedStartTime = _clock() * 1000
             schedEndTime = schedStartTime
 
-            if events and (not self._skip or self._skip and time_stuck_counter <= 1):
+            if events:  # and (not self._skip or self._skip and time_stuck_counter <= 1):
                 if debug:
                     print('{} DUR: To Schedule {}'.format(_actual_time, len(events)))
                 simulated_jobs = (self._loaded_jobs() + len(self.mapper.queued) + len(events) + len(self.mapper.running) + len(self.mapper.finished))
@@ -528,11 +541,15 @@ class hpc_simulator(simulator_base):
             else:
                 for e in events:
                     self.mapper.submit_event(e)
-            prev_stats = (len(self.mapper.queued), len(self.mapper.running), len(self.mapper.finished))
             if self._skip:
-                prev_stats += tuple(self.resource_manager.resources.usage('dict').values())
+                sys_usage_dict = self.resource_manager.resources.usage('dict')
+                sys_keys = sys_usage_dict.keys()
+                sys_usage = [ sys_usage_dict[key] for key in sys_keys]
+                
+                prev_stats = (events, tuple(sys_usage))
+
             if debug:
-                print('{} END: Loaded {}, Queued {}, Running {}, Finished {}'.format(_actual_time, self._loaded_jobs(), *prev_stats))
+                print('{} END: Loaded {}, Queued {}, Running {}, Finished {}'.format(_actual_time, self._loaded_jobs(), len(self.mapper.queued), len(self.mapper.running), len(self.mapper.finished)))
 
             # ===================================================================
             # Loading next jobs based on Time points
