@@ -489,7 +489,9 @@ class hpc_simulator(simulator_base):
             benchStartTime = _clock() * 1000
             self.mapper.release_ended_events(event_dict)
             if debug:
-                print('{} INI: Loaded {}, Queued {}, Running {}, Finished {}'.format(_actual_time, self._loaded_jobs(), *prev_stats))
+                print('{} INI: Loaded {}, Queued {}, Running {}, Finished {}'.format(_actual_time, self._loaded_jobs(), len(self.mapper.queued),
+                                                                                         len(self.mapper.running),
+                                                                                         len(self.mapper.finished)))
             if self._skip and events:
                 sys_usage_dict = self.resource_manager.resources.usage('dict')
                 sys_keys = sys_usage_dict.keys()
