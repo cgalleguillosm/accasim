@@ -30,7 +30,6 @@ from accasim.utils.misc import CONSTANT, DEFAULT_SIMULATION, load_config, clean_
     default_swf_mapper
 from accasim.utils.misc import system_status as system_status_class
 from accasim.utils.file import path_leaf, save_jsonfile
-from accasim.utils.visualization_class import system_utilization as system_utilization_class
 from accasim.base.event_class import event_mapper, attribute_type
 from accasim.base.resource_manager_class import resources_class, resource_manager
 from accasim.base.scheduler_class import scheduler_base
@@ -407,6 +406,7 @@ class hpc_simulator(simulator_base):
          
         """
         if system_utilization:
+            from accasim.utils.visualization_class import system_utilization as system_utilization_class
             running_at = {
                 'interval': 1,
                 'current_time': self.mapper.current_time,
