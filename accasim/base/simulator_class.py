@@ -463,6 +463,8 @@ class hpc_simulator(simulator_base):
             self._usage_writer.stop()
             self._usage_writer = None
 
+        self.mapper.stop_writers()
+
         filepaths = self._generated_filepaths()
         self._clean_simulator_constants()
         return filepaths
@@ -615,6 +617,8 @@ class hpc_simulator(simulator_base):
         - schedTime: the time related to the scheduling procedure
         - simTime: the remaining time used in the step, related to the simulation process
         - memUsage: memory usage (expressed in MB) at the simulation step
+
+        :param entry: Tuple of data to be written to output
         """
         sep_token = ';'
         bline = sep_token.join([str(v) for v in entry]) + '\n'

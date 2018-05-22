@@ -53,6 +53,7 @@ class async_writer:
             self._thread = None
         if self._outfile is not None:
             self._outfile.close()
+            self._outfile = None
         self._deque.clear()
 
     def _working_loop(self):
@@ -62,7 +63,11 @@ class async_writer:
             if len(self._deque) > 0:
                 entry = self._deque.popleft()
                 str_out = self._pre_processor(entry)
-                self._outfile.write(str_out)
+                if isinstance(str_out, (list, tuple)) and len(str_out) > 1:
+                    for str_el in str_out:
+                        self._outfile.write(str_el)
+                else:
+                    self._outfile.write(str_out)
         self._outfile.close()
         self._outfile = None
 

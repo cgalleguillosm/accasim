@@ -33,39 +33,40 @@ from inspect import signature
 from accasim.utils.misc import CONSTANT, default_swf_mapper
 from sortedcontainers import SortedSet as sorted_list
 from accasim.base.resource_manager_class import resource_manager as resource_manager_class
+from accasim.utils.async_writer import async_writer
 import copy
 
 
 class attribute_type:
-    
+
     def __init__(self, name, type_class=None, optional=False):
         """
-        
+
         Constructor for defining a new attribute type.
-        
+
         :param name: Attribute name
         :param type_class: Class type of attribute (str, int, float, etc.) for casting. If value  is already casted it is not necesary.
-        :param optional: False by default. If it is True, the default value will be None and it is not required to give any value to this.  
-        
+        :param optional: False by default. If it is True, the default value will be None and it is not required to give any value to this.
+
         """
         assert(isinstance(name, str))
         self.name = name
         self.type = type_class
-        self.optional = optional  
-                
+        self.optional = optional
+
 class event(ABC):
-    
+
     def __init__(self, job_id, queued_time, duration, requested_nodes, requested_resources):
         """
-        
-        Constructor of the basic job event. 
-            
+
+        Constructor of the basic job event.
+
         :param job_id: Identification of the job.
         :param queued_time: Corresponding time to the submission time to the system in unix timestamp.
         :param duration: Real duration of the job in unix timestamp.
         :param requested_nodes: Number of requested nodes
-        :param requested_resources: Dictionary with the requested resources for a single node. 
-        
+        :param requested_resources: Dictionary with the requested resources for a single node.
+
         """
         self.constants = CONSTANT()
         self.id = str(job_id)
@@ -76,19 +77,19 @@ class event(ABC):
         self.end_time = None
         self.duration = duration
         self.end_order = 0
-    
+
     def subattr(self, obj, attrs):
         """
-        
+
         Internal method that reads a description, and extract the value from the object itself and return it. It is used
         for genereting the output logs. (This method is candidate to be moved into utils package.)
-        
+
         :param obj: Object to be analyzed
         :param attrs: Attributes to be extracted from the object
-            
-        :return: Value of the object.   
-        
-        """ 
+
+        :return: Value of the object.
+
+        """
         if isinstance(attrs, tuple):
             values = []
             for attr in list(attrs):
@@ -98,83 +99,37 @@ class event(ABC):
         if len(sp_attr) > 1:
             tmp = getattr(obj, sp_attr[0])
             return self.subattr(tmp, ''.join(sp_attr[1:]))
-        
+
         try:
             if isinstance(obj, dict):
                 return obj.get(sp_attr[0], 'NA')
             return getattr(obj, sp_attr[0])
         except AttributeError as e:
             return 'NA'
-        
-    def schd_write_out(self):
-        """
-        
-        Method for writting the dispathing plan. It uses the format specified in the SCHEDULE_OUTPUT constant.  
-        
-        """
-        if not self.constants.SCHEDULING_OUTPUT:
-            return 
-        _dict = self.constants.SCHEDULE_OUTPUT
-        _attrs = {}
-        for a, av in _dict['attributes'].items():
-            try:
-                _attrs[a] = locate(av[-1])(*self.subattr(self, av[:-1]))
-            except ValueError:
-                _attrs[a] = 'NA'
-        output_format = _dict['format']
-        format_elements = re.findall('\{(\w+)\}', output_format)
-        values = {k: v for k, v in _attrs.items() if k in format_elements}
-        _filepath = os.path.join(self.constants.RESULTS_FOLDER_PATH, self.constants.SCHED_PREFIX + self.constants.WORKLOAD_FILENAME)
-        with open(_filepath, 'a') as f:
-            f.write(output_format.format(**values) + '\n')
-    
-    def schd_pprint_write_out(self):
-        """
-        
-        Method for writting the dispathing plan in pprint (user readeable) format. It uses the format specified in the PPRINT_SCHEDULE_OUTPUT constant.  
-        
-        """
-        if not self.constants.PPRINT_OUTPUT:
-            return 
-        _dict = self.constants.PPRINT_SCHEDULE_OUTPUT
-        _order = _dict['order']
-        _attrs = {}
-        for a, av in _dict['attributes'].items():
-            try:
-                _attrs[a] = locate(av[-1])(*self.subattr(self, av[:-1]))
-            except ValueError:
-                _attrs[a] = 'NA'
-        output_format = _dict['format']
-        format_elements = re.findall('\{(\w+)\}', output_format)
-        values = [_attrs[k] for k in _order]
-        _filepath = os.path.join(self.constants.RESULTS_FOLDER_PATH, self.constants.PPRINT_PREFIX + self.constants.WORKLOAD_FILENAME)
-        with open(_filepath, 'a') as f:
-            if self.end_order == 1:
-                f.write(output_format.format(*_order) + '\n')
-            f.write(output_format.format(*values) + '\n')
-                        
+
+
 class job_factory:
     def __init__(self, resource_manager=None, job_class=event, job_attrs=[], job_mapper={}):
         """
-        
+
         :param resource_manager: The resource manager of the simulator. It is required for creating the job requests.
-        :param job_class: The class to be created by the Factory. By default it uses the Event class, but any subclass of it can be used (modified versions). 
+        :param job_class: The class to be created by the Factory. By default it uses the Event class, but any subclass of it can be used (modified versions).
         :param job_attrs: The extra attributes (attribute_type class) (already job_id, queued_time and duration are mandatory) to be set in the JobEvent class
         :param job_mapper: Rename the the old key to a new key (using the value of the job_mapper dictionary)
-        
+
         """
         self.resource_manager = None
         if resource_manager:
             assert(isinstance(resource_manager, resource_manager_class)), 'Only subclases of :class:`.resource_manager_class` are accepted.'
             self.resource_manager = resource_manager
             self.resource_manager_setup()
-                 
+
         assert(issubclass(job_class, event)), 'Only subclasses of event class are accepted. Received: {} class'.format(_class.__name__)
-        
+
         if job_attrs:
             assert(isinstance(job_attrs, list)), 'jobs_attrs must be a list'
             assert(all(isinstance(attr_type, attribute_type) for attr_type in job_attrs)), 'The elements of jobs_attrs must be of :class:`.attribute_type` class.'
-            
+
         self.obj_type = job_class
         self.obj_parameters = list(signature(self.obj_type).parameters)
         self.attrs_names = []
@@ -182,7 +137,7 @@ class job_factory:
         self.optional_attrs = {}
         self.job_mapper = job_mapper
         self.checked = False
-        
+
         for attr in job_attrs:
             _attr_name = attr.name
             assert(_attr_name not in self.attrs_names + self.obj_parameters), '{} attribute name already set. Names must be unique'.format(_attr_name)
@@ -192,11 +147,11 @@ class job_factory:
             else:
                 self.mandatory_attrs[_attr_name] = attr
             self.attrs_names.append(_attr_name)
-            
+
     def check_requested_resources(self, job_attrs):
         """
         Checks if the requested resources in the dict include all the system resources.
-        
+
         :param job_attrs: Array of job attribute names
         """
         _req_resources = job_attrs['requested_resources']
@@ -211,13 +166,13 @@ class job_factory:
                 exit()
             self.missing_resources = missing_res
         self.checked = True
-        
+
     def resource_manager_setup(self):
         """
-            
+
         The groups and system resources types are set.
-            
-        """        
+
+        """
         self.group_resources = self.resource_manager.groups_available_resource()
         self.system_resources = self.resource_manager.resources.system_resource_types
 
@@ -227,69 +182,69 @@ class job_factory:
             self.resource_manager = resource_manager
             self.resource_manager_setup()
 
-                 
+
     def factory(self, **kwargs):
         """
-        
-        Creates a job instance with the dictionary received as argument. It verifies that all attributes has been included in the kwargs.
-        
-        :param \*\*kwargs: Dictionary with the job attributes.
-        
-        :return: Returns a job instantiation.  
 
-        """        
+        Creates a job instance with the dictionary received as argument. It verifies that all attributes has been included in the kwargs.
+
+        :param \*\*kwargs: Dictionary with the job attributes.
+
+        :return: Returns a job instantiation.
+
+        """
         assert(self.resource_manager), 'Missing resource_manager attribute. It must be added via :func:`.set_resource_manager`.'
-        
+
         for _old, _new in self.job_mapper.items():
             value = kwargs.pop(_old)
             kwargs[_new] = value
         _missing = list(filter(lambda x:x not in kwargs, set(self.obj_parameters + list(self.mandatory_attrs))))
         assert(not _missing), 'Missing attributes: {}'.format(', '.join(_missing))
-        
+
         _obj_attr = {k:kwargs[k] for k in self.obj_parameters}
 
         if not self.checked:
             self.check_requested_resources(_obj_attr)
-                
+
         if hasattr(self, 'missing_resources'):
             for r in self.missing_resources:
-                _obj_attr['requested_resources'][r] = 0 
-        
+                _obj_attr['requested_resources'][r] = 0
+
         _tmp = self.obj_type(**_obj_attr)
         setattr(_tmp, '_dict', kwargs)
         self.add_attrs(_tmp, self.mandatory_attrs, kwargs)
         self.add_attrs(_tmp, self.optional_attrs, kwargs)
 
         return _tmp
-        
+
     def add_attrs(self, obj, reference, values):
         """
-        
+
         Sets the attributes to the job object.
-        
+
         :param obj: Object to be updated
         :param reference: Attribute type of reference. It contains the name, optionality and type for casting.
         :param values: Values to be added to the object
-               
+
         """
         for _attr in reference:
             _type = reference[_attr].type
             _value = None
             if not reference[_attr].optional or (_attr in values and values[_attr]):
-                _value = _type(values[_attr]) if _type else values[_attr] 
+                _value = _type(values[_attr]) if _type else values[_attr]
             setattr(obj, _attr, _value)
-    
+
     def add_request(self, obj):
         """
 
-        This method sets the request of the job, it uses the resources available of the system to define it.  
+        This method sets the request of the job, it uses the resources available of the system to define it.
 
         :param obj: Job object
 
         """
         # Calculate only if it is not present
         if not hasattr(obj, 'requested_nodes'):
-            _partition = 0 
+            _partition = 0
             for _res in self.system_resources:
                 _total_request = getattr(obj, _res)
                 assert(_total_request >= 0), 'The request for {} is no feasible ({}). Accepted values are equal or greater than 0. Job {} must be tweaked before re-run. See the example.'.format(_res, _total_request, obj.id)
@@ -298,16 +253,16 @@ class job_factory:
         if not hasattr(obj, 'requested_resources'):
             _partition = getattr(obj, 'requested_nodes')
             setattr(obj, 'requested_resources', {_res: getattr(obj, _res) // _partition for _res in self.system_resources})
-            
+
 class event_mapper:
-    
+
     def __init__(self, resource_manager, debug=False, **kwargs):
         """
 
-        This class coordinates events submission, queueing and ending. 
-        
+        This class coordinates events submission, queueing and ending.
+
         :param resource_manager: Resource manager instance
-        :param \*\*kwargs: nothing for the moment. 
+        :param \*\*kwargs: nothing for the moment.
 
         """
         assert(isinstance(resource_manager, resource_manager_class)), 'Wrong type for the resource_manager argument.'
@@ -319,7 +274,7 @@ class event_mapper:
         self.last_run_time = None
         self.slowdowns = []
         self.wtimes = []
-        
+
         self.current_time = None
         self.time_points = sorted_list()
         # self.ending_time_points = sorted_list()
@@ -329,14 +284,18 @@ class event_mapper:
         self.real_ending = {}
         self.running = []
         self.finished = []
-            
+
+        self._sched_writer = None
+        self._pprint_writer = None
+
+
     def load_events(self, es):
         """
-        
+
         Jobs are loaded to the system. This is the first step for a job simulation.
-        
-        :param es: List of jobs. Jobs must be subclass of event class. 
-        
+
+        :param es: List of jobs. Jobs must be subclass of event class.
+
         """
         if isinstance(es, list):
             for e in es:
@@ -345,14 +304,14 @@ class event_mapper:
         else:
             assert(isinstance(es, event)), 'Only subclasses of event can be simulated.'
             self.load_event(es)
-                    
+
     def load_event(self, e):
         """
-        
+
         Internal method for job submission.
-            
+
         :param e: Single job (event subclass).
-          
+
         """
         assert(isinstance(e, event)), 'Using %s, expecting a single %s' % (e.__class__, event.__name__)
         # print('load event', self.time_points)
@@ -367,26 +326,26 @@ class event_mapper:
             self.loaded[e.queued_time].append(e.id)
             self.time_points.add(e.queued_time)
         else:
-            raise Exception('Time sync problem, the actual event was loaded after the real submit time. This a programming error, must be checked.')        
+            raise Exception('Time sync problem, the actual event was loaded after the real submit time. This a programming error, must be checked.')
 
     def move_to_finished(self, events_dict):
         """
-        
-        There are two time points for a job could ends, the expected one and the real one. 
+
+        There are two time points for a job could ends, the expected one and the real one.
         The job must run until the real one is reached, then if a job is waiting to finish but is less than the
         real ending time, this value must be updated with the real one.
-        
+
         :param events_dict: Actual Loaded, queued and running jobs in a dictionary {id: job object}
-        
-        :return: Array of completed jobs         
-    
+
+        :return: Array of completed jobs
+
         """
         _es = []
         for e_id in self.real_ending.pop(self.current_time, []):
             if e_id in self.running:
                 self.running.remove(e_id)
                 e = events_dict[e_id]
-                self.finish_event(e)  
+                self.finish_event(e)
                 _es.append(e_id)
         self.last_run_time = self.current_time
         return _es
@@ -394,9 +353,9 @@ class event_mapper:
     def finish_event(self, e):
         """
 
-        Internal method for Job's completion. This method sets the ending time, and make some standard calculations for statistics, such as slowdown, waiting time. 
+        Internal method for Job's completion. This method sets the ending time, and make some standard calculations for statistics, such as slowdown, waiting time.
         Finally it calls the methods for output.
-        
+
         :param e: Job to be completed.
 
         """
@@ -404,30 +363,41 @@ class event_mapper:
         e.running_time = e.end_time - e.start_time
         e.waiting_time = e.start_time - e.queued_time
         e.slowdown = float("{0:.2f}".format((e.waiting_time + e.running_time) / e.running_time)) if e.running_time != 0 else e.waiting_time if e.waiting_time != 0 else 1.0
-        self.slowdowns.append(e.slowdown)   
+        self.slowdowns.append(e.slowdown)
         self.wtimes.append(e.waiting_time)
         self.finished.append(e.id)
         e.end_order = len(self.finished)
-        asyncio.create_subprocess_exec([e.schd_write_out(), e.schd_pprint_write_out()])
-   
+        if self.constants.SCHEDULING_OUTPUT:
+            if self._sched_writer is None:
+                self._sched_writer = async_writer(path=os.path.join(self.constants.RESULTS_FOLDER_PATH,
+                    self.constants.SCHED_PREFIX + self.constants.WORKLOAD_FILENAME), pre_process_fun=event_mapper._schd_write_preprocessor)
+                self._sched_writer.start()
+            self._sched_writer.push(e)
+        if self.constants.PPRINT_OUTPUT:
+            if self._pprint_writer is None:
+                self._pprint_writer = async_writer(path=os.path.join(self.constants.RESULTS_FOLDER_PATH,
+                    self.constants.PPRINT_PREFIX + self.constants.WORKLOAD_FILENAME), pre_process_fun=event_mapper._schd_pprint_preprocessor)
+                self._pprint_writer.start()
+            self._pprint_writer.push(e)
+
     def dispatch_event(self, _job, _time, _time_diff, _nodes):
         """
 
-        Internal method for Job's dispatching. This method updates the related attributes for allocation of the job. 
-        
+        Internal method for Job's dispatching. This method updates the related attributes for allocation of the job.
+
         :param _job: Job object
         :param _time: Time of dispatching
         :param _time_diff: Time used if dispatching processing _time must be considered.
         :param _nodes: Nodes to be allocated.
-        
+
         :return: True if the allocation must be performed, false otherwise. False for jobs that have duration equal to 0
 
-        """ 
+        """
         id = _job.id
         start_time = _time + _time_diff
         assert(self.current_time == start_time), 'Start _time is different to the current _time'
-        
-        
+
+
         # Update job info
         _job.start_time = start_time
         _job.assigned_nodes = _nodes
@@ -444,11 +414,11 @@ class event_mapper:
             # self.time_points.add(self.current_time)
             return False
 
-        # Move to running jobs 
+        # Move to running jobs
         self.running.append(id)
-        
+
         # Setting the ending _time as walltime
-        
+
         expected_end_time = _job.start_time + _job.expected_duration
         real_end_time = _job.start_time + _job.duration
 
@@ -459,11 +429,11 @@ class event_mapper:
         self.time_points.add(real_end_time)
 
         if real_end_time not in self.real_ending:
-            self.real_ending[real_end_time] = [] 
+            self.real_ending[real_end_time] = []
         self.real_ending[real_end_time].append(id)
         logging.debug('%s: %s Dispatched! Init %s Ending %s' % (self.current_time, id, start_time, expected_end_time))
         return True
-        
+
     def submit_event(self, e_id):
         """
 
@@ -471,13 +441,13 @@ class event_mapper:
 
         """
         self.queued.append(e_id)
-    
+
     def next_events(self):
         """
 
         Return the jobs that belongs to the next time point.
-        
-        :return: Array of jobs recently submitted + queued available at current time. 
+
+        :return: Array of jobs recently submitted + queued available at current time.
 
         """
         if len(self.time_points) > 0:
@@ -487,21 +457,21 @@ class event_mapper:
                 print('No more time points... but there still jobs in the queue')
             self.current_time += 1
         submitted = self.loaded.pop(self.current_time, [])
-        new_queue = self.queued + submitted 
+        new_queue = self.queued + submitted
         if self.debug:
             print('{} Next events: \n-Recently submited: {}\n-Already queued: {}'.format(self.current_time, submitted, self.queued))
         self.queued.clear()
-        
+
         return new_queue
-        
+
     def has_events(self):
         """
 
         :return: True if are loaded, queued or running jobs. False otherwise.
 
         """
-        return (self.loaded or self.queued or self.running)  
- 
+        return (self.loaded or self.queued or self.running)
+
     def dispatch_events(self, event_dict, to_dispatch, time_diff, _debug=False):
         """
 
@@ -509,8 +479,8 @@ class event_mapper:
 
         :param event_dict: Actual Loaded, queued and running jobs in a dictionary {id: job object}
         :param to_dispatch: A tuple which contains the (start time, job id, nodes)
-        :param time_diff: Time which takes the dispatching processing time. Default 0. 
-        :param _debug: Debug flag    
+        :param time_diff: Time which takes the dispatching processing time. Default 0.
+        :param _debug: Debug flag
 
         :return return a tuple of (#dispatched, #Dispatched + Finished (0 duration), #postponed)
         """
@@ -520,10 +490,10 @@ class event_mapper:
         for (_time, _id, _nodes) in to_dispatch:
             assert(isinstance(_id, str)), 'Please check your return tuple in your Dispatching method. _id must be a str type. Received wrong type: {}'.format(e.__class__)
             assert(_time is None or _time >= self.current_time), 'Receiving wrong schedules.'
-            
+
             #===================================================================
             # Time must be equal or later than current time.
-            #     Equals will be dispatched in the momement, instead later ones, which will be requeued with expected ending time of the job that release the resources. 
+            #     Equals will be dispatched in the momement, instead later ones, which will be requeued with expected ending time of the job that release the resources.
             # If the expected ending is surpass, because the job takes more time to finish, the time tuple\'s element must be None. '
             #===================================================================
             if not _nodes:
@@ -531,7 +501,7 @@ class event_mapper:
                 if _time is not None and _time != self.current_time:
                     self.time_points.add(_time)
                 #==============================================================
-                # Maintaining the event in the queue 
+                # Maintaining the event in the queue
                 #==============================================================
                 self.submit_event(_id)
                 n_post += 1
@@ -548,17 +518,17 @@ class event_mapper:
                     event_dict[_id] = _e
                     n_disp += 1
             else:
-                # Since the job duration was 0 it was dispatched and finished at the same time 
+                # Since the job duration was 0 it was dispatched and finished at the same time
                 n_disp_finish += 1
         return (n_disp, n_disp_finish, n_post)
-                
+
     def release_ended_events(self, event_dict):
         """
 
         Internal method for completed jobs. Removes from the dictionary finished jobs.
-        
+
         :param event_dict: Actual Loaded, queued and running jobs in a dictionary {id: job object}
-        
+
         :return: return Array list of jobs objects.
 
         """
@@ -568,47 +538,106 @@ class event_mapper:
             # Freeing mem (finished events)
             event_dict.pop(_e)
         return _es
-    
+
     def simulated_status(self):
         """
 
         Show the current state of the system in terms of loaded, queued, running and finished jobs.
-            
+
         :return: String including the system info.
 
         """
         return ('Loaded {}, Queued {}, Running {}, and Finished {} Jobs'.format(len(self.loaded), len(self.queued), len(self.running), len(self.finished)))
-    
+
     def availability(self):
         """
 
         Current availability of the system.
-        
+
         :return: Return the availability of the system.
 
         """
         return self.resource_manager.availability()
-    
+
     def usage(self):
         """
 
         Current usage of the system
-        
+
         :return: Return the usage of the system
 
         """
         return self.resource_manager.resources.usage()
-    
+
     def simulated_current_time(self):
         """
 
         Current time
-        
+
         :return: Return the current simulated time
 
         """
         return self.current_time
-    
+
+    def stop_writers(self):
+        """
+        Stops the output writer threads and closes the file streams
+        """
+        if self._sched_writer is not None:
+            self._sched_writer.stop()
+            self._sched_writer = None
+        if self._pprint_writer is not None:
+            self._pprint_writer.stop()
+            self._pprint_writer = None
+
+    @staticmethod
+    def _schd_write_preprocessor(event):
+        """
+        To be used as a pre-processor for async_writer objects applied to event schedules.
+        Pre-processes an event object and converts it to a String representation.
+        It uses the format specified in the SCHEDULE_OUTPUT constant.
+
+        :param event: The event to be written to output
+        """
+        constants = CONSTANT()
+        _dict = constants.SCHEDULE_OUTPUT
+        _attrs = {}
+        for a, av in _dict['attributes'].items():
+            try:
+                _attrs[a] = locate(av[-1])(*event.subattr(event, av[:-1]))
+            except ValueError:
+                _attrs[a] = 'NA'
+        output_format = _dict['format']
+        format_elements = re.findall('\{(\w+)\}', output_format)
+        values = {k: v for k, v in _attrs.items() if k in format_elements}
+        return output_format.format(**values) + '\n'
+
+    @staticmethod
+    def _schd_pprint_preprocessor(event):
+        """
+        To be used as a pre-processor for async_writer objects applied to pretty-print event schedules.
+        Pre-processes an event object and converts it to a String representation.
+        It uses the format specified in the PPRINT_SCHEDULE_OUTPUT constant.
+
+        :param event: The event to be written to output
+        """
+        constants = CONSTANT()
+        _dict = constants.PPRINT_SCHEDULE_OUTPUT
+        _order = _dict['order']
+        _attrs = {}
+        for a, av in _dict['attributes'].items():
+            try:
+                _attrs[a] = locate(av[-1])(*event.subattr(event, av[:-1]))
+            except ValueError:
+                _attrs[a] = 'NA'
+        output_format = _dict['format']
+        format_elements = re.findall('\{(\w+)\}', output_format)
+        values = [_attrs[k] for k in _order]
+        if event.end_order == 1:
+            return (output_format.format(*_order) + '\n', output_format.format(*values) + '\n')
+        else:
+            return output_format.format(*values) + '\n'
+
     def __str__(self):
         """
 
