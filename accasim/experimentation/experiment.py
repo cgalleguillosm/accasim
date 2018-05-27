@@ -24,7 +24,7 @@ SOFTWARE.
 from builtins import str
 from os.path import join as _join
 from accasim.base.allocator_class import allocator_base
-from accasim.base.scheduler_class import scheduler_base
+from accasim.base.scheduler_class import SchedulerBase as scheduler_base 
 from accasim.base.simulator_class import hpc_simulator
 from accasim.utils.file import file_exists, dir_exists, remove_dir, find_file_by
 from accasim.utils.misc import obj_assertion, list_class_assertion
@@ -112,7 +112,7 @@ class experiment_class:
             print('Dispatcher {} already set. Skipping it'.format(name))
         self.dispatchers[name] = dispatcher
 
-    def generate_dispatchers(self, scheduler_list, allocator_list):
+    def generate_dispatchers(self, scheduler_list, allocator_list, **kwargs):
         """
         Generate a set of dispatchers from a combination of scheduler and allocation lists.
 
@@ -129,11 +129,10 @@ class experiment_class:
         list_class_assertion(allocator_list, allocator_base,
                              error_msg='Allocator objects must belong only to {} subclass',
                              msg_args=[allocator_base.__name__])
-
         for _alloc_class in allocator_list:
             _alloc = _alloc_class()
             for _sched_class in scheduler_list:
-                _dispatcher = _sched_class(_alloc)
+                _dispatcher = _sched_class(_alloc, **kwargs)
                 _name = self._generate_name(_dispatcher.name, _alloc.name)
                 self.add_dispatcher(_name, _dispatcher)
 
@@ -173,21 +172,21 @@ class experiment_class:
             self.generate_plots(self._RESULTS_FOLDER.format(self.name, ''))
             print('Plot generation finished. ')
 
-    def create_folders(self, name, instance_name, OVERWRITE=True):
+    def create_folders(self, name, instance_name, overwrite=True):
         """
-        Create a folder if does not exists. If :attr:`.OVERWRITE` is True, the existing folder will be deleted and then created.
+        Create a folder if does not exists. If :attr:`.overwrite` is True, the existing folder will be deleted and then created.
         
         :param name: Corresponds to the experiment name.
         :param instance_name: Name of the current simulation. By default is the name of the dispatcher.
-        :param OVERWRITE: `True` to overwrite current results on the destiniy by deleting the entire folder.
+        :param overwrite: `True` to overwrite current results on the destiniy by deleting the entire folder.
 
         :return: Return the path of the new folder. 
         """
         results_folder = self._RESULTS_FOLDER.format(name, instance_name)
-        if OVERWRITE:
+        if overwrite:
             remove_dir(results_folder)
         dir_exists(results_folder, create=True)
-        self.SIMULATOR_ATTRIBUTES['OVERWRITE'] = OVERWRITE
+        self.SIMULATOR_ATTRIBUTES['OVERWRITE'] = overwrite
         return results_folder
 
     def retrieve_filepaths(self, dispatcher_results, **kwargs):
@@ -251,5 +250,3 @@ class experiment_class:
         for k, v in kwargs.items():
             if k in self.RUN_SIMULATOR_ATTRIBUTES:
                 self.RUN_SIMULATOR_ATTRIBUTES[k] = v
-                
-    

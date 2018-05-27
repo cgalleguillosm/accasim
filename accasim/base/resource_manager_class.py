@@ -65,7 +65,7 @@ class resources_class:
         # For instance when a group has gpu and an another group hasn't and that attribute must be 0. 
         #=======================================================================
         for group_name, group_values in groups.items():
-            resource_group = { '%s%s' % (p, attr): group_values.get(attr, 0) if p == self.available_prefix else 0
+            resource_group = { '{}{}'.format(p, attr): group_values.get(attr, 0) if p == self.available_prefix else 0
 #                for attr, q in group_values.items() for p in [self.available_prefix, self.used_prefix]
                 for attr in self.system_resource_types for p in [self.available_prefix, self.used_prefix]
             }
@@ -74,7 +74,7 @@ class resources_class:
         j = 0
         for group_name, q in resources.items():
             for i in range(q):
-                _node_name = '%s%i' % (self.node_prefix, j + 1)
+                _node_name = '{}{}'.format(self.node_prefix, j + 1)
                 _attrs_values = self.groups[group_name]
                 self.resources[_node_name] = deepcopy(_attrs_values)
                 self.resources_status[_node_name] = self.ON
@@ -123,7 +123,6 @@ class resources_class:
         assert(self.resources), 'The resources must be setted before jobs allocation'
         assert(self.resources_status[node_name] == self.ON), 'The Node {} is {}, it is impossible to allocate any job'
         _resources = self.resources[node_name]
-        # _used = {}
         _done = []
         for k, v in kwargs.items():
             avl_key = '{}{}'.format(self.available_prefix, k)
@@ -138,7 +137,6 @@ class resources_class:
                     key, req = _done.pop()
                     _resources[key] -= req
                 return False, e
-            # _used[k] = _rem_attr - v
         self.update_full(node_name)
         return True, 'OK'
 
@@ -156,8 +154,9 @@ class resources_class:
         assert(self.resources_status[node_name] == self.ON), 'The Node {} is {}.'
         _resources = self.resources[node_name]
         for k, v in kwargs.items():
-            _resources['%s%s' % (self.used_prefix, k)] -= v
-            assert(_resources['%s%s' % (self.used_prefix, k)] >= 0), 'The event was request to release %i %s, but there is only %i available. It is impossible less than 0 resources' % (v, k, _resources['%s%s' % (self.used_prefix, k)])
+            _key = '{}{}'.format(self.used_prefix, k)
+            _resources[_key] -= v
+            assert(_resources[_key] >= 0), 'The event was request to release {} {}, but there is only {} available. It is impossible less than 0 resources'.format(v, k, _resources['%s%s' % (self.used_prefix, k)])
         self.update_full(node_name)
         
     def availability(self):
@@ -174,7 +173,7 @@ class resources_class:
             if self.resources_status[node] == self.OFF:
                 continue 
             _a[node] = {
-                attr: (attrs['%s%s' % (self.available_prefix, attr)] - attrs['%s%s' % (self.used_prefix, attr)]) for attr in self.system_resource_types
+                attr: (attrs['{}{}'.format(self.available_prefix, attr)] - attrs['{}{}'.format(self.used_prefix, attr)]) for attr in self.system_resource_types
             }
         return _a
 
@@ -195,12 +194,12 @@ class resources_class:
                 usage[k] += v
         if not type:
             for _attr in self.system_resource_types:
-                if usage['%s%s' % (self.available_prefix, _attr)] > 0:
-                    _str_usage.append("%s: %.2f%%" % (_attr, usage['%s%s' % (self.used_prefix, _attr)] / usage['%s%s' % (self.available_prefix, _attr)] * 100))
+                if usage['{}{}'.format(self.available_prefix, _attr)] > 0:
+                    _str_usage.append("{}: {:.2%}".format(_attr, usage['{}{}'.format(self.used_prefix, _attr)] / usage['{}{}'.format(self.available_prefix, _attr)]))
 
             return (_str + ', '.join(_str_usage))
         elif type == 'dict':
-            return {_attr: usage['%s%s' % (self.used_prefix, _attr)] / usage['%s%s' % (self.available_prefix, _attr)] * 100 if usage['%s%s' % (self.available_prefix, _attr)] > 0 else 0 for _attr in self.system_resource_types}
+            return {_attr: usage['{}{}'.format(self.used_prefix, _attr)] / usage['{}{}'.format(self.available_prefix, _attr)] * 100 if usage['{}{}'.format(self.available_prefix, _attr)] > 0 else 0 for _attr in self.system_resource_types}
         else:
             raise NotImplementedError()
 
@@ -247,8 +246,8 @@ class resources_class:
             formatted_attrs = ""
             # for attr in set([attr.split('_')[1] for attr in attrs]):
             for attr in self.system_resource_types:
-               formatted_attrs += '%s: %i/%i, ' % (attr, attrs['%s%s' % (self.used_prefix, attr)], attrs['%s%s' % (self.available_prefix, attr)])
-            _str += '- %s: %s\n' % (node, formatted_attrs)
+               formatted_attrs += '{}: {}/{}, '.format(attr, attrs['{}{}'.format(self.used_prefix, attr)], attrs['{}{}'.format(self.available_prefix, attr)])
+            _str += '- {}: {}\n'.format(node, formatted_attrs)
         return _str
     
     def update_full(self, node):
@@ -259,7 +258,7 @@ class resources_class:
             if self.resources_status[node] == self.OFF:
                 continue
             for attr in _system_resource_types:
-                if (attrs['%s%s' % (self.available_prefix, attr)] - attrs['%s%s' % (self.used_prefix, attr)]) > 0:
+                if (attrs['{}{}'.format(self.available_prefix, attr)] - attrs['{}{}'.format(self.used_prefix, attr)]) > 0:
                     _system_resource_types.remove(attr)
             if not _system_resource_types:
                 break
@@ -279,9 +278,9 @@ class resource_manager:
         :param _resource: An instance of the resources class. It defines the system capacity.  
         
         """
-        assert(isinstance(_resource, resources_class)), ('Only %s class is acepted for resources' % resources_class.__name__)
+        assert(isinstance(_resource, resources_class)), ('Only {} class is acepted for resources'.format(resources_class.__name__))
         self.resources = _resource
-        self.actual_events = {}
+        self.running_jobs = {}
 
     def allocate_event(self, event, node_names):
         """
@@ -293,29 +292,36 @@ class resource_manager:
         
         :return: Tuple: First element True if the event was allocated, False otherwise. Second element a message. 
         """
-        logging.debug('Allocating %s event in nodes %s' % (event.id, ', '.join([node for node in node_names])))
-        _resources = event.requested_resources
-        _attrs = event.requested_resources.keys()
-
-        unique_nodes = [(t, node_names.count(t)) for t in set(node_names)]
-
-        self.actual_events[event.id] = {
-            node_name: { _attr:_resources[_attr] * q for _attr in _attrs} for (node_name, q) in unique_nodes
-        }
+        logging.trace('Allocating {} in nodes {}'.format(event.id, ', '.join([node for node in node_names])))
+        _requested_res = event.requested_resources
+        _attrs = _requested_res.keys()
+        
+        _allocation = {}
+        for node in node_names:
+            if not(node in _allocation):
+                _allocation[node] = {_attr: _requested_res[_attr] for _attr in _attrs}
+                continue
+            for _attr in _attrs:
+                _allocation[node][_attr] += _requested_res[_attr]
+        
         _allocated = True
         _rollback = []
-        for node_name, values in self.actual_events[event.id].items():
+
+        for node_name, values in _allocation.items():
             done, message = self.resources.allocate(node_name, **values)
             if done:
                 _rollback.append((node_name, values))
             else:
+                logging.trace('Rollback for {}: {}'.format(event.id, _rollback + [(node_name, values)]))
                 _allocated = False
-                self.actual_events.pop(event.id)
                 break
-            
-        while not _allocated and _rollback:
-            node_name, values = _rollback.pop()
-            self.resources.release(node_name, **values)
+        
+        if _allocated:
+            self.running_jobs[event.id] = _allocation
+        else:
+            while _rollback:
+                node_name, values = _rollback.pop()
+                self.resources.release(node_name, **values)
                
         return _allocated, message
 
@@ -327,7 +333,7 @@ class resource_manager:
         :param id: Job Id 
         
         """
-        for node_name, values in self.actual_events.pop(id).items():
+        for node_name, values in self.running_jobs.pop(id).items():
             self.resources.release(node_name, **values)
 
     def node_resources(self, *args):
@@ -368,7 +374,7 @@ class resource_manager:
     def get_total_resources(self, *args):
         """
         
-        Return the total system resource for the required argument. The resource have to exist in the system. 
+        Return the total system resource for the required argument. The resource has to exist in the system. 
         If no arguments is proportioned all resources are returned.
         
         :param \*args: Depends on the system configuration. But at least it must have ('core', 'mem') resources.

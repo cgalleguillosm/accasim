@@ -51,6 +51,7 @@ class async_writer:
             self._sem.release()
             self._thread.join()
             self._thread = None
+            
         if self._outfile is not None:
             self._outfile.close()
             self._outfile = None

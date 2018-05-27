@@ -1087,7 +1087,6 @@ class DEFAULT_SIMULATION:
     }
     """dict: Default Simulation parameters """
 
-
 def obj_assertion(obj, class_type, error_msg=None, msg_args=None):
     """
 

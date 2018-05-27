@@ -21,17 +21,17 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-import random
-import sys
+import logging
+
+from random import seed
+from sys import maxsize 
+from re import split
+from sortedcontainers import SortedSet, SortedList
 from abc import abstractmethod, ABC
+from _functools import reduce
+
 from accasim.utils.misc import CONSTANT
 from accasim.base.resource_manager_class import resource_manager
-from _functools import reduce
-from sortedcontainers import SortedSet as _sorted_set
-import time
-from re import split as _split
-
-
 
 
 class allocator_base(ABC):
@@ -41,7 +41,9 @@ class allocator_base(ABC):
     
     """
 
-    def __init__(self, seed, resource_manager=None, **kwargs):
+    MAXSIZE = maxsize
+
+    def __init__(self, _seed, resource_manager=None, **kwargs):
         """
     
         Allocator constructor (based on scheduler)
@@ -51,11 +53,12 @@ class allocator_base(ABC):
         :param kwargs: Nothing for the moment
                  
         """
-        random.seed(seed)
-        self._constants = CONSTANT()
+        seed(_seed)
+        self.constants = CONSTANT()
         self._avl_resources = []
         self._sorted_keys = []
         self.set_resource_manager(resource_manager)
+        self.logger = None
 
     @abstractmethod
     def get_id(self):
@@ -99,7 +102,7 @@ class allocator_base(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def allocating_method(self, es, cur_time, skip=False, reserved_time=None, reserved_nodes=None, debug=False):
+    def allocating_method(self, es, cur_time, skip=False, reserved_time=None, reserved_nodes=None):
         """
     
         Abstract method. Must be implemented by the subclass.
@@ -115,7 +118,6 @@ class allocator_base(ABC):
         :param skip: determines if the allocator can skip jobs
         :param reserved_time: beginning of the next reservation slot (used for backfilling)
         :param reserved_nodes: nodes already reserved (used for backfilling)
-        :param debug: Debugging flag
 
         :return: a list of assigned nodes of length e.requested_nodes, for all events that could be allocated. The list is in the format (time,event,nodes) where time can be either cur_time or None.
         
@@ -140,9 +142,14 @@ class allocator_base(ABC):
 
         """
         assert(self.resource_manager is not None), 'The resource manager is not defined. It must defined prior to run the simulation.'
-        if debug:
-            print('{}: {} queued jobs to be considered in the dispatching plan'.format(cur_time, len(es) if isinstance(es, (list, tuple)) else 1))
-        return self.allocating_method(es, cur_time, skip, reserved_time, reserved_nodes, debug)
+        if not self.logger:
+            self.logger = logging.getLogger(self.constants.LOGGER_NAME)
+
+        self.logger.debug('{}: {} queued jobs to be considered in the dispatching plan'.format(cur_time, len(es) if isinstance(es, (list, tuple, SortedList)) else 1))
+        
+        # Update current available resources
+        self.set_resources(self.resource_manager.availability())
+        return self.allocating_method(es, cur_time, skip, reserved_time, reserved_nodes)
     
     def set_resource_manager(self, _resource_manager):
         """
@@ -226,7 +233,7 @@ class ff_alloc(allocator_base):
         """
         pass
 
-    def allocating_method(self, es, cur_time, skip=False, reserved_time=None, reserved_nodes=None, debug=False):
+    def allocating_method(self, es, cur_time, skip=False, reserved_time=None, reserved_nodes=None):
         """
     
         Given a job list es, this method searches for a suitable allocation for as many jobs as possible.
@@ -249,8 +256,7 @@ class ff_alloc(allocator_base):
         :return: a list of assigned nodes of length e.requested_nodes, for all events that could be allocated. The list is in the format (time,event,nodes) where time can be either cur_time or None.
     
         """
-        debug = False
-        if not isinstance(es, (list, tuple)):
+        if not isinstance(es, (list, tuple, SortedList)):
             listAsInput = False
             es = [es]
         else:
@@ -269,7 +275,7 @@ class ff_alloc(allocator_base):
 
             # If the input arguments relative to backfilling are not supplied, the method operates in regular mode.
             # Otherwise, backfilling mode is enabled, allowing the allocator to skip jobs and consider the reservation.
-            nodes_to_discard = self._compute_reservation_overlaps(e, cur_time, reserved_time, reserved_nodes, debug)
+            nodes_to_discard = self._compute_reservation_overlaps(e, cur_time, reserved_time, reserved_nodes)
             backfilling_overlap = False if len(nodes_to_discard) == 0 else True
 
             assigned_nodes = []
@@ -313,27 +319,23 @@ class ff_alloc(allocator_base):
                 self._update_resources(assigned_nodes, requested_resources)
                 self._sorted_keys = self._adjust_resources(self._sorted_keys)
                 success_counter += 1
-                if debug:
-                    print('Allocation successful for event %s' % (e.id))
+                self.logger.trace('Allocation successful for event %s' % (e.id))
             # If no correct allocation could be found, two scenarios are possible: 1) normally, the allocator stops
             # here and returns the jobs allocated so far 2) if the skip parameter is enabled, the job is just
             # skipped, and we proceed with the remaining ones.
             else:
-                if debug:
-                    print('Allocation failed for event %s with %s nodes left' % (e.id, nodes_left))
+                self.logger.trace('Allocation failed for event %s with %s nodes left' % (e.id, nodes_left))
                 allocation.append((None, e.id, []))
                 if not skip:
                     # if jobs cannot be skipped, at the first allocation fail all subsequent jobs fail too
                     for ev in es[(success_counter + 1):]:
                         allocation.append((None, ev.id, []))
-                    if debug:
-                        print('Cannot skip jobs, %s additional pending allocations failed' % (len(es) - success_counter - 1))
+                    self.logger.trace('Cannot skip jobs, %s additional pending allocations failed' % (len(es) - success_counter - 1))
                     break
-        if debug:
-            print('There were %s successful allocations out of %s events' % (success_counter, len(es)))
+        self.logger.trace('{}/{} successful allocations of events'.format(success_counter, len(es)))
         return allocation if listAsInput else allocation[0]
 
-    def _compute_reservation_overlaps(self, e, cur_time, reserved_time, reserved_nodes, debug=False):
+    def _compute_reservation_overlaps(self, e, cur_time, reserved_time, reserved_nodes):
         """
     
         This method considers an event e, the current time, and a list of reservation start times with relative
@@ -343,7 +345,6 @@ class ff_alloc(allocator_base):
         :param cur_time: the current time
         :param reserved_time: the list (or single element) of reservation times
         :param reserved_nodes: the list of lists (or single list) of reserved nodes for each reservation
-        :param debug: the debug flag
         
         :return: the list of nodes that cannot be used by event e
     
@@ -353,8 +354,7 @@ class ff_alloc(allocator_base):
         else:
             if not isinstance(reserved_time, (list, tuple)):
                 if cur_time + e.expected_duration > reserved_time:
-                    if debug:
-                        print('Backfill: Event %s is overlapping with reservation at time %s in backfilling mode' % (e.id, reserved_time))
+                    self.logger.trace('Backfill: Event %s is overlapping with reservation at time %s in backfilling mode' % (e.id, reserved_time))
                     return reserved_nodes
                 else:
                     return []
@@ -362,8 +362,7 @@ class ff_alloc(allocator_base):
                 overlap_list = []
                 for ind, evtime in enumerate(reserved_time):
                     if cur_time + e.expected_duration > evtime:
-                        if debug:
-                            print('Backfill: Event %s is overlapping with reservation at time %s in backfilling mode' % (e.id, evtime))
+                        self.logger.trace('Backfill: Event %s is overlapping with reservation at time %s in backfilling mode' % (e.id, evtime))
                         overlap_list += reserved_nodes[ind]
                 return list(set(overlap_list))
 
@@ -391,7 +390,7 @@ class ff_alloc(allocator_base):
                 if new_q == 0:
                     continue
                 if not (new_q in self.aux_resources[attr]):
-                    self.aux_resources[attr][new_q] = _sorted_set()
+                    self.aux_resources[attr][new_q] = SortedSet()
                 self.aux_resources[attr][new_q].add(node)
 
     def _sort_resources(self):
@@ -431,13 +430,8 @@ class ff_alloc(allocator_base):
                 if n_res == 0:  # This works similar to trim_nodes
                     continue
                 if not (n_res in self.aux_resources[res_type]):
-                    self.aux_resources[res_type][n_res] = _sorted_set()
+                    self.aux_resources[res_type][n_res] = SortedSet()
                 self.aux_resources[res_type][n_res].add(node)
-                #===============================================================
-                # if not (node in self.aux_resources['nodes']):
-                #     self.aux_resources['nodes'][node] = {} 
-                # self.aux_resources['nodes'][node][res_type] = n_res
-                #===============================================================
 
     def _event_fits_node(self, resources, requested_resources):
         """
@@ -453,7 +447,7 @@ class ff_alloc(allocator_base):
         """
         # min_availability is the number of job units fitting in the node. It is initialized at +infty,
         # since we must compute a minimum
-        min_availability = sys.maxsize
+        min_availability = self.MAXSIZE
         # if a job requests 0 resources, the request is deemed as not valid
         valid_request = False
         for k, v in requested_resources.items():
@@ -473,7 +467,7 @@ class ff_alloc(allocator_base):
     def _trim_nodes(self, nodes):
         """
         Method which removes from a list of node IDs those elements that correspond to nodes that are full, i.e. they
-        have no available Memory or CPU resources and are thus useless for allocation.
+        have no available Memory or CPU resources, therefore they are thus useless for allocation.
 
         :param nodes: A list of node IDs
         :return: The trimmed list of nodes
@@ -483,8 +477,7 @@ class ff_alloc(allocator_base):
         # for i in range(len(nodes) - 1, -1, -1):
         #    if not all(self._avl_resources[nodes[i]][r] > 0 for r in self.nec_res_types):
         #        nodes.pop(i)
-        trimNodes = [n for n in nodes if all(self._avl_resources[n][r] > 0 for r in self.nec_res_types)]
-        return trimNodes
+        return [n for n in nodes if all(self._avl_resources[n][r] > 0 for r in self.nec_res_types)]
     
     def _atoi(self, text):
         return int(text) if text.isdigit() else text
@@ -495,30 +488,23 @@ class ff_alloc(allocator_base):
         http://nedbatchelder.com/blog/200712/human_sorting.html
         (See Toothy's implementation in the comments)
         '''
-        return [ self._atoi(c) for c in _split('(\d+)', text) ]
+        return [ self._atoi(c) for c in split('(\d+)', text) ]
     
     # New function to find nodes that satisfies the node request, this is used in conjuction with the sorted node keys.
     def _find_sat_nodes(self, req_resources):
         sat_nodes = {}
-        # fitting_nodes = {}
+        
         for t_res, n_res in req_resources.items():
             if n_res == 0:
                 continue
             if not(t_res in sat_nodes):
-                sat_nodes[t_res] = _sorted_set(key=self._natural_keys)
+                sat_nodes[t_res] = SortedSet(key=self._natural_keys)
             for n, nodes in self.aux_resources[t_res].items():
                 if n >= n_res:
                     sat_nodes[t_res].update(nodes)
-                    #===========================================================
-                    # for node in nodes:
-                    #     if not (node in fitting_nodes):
-                    #         fitting_nodes[node] = {}
-                    #     fitting_nodes[node][t_res] = n // n_res
-                    #===========================================================
-        # nodes = list(reduce(set.intersection, (set(val) for val in sat_nodes.values())))
-        # tot_fitting_reqs = sum([min(fitting_nodes[n].values()) for n in nodes])
-        nodes = reduce(_sorted_set.intersection, sat_nodes.values())
-        return nodes  # , tot_fitting_reqs
+        nodes = reduce(SortedSet.intersection, sat_nodes.values())
+        
+        return nodes
 
 class bf_alloc(ff_alloc):
     """

@@ -22,19 +22,17 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 import logging
-import re
-import os
-import time
+
+from os import path
 from abc import ABC
 from pydoc import locate
-import asyncio
 from builtins import str, filter
 from inspect import signature
+from sortedcontainers import SortedSet, SortedDict
+
 from accasim.utils.misc import CONSTANT, default_swf_mapper
-from sortedcontainers import SortedSet as sorted_list
 from accasim.base.resource_manager_class import resource_manager as resource_manager_class
 from accasim.utils.async_writer import async_writer
-import copy
 
 
 class attribute_type:
@@ -106,7 +104,12 @@ class event(ABC):
             return getattr(obj, sp_attr[0])
         except AttributeError as e:
             return 'NA'
+        
+    def __str__(self):
+        return str(self.id)
 
+    def __repr__(self):
+        return self.id
 
 class job_factory:
     def __init__(self, resource_manager=None, job_class=event, job_attrs=[], job_mapper={}):
@@ -156,13 +159,12 @@ class job_factory:
         """
         _req_resources = job_attrs['requested_resources']
         missing_res = {r for r in self.system_resources if r not in _req_resources.keys()}
-        # assert(len(missing_res) == 0), 'Missing resources in the readed jobs: {}'.format(missing_res)
         if missing_res:
-            print('Some resources has not been included in the parser, assigning 0 to the {} resources in the job request.'.format(missing_res))
+            logging.info('Some resources has not been included in the parser, assigning 0 to the {} resources in the job request.'.format(missing_res))
             required = {'core', 'mem'}
             inter = missing_res & required
             if inter and len(inter) != len(required):
-                print('Some mandatory attributes are missing: {}. The simulation will stop.'.format(inter))
+                logging.error('Some mandatory attributes are missing: {}. The simulation will stop.'.format(inter))
                 exit()
             self.missing_resources = missing_res
         self.checked = True
@@ -190,7 +192,7 @@ class job_factory:
 
         :param \*\*kwargs: Dictionary with the job attributes.
 
-        :return: Returns a job instantiation.
+        :return: Returns a job instance.
 
         """
         assert(self.resource_manager), 'Missing resource_manager attribute. It must be added via :func:`.set_resource_manager`.'
@@ -276,18 +278,26 @@ class event_mapper:
         self.wtimes = []
 
         self.current_time = None
-        self.time_points = sorted_list()
-        # self.ending_time_points = sorted_list()
-        self.events = {}
-        self.loaded = {}
+        self.time_points = SortedSet()
+        self.events = SortedDict()
+        self.loaded = SortedDict()
         self.queued = []
-        self.real_ending = {}
+        self.real_ending = SortedDict()
         self.running = []
-        self.finished = []
-
-        self._sched_writer = None
-        self._pprint_writer = None
-
+        self.finished = 0
+        
+        self.logger = logging.getLogger(self.constants.LOGGER_NAME)
+        
+        self._writers = []
+        if self.constants.SCHEDULING_OUTPUT:
+            _sched_fp = path.join(self.constants.RESULTS_FOLDER_PATH, self.constants.SCHED_PREFIX + self.constants.WORKLOAD_FILENAME)
+            self._sched_writer = async_writer(path=_sched_fp, pre_process_fun=event_mapper._schd_write_preprocessor)
+            self._writers.append(self._sched_writer)
+        
+        if self.constants.PPRINT_OUTPUT:
+            _pprint_fp = path.join(self.constants.RESULTS_FOLDER_PATH, self.constants.PPRINT_PREFIX + self.constants.WORKLOAD_FILENAME)
+            self._pprint_writer = async_writer(path=_pprint_fp, pre_process_fun=event_mapper._schd_pprint_preprocessor)
+            self._writers.append(self._pprint_writer)
 
     def load_events(self, es):
         """
@@ -314,7 +324,6 @@ class event_mapper:
 
         """
         assert(isinstance(e, event)), 'Using %s, expecting a single %s' % (e.__class__, event.__name__)
-        # print('load event', self.time_points)
         if not self.current_time:
             self.current_time = e.queued_time - 1
             self.time_points.add(self.current_time)
@@ -347,7 +356,8 @@ class event_mapper:
                 e = events_dict[e_id]
                 self.finish_event(e)
                 _es.append(e_id)
-        self.last_run_time = self.current_time
+        if _es:
+            self.last_run_time = self.current_time
         return _es
 
     def finish_event(self, e):
@@ -365,19 +375,11 @@ class event_mapper:
         e.slowdown = float("{0:.2f}".format((e.waiting_time + e.running_time) / e.running_time)) if e.running_time != 0 else e.waiting_time if e.waiting_time != 0 else 1.0
         self.slowdowns.append(e.slowdown)
         self.wtimes.append(e.waiting_time)
-        self.finished.append(e.id)
-        e.end_order = len(self.finished)
+        self.finished += 1
+        e.end_order = self.finished
         if self.constants.SCHEDULING_OUTPUT:
-            if self._sched_writer is None:
-                self._sched_writer = async_writer(path=os.path.join(self.constants.RESULTS_FOLDER_PATH,
-                    self.constants.SCHED_PREFIX + self.constants.WORKLOAD_FILENAME), pre_process_fun=event_mapper._schd_write_preprocessor)
-                self._sched_writer.start()
             self._sched_writer.push(e)
         if self.constants.PPRINT_OUTPUT:
-            if self._pprint_writer is None:
-                self._pprint_writer = async_writer(path=os.path.join(self.constants.RESULTS_FOLDER_PATH,
-                    self.constants.PPRINT_PREFIX + self.constants.WORKLOAD_FILENAME), pre_process_fun=event_mapper._schd_pprint_preprocessor)
-                self._pprint_writer.start()
             self._pprint_writer.push(e)
 
     def dispatch_event(self, _job, _time, _time_diff, _nodes):
@@ -395,44 +397,49 @@ class event_mapper:
         """
         id = _job.id
         start_time = _time + _time_diff
+        
+        #=======================================================================
+        # started, started_ended, postponed
+        #=======================================================================
+        # state = (0, 0, 0)
         assert(self.current_time == start_time), 'Start _time is different to the current _time'
 
+        # Try to allocate
+        done, msg = self.resource_manager.allocate_event(_job, _nodes)
+        if not done:
+            logging.error('{} Must be postponed. Reason: {}. If you see this message many times, probably you have to check your allocation heuristic.'.format(_id, msg))
+            self.submit_event(_id)
+            return (0, 0, 1)
 
+        # Continue with a successfully allocated job        
         # Update job info
         _job.start_time = start_time
         _job.assigned_nodes = _nodes
 
-
-        # Used only for statistics
+        # Initialize the output writers
         if self.first_time_dispatch == None:
             self.first_time_dispatch = start_time
+            for writer in self._writers:
+                writer.start()
 
         if _job.duration == 0:
-            if self.debug:
-                print('{}: {} Dispatched and Finished at the same moment. Job Lenght 0'.format(self.current_time, id))
+            self.logger.trace('{}: {} Dispatched and Finished at the same moment. Job Lenght 0'.format(self.current_time, id))
             self.finish_event(_job)
-            # self.time_points.add(self.current_time)
-            return False
+            return (0, 1, 0)
 
         # Move to running jobs
         self.running.append(id)
 
-        # Setting the ending _time as walltime
-
-        expected_end_time = _job.start_time + _job.expected_duration
+        # Include real ending time int time points
         real_end_time = _job.start_time + _job.duration
-
-        #=======================================================================
-        # if expected_end_time != self.current_time:
-        #     self.time_points.add(expected_end_time)
-        #=======================================================================
         self.time_points.add(real_end_time)
 
+        # Relate ending time with job id
         if real_end_time not in self.real_ending:
             self.real_ending[real_end_time] = []
         self.real_ending[real_end_time].append(id)
-        logging.debug('%s: %s Dispatched! Init %s Ending %s' % (self.current_time, id, start_time, expected_end_time))
-        return True
+
+        return (1, 0, 0)    
 
     def submit_event(self, e_id):
         """
@@ -453,13 +460,11 @@ class event_mapper:
         if len(self.time_points) > 0:
             self.current_time = self.time_points.pop(0)
         else:
-            if self.debug:
-                print('No more time points... but there still jobs in the queue')
+            self.logger.trace('No more time points... but there still jobs in the queue')
             self.current_time += 1
         submitted = self.loaded.pop(self.current_time, [])
         new_queue = self.queued + submitted
-        if self.debug:
-            print('{} Next events: \n-Recently submited: {}\n-Already queued: {}'.format(self.current_time, submitted, self.queued))
+        self.logger.trace('{} Next events: \n-Recently submited: {}\n-Already queued: {}'.format(self.current_time, submitted, self.queued))
         self.queued.clear()
 
         return new_queue
@@ -472,21 +477,26 @@ class event_mapper:
         """
         return (self.loaded or self.queued or self.running)
 
-    def dispatch_events(self, event_dict, to_dispatch, time_diff, _debug=False):
+    def dispatch_events(self, event_dict, to_dispatch, time_diff, omit_timediff=True):
         """
 
         Internal method for processing the job's dispatching. Jobs are started if start time is equals to current time.
 
         :param event_dict: Actual Loaded, queued and running jobs in a dictionary {id: job object}
         :param to_dispatch: A tuple which contains the (start time, job id, nodes)
-        :param time_diff: Time which takes the dispatching processing time. Default 0.
-        :param _debug: Debug flag
+        :param time_diff: Time which takes the dispatching processing time.
+        :param omit_timediff: If True the time spent in generating a decision is considered as 0. False this time is considered, and all events in \
+            in [current time, current time + time diff] are moved to the new current time (current time + time diff). The latter isn't implemented. 
 
         :return return a tuple of (#dispatched, #Dispatched + Finished (0 duration), #postponed)
         """
+        if omit_timediff:
+            time_diff = 0
+        
         n_disp = 0
         n_disp_finish = 0
         n_post = 0
+        
         for (_time, _id, _nodes) in to_dispatch:
             assert(isinstance(_id, str)), 'Please check your return tuple in your Dispatching method. _id must be a str type. Received wrong type: {}'.format(e.__class__)
             assert(_time is None or _time >= self.current_time), 'Receiving wrong schedules.'
@@ -506,20 +516,15 @@ class event_mapper:
                 self.submit_event(_id)
                 n_post += 1
                 continue
-            _e = copy.deepcopy(event_dict[_id])
-            if self.dispatch_event(_e, _time, time_diff, _nodes):
-                done, msg = self.resource_manager.allocate_event(_e, _nodes)
-                if not done:
-                    print('{} Must be postponed. Reason: {}. If you see this message many times, probably you have to check your allocation heuristic.'.format(_id, msg))
-                    self.running.remove(_id)
-                    self.submit_event(_id)
-                    n_post += 1
-                else:
-                    event_dict[_id] = _e
-                    n_disp += 1
-            else:
-                # Since the job duration was 0 it was dispatched and finished at the same time
-                n_disp_finish += 1
+            
+            #=======================================================================
+            # started, started_ended, postponed
+            #=======================================================================
+            dispatched, ended, postponed = self.dispatch_event(event_dict[_id], _time, time_diff, _nodes)
+            n_disp += dispatched
+            n_disp_finish += ended
+            n_post += postponed   
+                         
         return (n_disp, n_disp_finish, n_post)
 
     def release_ended_events(self, event_dict):
@@ -547,7 +552,7 @@ class event_mapper:
         :return: String including the system info.
 
         """
-        return ('Loaded {}, Queued {}, Running {}, and Finished {} Jobs'.format(len(self.loaded), len(self.queued), len(self.running), len(self.finished)))
+        return ('Loaded {}, Queued {}, Running {}, and Finished {} Jobs'.format(len(self.loaded), len(self.queued), len(self.running), self.finished))
 
     def availability(self):
         """
@@ -583,12 +588,9 @@ class event_mapper:
         """
         Stops the output writer threads and closes the file streams
         """
-        if self._sched_writer is not None:
-            self._sched_writer.stop()
-            self._sched_writer = None
-        if self._pprint_writer is not None:
-            self._pprint_writer.stop()
-            self._pprint_writer = None
+        for i in range(len(self._writers)):
+            self._writers[i].stop()
+            self._writers[i] = None
 
     @staticmethod
     def _schd_write_preprocessor(event):
@@ -608,9 +610,7 @@ class event_mapper:
             except ValueError:
                 _attrs[a] = 'NA'
         output_format = _dict['format']
-        format_elements = re.findall('\{(\w+)\}', output_format)
-        values = {k: v for k, v in _attrs.items() if k in format_elements}
-        return output_format.format(**values) + '\n'
+        return output_format.format(**_attrs) + '\n'
 
     @staticmethod
     def _schd_pprint_preprocessor(event):
@@ -631,7 +631,6 @@ class event_mapper:
             except ValueError:
                 _attrs[a] = 'NA'
         output_format = _dict['format']
-        format_elements = re.findall('\{(\w+)\}', output_format)
         values = [_attrs[k] for k in _order]
         if event.end_order == 1:
             return (output_format.format(*_order) + '\n', output_format.format(*values) + '\n')
@@ -646,4 +645,4 @@ class event_mapper:
         :return: Return the current system info.
 
         """
-        return 'Loaded: %s\nQueued: %s\nRunning: %s\nExpected job finish: %s\nReal job finish on: %s,\nFinished: %s\nNext time events: %s' % (self.loaded, self.queued, self.running, None, self.real_ending, self.finished, self.time_points)
+        return 'Loaded: {}\nQueued: {}\nRunning: {}\nReal job finish on: {},\nFinished: {}\nNext time events: {}'.format(self.loaded, self.queued, self.running, self.real_ending, self.finished, self.time_points)
