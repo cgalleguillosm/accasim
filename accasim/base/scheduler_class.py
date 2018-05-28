@@ -67,22 +67,26 @@ class SchedulerBase(ABC):
                     - JobVerification.REJECT: Any job is rejected
                     - JobVerification.NO_CHECK: All jobs are accepted
                     - JobVerification.CHECK_TOTAL: If the job requires more resources than the available in the system.
-                    - JobVerification.CHECK_REQUEST: if an individual request by node requests more resources than the available one.
-                 
+                    - JobVerification.CHECK_REQUEST: if an individual request by node requests more resources than the available one.        
         """
         seed(_seed)
         self._counter = 0
         self.constants = CONSTANT()
         self.allocator = None
         self.logger = None
+        self._system_capacity = None
+        self._nodes_capacity = None
+        
         if allocator:
             assert isinstance(allocator, allocator_base), 'Allocator not valid for scheduler'
             self.allocator = allocator
         self.set_resource_manager(resource_manager)
-        self.internal_ref = {}
-        self._job_check = job_check
-        self._min_required_availability = kwargs.pop('min_resources', None)  # ['core', 'mem']
         
+        assert(isinstance(job_check, JobVerification)), 'job_check invalid type. {}'.format(job_check.__class__)
+        self._job_check = job_check
+        
+        # Check resources
+        self._min_required_availability = kwargs.pop('min_resources', None)  # ['core', 'mem']s        
         
     @property
     def name(self):
@@ -196,21 +200,25 @@ class SchedulerBase(ABC):
         """
         if self._job_check == JobVerification.REJECT:
             return False
+        
         elif self._job_check == JobVerification.NO_CHECK:
             return True
+        
         elif self._job_check == JobVerification.CHECK_TOTAL:
             # We verify that the _job does not violate the system's resource constraints by comparing the total
-            for t in requested_resources.keys():
-                if _job.requested_resources[t] * _job.requested_nodes > self._base_availability[t]:
-                    return False                    
+            if not self._system_capacity:
+                self._system_capacity = self.resource_manager.system_capacity('total')
+            return not any([_job.requested_resources[res] * _job.requested_nodes > self._system_capacity[res] for res in _job.requested_resources.keys()])
+                
         elif self._job_check == JobVerification.CHECK_REQUEST:
-            _nodes_cap = self.resource_manager.system_capacity('nodes')
+            if not self._nodes_capacity:
+                self._nodes_capacity = self.resource_manager.system_capacity('nodes')
             # We verify the _job request can be fitted in the system        
             _requested_resources = _job.requested_resources
             _requested_nodes = _job.requested_nodes
             _fits = 0
             _diff_node = 0 
-            for _node, _attrs in _nodes_cap.items():
+            for _node, _attrs in self._nodes_capacity.items():
                 # How many time a request fits on the node
                 _nfits = min([_attrs[_attr] // req for _attr, req in _requested_resources.items() if req > 0 ])
                 
@@ -226,6 +234,7 @@ class SchedulerBase(ABC):
                 else:
                     if _diff_node >= _requested_nodes:
                         return True
+            
             return False
         raise DispatcherException('Invalid option.')    
     
