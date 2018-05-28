@@ -21,33 +21,30 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-from accasim.base.resource_manager_class import resources_class
-from accasim.utils.misc import obj_assertion, str_datetime, load_config
-from accasim.utils.data_fitting import distribution_fit
-from accasim.experimentation.schedule_writer import workload_writer, default_writer
-from accasim.experimentation.schedule_parser import workload_file_reader
-from accasim.utils.reader_class import default_tweak_class
-
+import warnings
+import json
+import time
 
 from abc import ABC
 from scipy import stats as _statistical_distributions
-from scipy.stats import percentileofscore as _percentileofscore
-from statistics import pstdev as _pstdev
-from numpy import average, percentile, cumsum, searchsorted
-from numpy import histogram as _histogram, mean, ndarray
-from sys import float_info as _min_float
-from math import exp as _exp, log as _log
-from random import random as _random
-import warnings
-from collections import Counter
-import json
-import time
-from sortedcontainers import SortedList as _sorted_list
+from scipy.stats import percentileofscore
+from statistics import pstdev
+from numpy import searchsorted, ndarray
+from math import exp, log
+from random import random
+from sortedcontainers import SortedList
 from _functools import reduce
-import os
+
+from accasim.base.resource_manager_class import Resources
+from accasim.utils.misc import obj_assertion, str_datetime, load_config
+from accasim.utils.data_fitting import DistributionFitting
+from accasim.experimentation.schedule_writer import WorkloadWriter, DefaultWriter
+from accasim.experimentation.schedule_parser import WorkloadFileReader
+from accasim.utils.reader_class import DefaultTweaker
 
 
-class generator(ABC):
+
+class Generator(ABC):
     
     def __init__(self, distributions):
         """
@@ -56,7 +53,7 @@ class generator(ABC):
         """
         if not distributions:
             distributions = [dist for dist in _statistical_distributions.__all__ if isinstance(getattr(_statistical_distributions, dist), _statistical_distributions.rv_continuous)]
-        self.distribution_fit = distribution_fit(distributions)
+        self.distribution_fit = DistributionFitting(distributions)
 
     def dist_cdf(self, x, dist_name, dist_param, optional):
         """
@@ -96,7 +93,7 @@ class generator(ABC):
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore')
             dist = getattr(_statistical_distributions, dist_name)
-            return dist.ppf(_random(), *dist_param, **optional)
+            return dist.ppf(random(), *dist_param, **optional)
 
 
     def _generate_dist_params(self, data, save=False, filepath=None):
@@ -140,7 +137,7 @@ class generator(ABC):
             json.dump(gen_parameters, fp)        
         
 
-class job_generator(generator):
+class JobGenerator(Generator):
     SERIAL = 1
     PARALLEL = 2
 
@@ -168,7 +165,7 @@ class job_generator(generator):
         self.params = params['params'] if 'params' in params else {}
         self.minimal_request = min_request
         self.maximal_request = max_request
-        generator.__init__(self, distributions)
+        Generator.__init__(self, distributions)
         self._init_probabilities(serial_prob, parallel_prob, parallel_node_prob)
         self.max_opers = params['max_opers'] if 'max_opers' in params else 0
         self.max_opers_serial = max_opers_serial 
@@ -242,7 +239,7 @@ class job_generator(generator):
         assert (serial_prob + parallel_prob == 1), 'Jobs types (serial, parallel) probabilities dont sum 1'
         assert (round(sum([p for p in par_node_prob.values()]), 10) in (0, 1)), 'Parallel node probabilities dont sum 1'
 
-        _calc_node_size = lambda x: _log(x) / _log(2)
+        _calc_node_size = lambda x: log(x) / log(2)
 
         self.p_serial = serial_prob
         self.p_parallel = parallel_prob
@@ -258,7 +255,7 @@ class job_generator(generator):
 
         :return:
         """
-        u = _random()
+        u = random()
         if u <= self._nodes_prob:
             a = self._node_base_min
             b = self._node_base_med
@@ -275,7 +272,7 @@ class job_generator(generator):
         :param b:
         :return:
         """
-        return (_random() * (b - a)) + a
+        return (random() * (b - a)) + a
 
     def _calc_runtime(self, gflops, nodes, request):
         """
@@ -298,7 +295,7 @@ class job_generator(generator):
         :return:
         """
         request = {k: 0 for k in self.resources}
-        r = _random()
+        r = random()
         if r <= self.p_serial and gflops <= self.max_opers_serial:
             nodes = 1
             type = self.SERIAL
@@ -343,7 +340,7 @@ class job_generator(generator):
         raise NotImplementedError()
 
 
-class arrive_generator(generator):
+class ArriveGenerator(Generator):
     HOURS_PER_DAY = 24
     MINUTES_PER_DAY = 60 * HOURS_PER_DAY
     SECONDS_PER_DAY = 60 * MINUTES_PER_DAY
@@ -387,10 +384,10 @@ class arrive_generator(generator):
 
         if not distributions:
             distributions = self.DISTRIBUTIONS
-        generator.__init__(self, distributions)
+        Generator.__init__(self, distributions)
 
         self.initialized = False
-        self.TOO_MUCH_ARRIVE_TIME = _log(max_arrive_time)
+        self.TOO_MUCH_ARRIVE_TIME = log(max_arrive_time)
 
     def add_sample(self, submission_times, rush_hours=(8, 17), save=False):
         """
@@ -429,10 +426,10 @@ class arrive_generator(generator):
             if ia_time > max_arrive_time_diff:
                 max_arrive_time_diff = ia_time
         avg_iatimes = sum(ia_times) / len(ia_times)
-        avg_percentile = _percentileofscore(ia_times, avg_iatimes)
-        iatimes_stdev = _pstdev(ia_times)
+        avg_percentile = percentileofscore(ia_times, avg_iatimes)
+        iatimes_stdev = pstdev(ia_times)
         
-        _log_arrive_time = _log(max_arrive_time_diff)
+        _log_arrive_time = log(max_arrive_time_diff)
         
         if self.TOO_MUCH_ARRIVE_TIME > _log_arrive_time:
             self.TOO_MUCH_ARRIVE_TIME = _log_arrive_time
@@ -480,9 +477,9 @@ class arrive_generator(generator):
                 current_rate = reduce(lambda x, y: x * y, progress)
                 
         factor = (1 - current_rate)
-        cur_max_ia_time = self.TOO_MUCH_ARRIVE_TIME - (self.TOO_MUCH_ARRIVE_TIME - _log(self.SECONDS_IN_BUCKET)) * factor
+        cur_max_ia_time = self.TOO_MUCH_ARRIVE_TIME - (self.TOO_MUCH_ARRIVE_TIME - log(self.SECONDS_IN_BUCKET)) * factor
         
-        assert(cur_max_ia_time <= self.TOO_MUCH_ARRIVE_TIME), 'wrong cur max ia time {} > {} ({} days)'.format(cur_max_ia_time, self.TOO_MUCH_ARRIVE_TIME, _exp(cur_max_ia_time) / (3600 * 24))
+        assert(cur_max_ia_time <= self.TOO_MUCH_ARRIVE_TIME), 'wrong cur max ia time {} > {} ({} days)'.format(cur_max_ia_time, self.TOO_MUCH_ARRIVE_TIME, exp(cur_max_ia_time) / (3600 * 24))
         while True:
             rnd_value = self.dist_rand(**dist)
             if rnd_value <= cur_max_ia_time: 
@@ -490,7 +487,7 @@ class arrive_generator(generator):
         current_bucket = self.current[sample_name]
         weights = self.weights[sample_name]
         
-        self.points[sample_name] += _exp(rnd_value) / self.SECONDS_IN_BUCKET
+        self.points[sample_name] += exp(rnd_value) / self.SECONDS_IN_BUCKET
         next_arrive = 0
 
         while self.points[sample_name] > weights[current_bucket]:
@@ -553,7 +550,7 @@ class arrive_generator(generator):
         self.initialized = True
 
 
-class workload_generator:
+class WorkloadGenerator:
     
     def __init__(self, workload, sys_config, performance, request_limits, reader_class=None, resources_target=None, user_behavior=None, walltime_calculation=None, non_processing_resources=['mem'], **kwargs):
         """
@@ -613,27 +610,27 @@ class workload_generator:
             
         parallel_prob = 1 - serial_prob
 
-        self.arrive_generator = arrive_generator(start_time, hour_prob, day_prob, month_prob, arrive_parameters, total_jobs)
+        self.arrive_generator = ArriveGenerator(start_time, hour_prob, day_prob, month_prob, arrive_parameters, total_jobs)
         
         if show_msg:
-            print('Arrive generator samples...')
+            print('Arrive Generator samples...')
         self.arrive_generator.add_sample(_submissiont_times, save=save_parameters)
         if show_msg:
-            print('Arrive generator samples... Loaded')
+            print('Arrive Generator samples... Loaded')
             
         total_nodes = sum([d['nodes'] for d in resources.definition])
         total_resources = resources.total_resources()
         resource_types = list(resources.total_resources().keys())
         min_request, max_request = request_limits['min'], request_limits['max'] 
 
-        self.job_generator = job_generator(total_nodes, resource_types, serial_prob, parallel_prob, nodes_parallel_prob,
+        self.job_generator = JobGenerator(total_nodes, resource_types, serial_prob, parallel_prob, nodes_parallel_prob,
                                            performance, min_request, max_request, job_parameters, max_opers_serial, max_parallel_duration, **job_gen_optional)
 
         if show_msg:
-            print('Job generator samples...')
+            print('Job Generator samples...')
         self.job_generator.add_sample(_job_total_opers, save=save_parameters)
         if show_msg:
-            print('Job generator samples... Loaded')
+            print('Job Generator samples... Loaded')
 
     def _initialize(self, base_reader, performance, resources, non_processing_resources):
         """
@@ -652,7 +649,7 @@ class workload_generator:
         _job_runtimes = []
         _job_submission_times = []
         _job_types = {'serial': 0, 'parallel': 0}
-        _job_total_opers = _sorted_list()
+        _job_total_opers = SortedList()
         _job_hours = [0 for i in range(24)]
         _job_days = [0 for i in range(7)]
         _job_months = [0 for i in range(12)]
@@ -715,11 +712,11 @@ class workload_generator:
         :return:
         """
         if not writer:
-            writer = default_writer(filename, overwrite=overwrite)
+            writer = DefaultWriter(filename, overwrite=overwrite)
         else:
-            obj_assertion(writer, workload_writer,
+            obj_assertion(writer, WorkloadWriter,
                           'Received {} type as system resource. resources_class type expected.',
-                          [workload_writer.__class__.__name__])
+                          [WorkloadWriter.__class__.__name__])
                 
         generation_stats = {
             'current_jobs': 0,
@@ -782,13 +779,13 @@ class workload_generator:
         :return:
         """
         if resources_obj:
-            obj_assertion(resources_obj, resources_class,
+            obj_assertion(resources_obj, Resources,
                           'Received {} type as system resource. resources_class type expected.',
                           [resources_obj.__class__.__name__])
             return resources_obj
         elif sys_config:
             config = load_config(sys_config)
-            resources_obj = resources_class(node_prefix='', **config)
+            resources_obj = Resources(node_prefix='', **config)
             return resources_obj
         else:
             raise Exception('A resources object or the path to the system config must be given.')
@@ -854,6 +851,6 @@ class workload_generator:
         _func2 = self._update_distinct_woption('mem', 'requested_memory', '-1', 'used_memory', int)
         _func3 = self._update_name('queue_time', 'queued_time', int)
    
-        tweaker = default_tweak_class(start_time, equivalence, resources)
+        tweaker = DefaultTweaker(start_time, equivalence, resources)
         
-        return workload_file_reader(workload, reg_exp, tweaker, [_func1, _func2, _func3])
+        return WorkloadFileReader(workload, reg_exp, tweaker, [_func1, _func2, _func3])

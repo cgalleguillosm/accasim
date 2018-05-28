@@ -22,10 +22,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 from abc import abstractmethod, ABC
-from accasim.base.event_class import event_mapper
+from accasim.base.event_class import EventMapper
 from builtins import int
 
-class additional_data_type:
+class AdditionalDataType:
     """
     
     Specific object type for variables added through additional data implementations 
@@ -50,11 +50,11 @@ class additional_data_type:
         """
         self.data = value
         
-class additional_data(ABC):
+class AdditionalData(ABC):
     """
 
     Additional data class enables to add new behavior to the system, by executing a custom process which can use the current state of the system to create new data
-    The current state of the system is maintained in the :class:`accasim.base.event_class.event_mapper` object.
+    The current state of the system is maintained in the :class:`accasim.base.event_class.EventMapper` object.
 
     """
     
@@ -62,7 +62,7 @@ class additional_data(ABC):
         """
         
         Constructor. 
-        The event mapper (:class:`accasim.base.event_class.event_mapper`) must be defined at the instantiation or later, but it is mandatory for working.
+        The event mapper (:class:`accasim.base.event_class.EventMapper`) must be defined at the instantiation or later, but it is mandatory for working.
         
         :param event_manager: Event manager object.
         
@@ -105,10 +105,10 @@ class additional_data(ABC):
         """
         if hasattr(self.event_mapper, name):
             var = getattr(self.event_mapper, name)
-            assert(isinstance(var, additional_data_type)), 'Only additional_data_type class can be modified. Ensure that the {} is not already used.'.format(name)
+            assert(isinstance(var, AdditionalDataType)), 'Only additional_data_type class can be modified. Ensure that the {} is not already used.'.format(name)
             var.update(value)
             return
-        var = additional_data_type(value)   
+        var = AdditionalDataType(value)   
         setattr(self.event_mapper, name, var)        
         
     def set_event_manager(self, event_manager):
@@ -116,12 +116,12 @@ class additional_data(ABC):
 
         Set the system event manager
             
-        :param event_manager: An instantiation of a :class:`accasim.base.event_class.event_mapper` class or None
+        :param event_manager: An instantiation of a :class:`accasim.base.event_class.EventMapper` class or None
 
         """       
         if self.event_mapper:
             return
          
         self.allocator.set_resource_manager(event_manager)
-        assert isinstance(event_manager, event_mapper), 'Event Mapper not valid for scheduler'
+        assert isinstance(event_manager, EventMapper), 'Event Mapper not valid for scheduler'
         self.event_mapper = event_manager

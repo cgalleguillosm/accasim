@@ -25,7 +25,7 @@ import logging
 from copy import deepcopy
 from accasim.utils.misc import CONSTANT, FrozenDict
 
-class resources_class:
+class Resources:
     """
     
         resources class: Stablish the resources, allocate and release their use.
@@ -229,7 +229,7 @@ class resources_class:
                     } for node, attrs in self.resources.items()
                 })
             return self.SYSTEM_CAPACITY_NODES
-        raise ResourceException('System Capacity: \'{}\' type not defined'.format(type))
+        raise ResourceError('System Capacity: \'{}\' type not defined'.format(type))
     
     def resource_manager(self):
         """
@@ -239,7 +239,7 @@ class resources_class:
         :return: Resource manager object. 
         
         """
-        return resource_manager(self)
+        return ResourceManager(self)
     
     def available_resource_key(self, _key):
         """
@@ -294,7 +294,7 @@ class resources_class:
             if not (res in _system_resource_types):
                 self.full[res] = False
 
-class resource_manager:
+class ResourceManager:
 
     def __init__(self, _resource):
         """
@@ -305,7 +305,7 @@ class resource_manager:
         :param _resource: An instance of the resources class. It defines the system capacity.  
         
         """
-        assert(isinstance(_resource, resources_class)), ('Only {} class is acepted for resources'.format(resources_class.__name__))
+        assert(isinstance(_resource, Resources)), ('Only {} class is acepted for resources'.format(Resources.__name__))
         self.resources = _resource
         self.running_jobs = {}
 
@@ -445,6 +445,6 @@ class resource_manager:
 
         return self.resources.system_capacity(type)
 
-class ResourceException(Exception):
+class ResourceError(Exception):
     pass
     

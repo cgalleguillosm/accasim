@@ -25,20 +25,20 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.backends.backend_pdf import PdfPages
 from math import floor
-from accasim.utils.reader_class import default_reader_class
-from accasim.utils.misc import load_config, from_isodatetime_2_timestamp as _timestamp, str_resources
+from accasim.utils.reader_class import DefaultReader
+from accasim.utils.misc import load_config, from_isodatetime_2_timestamp as timestamp_func, str_resources
 from accasim.utils.file import path_leaf, load_jsonfile
-from accasim.base.resource_manager_class import resources_class
+from accasim.base.resource_manager_class import Resources
 from accasim.experimentation.schedule_parser import define_result_parser
 from accasim.utils.misc import DEFAULT_SIMULATION
 from copy import deepcopy
-from os.path import splitext as _splitext, join as _join
+from os.path import splitext, join
 from scipy.signal import savgol_filter
 from os.path import isfile
 import numpy as np
 
 
-class plot_factory:
+class PlotFactory:
     """
     A class for plot production and schedule files pre-processing.
     
@@ -105,7 +105,7 @@ class plot_factory:
 
         self._resource_order = None
         if self._sim_params_fname is None:
-            self._resource_order = DEFAULT_SIMULATION().parameters['RESOURCE_ORDER']
+            self._resource_order = DEFAULT_SIMULATION['RESOURCE_ORDER']
 
         # Base resource availability per-node (never changes)
         self._base_res = {}
@@ -344,7 +344,7 @@ class plot_factory:
             # If it is a plain string, it is used as a token for config files in the experimentation
             elif self._sim_params_fname is not None:
                 _path, _filename = path_leaf(filepath)
-                _sim_params_path = _join(_path, self._sim_params_fname)
+                _sim_params_path = join(_path, self._sim_params_fname)
             # If it is none, the default_result_parser will use the DEFAULT_SIMULATION config
 
             if _sim_params_path is not None:
@@ -353,9 +353,9 @@ class plot_factory:
                 _resource_order = self._resource_order
 
             if self._workload_parser is not None:
-                reader = default_reader_class(filepath, parser=self._workload_parser, equivalence=equiv)
+                reader = DefaultReader(filepath, parser=self._workload_parser, equivalence=equiv)
             else:
-                reader = default_reader_class(filepath, parser=define_result_parser(_sim_params_path), equivalence=equiv)
+                reader = DefaultReader(filepath, parser=define_result_parser(_sim_params_path), equivalence=equiv)
 
             slowdowns = []
             timePoints = set()
@@ -367,9 +367,9 @@ class plot_factory:
                 # Jobs are read and their slowdown values are stored
                 job = reader.read()
                 if job is not None:
-                    job['start_time'] = _timestamp(job['start_time'])
-                    job['end_time'] = _timestamp(job['end_time'])
-                    job['queue_time'] = _timestamp(job['queue_time'])
+                    job['start_time'] = timestamp_func(job['start_time'])
+                    job['end_time'] = timestamp_func(job['end_time'])
+                    job['queue_time'] = timestamp_func(job['queue_time'])
                     _start_time = job['start_time']
                     _end_time = job['end_time']
                     _queued_time = job['queue_time']
@@ -573,15 +573,15 @@ class plot_factory:
 
     def _generateSystemConfig(self, config_path):
         """
-        Generates a resources_class object from a system configuration file.
+        Generates a Resources object from a system configuration file.
         
         :param config_path: the path to the config file;
-        :return: the resources_class job, and the resource equivalence;
+        :return: the Resources object and the resource equivalence;
         """
         try:
             config = load_config(config_path)
             equiv = config.pop('equivalence', {})
-            resources = resources_class(**config, node_prefix='')
+            resources = Resources(**config, node_prefix='')
             return resources, equiv
         except Exception as e:
             if config_path != '':
@@ -974,7 +974,7 @@ class plot_factory:
             ax.grid(True)
 
             plt.show()
-            splitoutput = _splitext(output)
+            splitoutput = splitext(output)
             ff = PdfPages(splitoutput[0] + '-' + self._labels[i] + '.pdf')
             ff.savefig(fig)
             ff.close()
@@ -1033,7 +1033,7 @@ if __name__=='__main__':
                   'Path/to/benchmark/file2']
     resultlabel = ['Label',
                    'Label2']
-    plots = plot_factory('benchmark')
+    plots = PlotFactory('benchmark')
     plots.set_files(resultpath,resultlabel)
     plots.pre_process()
     plots.produce_plot(type='scalability', title='My Scalability Plot')

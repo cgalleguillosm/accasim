@@ -21,26 +21,26 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-from accasim.utils.reader_class import workload_parser_base
-from accasim.utils.file import plain_file_reader
+from accasim.utils.reader_class import WorkloadParserBase
+from accasim.utils.file import PlainFileReader
 from accasim.utils.misc import load_config, type_regexp, DEFAULT_SIMULATION
-from re import compile as _compile
+from re import compile
 
 
 def define_result_parser(simulator_config=None):
     """
-    This function creates a schedule_parser instance enabled for parsing AccaSim schedule files.
+    This function creates a ScheduleParser instance enabled for parsing AccaSim schedule files.
 
     The objects produced by this function are used for post-processing simulation results.
 
-    :return: A schedule_parser object
+    :return: A ScheduleParser object
     """
     try:
         if simulator_config is not None:
             _schedule_output = load_config(simulator_config)['schedule_output']
         else:
             # If no simulation config is supplied, DEFAULT_SIMULATION is used
-            _schedule_output = DEFAULT_SIMULATION().parameters['SCHEDULE_OUTPUT']
+            _schedule_output = DEFAULT_SIMULATION['SCHEDULE_OUTPUT']
         # _separators = _schedule_output['separators']
         _format = _schedule_output['format']
         _attributes = _schedule_output['attributes']
@@ -51,15 +51,15 @@ def define_result_parser(simulator_config=None):
 
     for _attr_name, _data_type in _attributes.items():
         _format = _format.replace('{' + _attr_name + '}', type_regexp(_data_type[-1]).format(_attr_name))
-    return schedule_parser(_format, [])
+    return ScheduleParser(_format, [])
 
 
-class schedule_parser(workload_parser_base):
+class ScheduleParser(WorkloadParserBase):
     """
     This class can read and parse schedule files produced by different sources, by personalizing the underlying parser
     object.
 
-    schedule_parser class is an implementation of the :class:`accasim.utils.reader_class.workload_parser_base`
+    ScheduleParser class is an implementation of the :class:`accasim.utils.reader_class.WorkloadParserBase`
     """
 
     def __init__(self, regexp, updater=[]):
@@ -70,8 +70,8 @@ class schedule_parser(workload_parser_base):
         :param updater: A list of functions used by the parser to perform automatic update operations over the lines
             that are read in the schedule file
         """
-        workload_parser_base.__init__(self)
-        self.regexp = _compile(regexp)
+        WorkloadParserBase.__init__(self)
+        self.regexp = compile(regexp)
         self.updater = updater
 
     def parse_line(self, line):
@@ -90,11 +90,11 @@ class schedule_parser(workload_parser_base):
         return _dict
 
 
-class workload_file_reader:
+class WorkloadFileReader:
     """
     Class that allows to read and parse schedule files produced by various sources.
 
-    This class employs a schedule_parser object in order to parse the lines that are read from the schedule file.
+    This class employs a ScheduleParser object in order to parse the lines that are read from the schedule file.
 
     """
     
@@ -103,13 +103,13 @@ class workload_file_reader:
         Constructor for the class.
 
         :param workload: Path to the file to be read
-        :param reg_exp: Regular expression used to instance the underlying schedule_parser object
+        :param reg_exp: Regular expression used to instance the underlying ScheduleParser object
         :param tweak_class: tweak_class instance used to filter the entries read from the schedule file
         :param updater: A list of functions used by the parser to perform automatic update operations over the lines
             that are read in the schedule file
         """
-        self.reader = plain_file_reader(workload)
-        self.parser = schedule_parser(reg_exp, updater)
+        self.reader = PlainFileReader(workload)
+        self.parser = ScheduleParser(reg_exp, updater)
         self.tweak = tweak_class
         
     def next(self, omit_startwith=';'):

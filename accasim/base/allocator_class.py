@@ -31,10 +31,10 @@ from abc import abstractmethod, ABC
 from _functools import reduce
 
 from accasim.utils.misc import CONSTANT
-from accasim.base.resource_manager_class import resource_manager
+from accasim.base.resource_manager_class import ResourceManager
 
 
-class allocator_base(ABC):
+class AllocatorBase(ABC):
     """
     
     The base abstract interface all allocators must comply to.
@@ -167,7 +167,7 @@ class allocator_base(ABC):
              
         """
         if _resource_manager:
-            assert isinstance(_resource_manager, resource_manager), 'Resource Manager not valid for scheduler'
+            assert isinstance(_resource_manager, ResourceManager), 'Resource Manager not valid for scheduler'
             self.resource_manager = _resource_manager
             self._base_availability = self.resource_manager.get_total_resources()
         else:
@@ -181,7 +181,7 @@ class allocator_base(ABC):
         """
         return self.get_id()
 
-class ff_alloc(allocator_base):
+class FirstFit(AllocatorBase):
     """
     
     A simple First-Fit allocator. Does not sort the resources.
@@ -204,7 +204,7 @@ class ff_alloc(allocator_base):
         :param kwargs: None at the moment
     
         """
-        allocator_base.__init__(self, seed, resource_manager)
+        AllocatorBase.__init__(self, seed, resource_manager)
         if self.resource_manager:
             self._base_availability = self.resource_manager.get_total_resources()
 
@@ -507,7 +507,7 @@ class ff_alloc(allocator_base):
         
         return nodes
 
-class bf_alloc(ff_alloc):
+class BestFit(FirstFit):
     """
     
     Best-Fit Allocator
@@ -530,7 +530,7 @@ class bf_alloc(ff_alloc):
         :param kwargs: None at the moment
         
         """
-        ff_alloc.__init__(self, seed, resource_manager)
+        FirstFit.__init__(self, seed, resource_manager)
 
         self.ranking = lambda x: sum(self._avl_resources[x].values())
         """

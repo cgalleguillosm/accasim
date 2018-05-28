@@ -30,12 +30,12 @@ from builtins import str, filter
 from inspect import signature
 from sortedcontainers import SortedSet, SortedDict
 
-from accasim.utils.misc import CONSTANT, default_swf_mapper
-from accasim.base.resource_manager_class import resource_manager as resource_manager_class
-from accasim.utils.async_writer import async_writer
+from accasim.utils.misc import CONSTANT
+from accasim.base.resource_manager_class import ResourceManager
+from accasim.utils.async_writer import AsyncWriter
 
 
-class attribute_type:
+class AttributeType:
 
     def __init__(self, name, type_class=None, optional=False):
         """
@@ -52,7 +52,7 @@ class attribute_type:
         self.type = type_class
         self.optional = optional
 
-class event(ABC):
+class Event(ABC):
 
     def __init__(self, job_id, queued_time, duration, requested_nodes, requested_resources):
         """
@@ -111,27 +111,27 @@ class event(ABC):
     def __repr__(self):
         return self.id
 
-class job_factory:
-    def __init__(self, resource_manager=None, job_class=event, job_attrs=[], job_mapper={}):
+class JobFactory:
+    def __init__(self, resource_manager=None, job_class=Event, job_attrs=[], job_mapper={}):
         """
 
         :param resource_manager: The resource manager of the simulator. It is required for creating the job requests.
         :param job_class: The class to be created by the Factory. By default it uses the Event class, but any subclass of it can be used (modified versions).
-        :param job_attrs: The extra attributes (attribute_type class) (already job_id, queued_time and duration are mandatory) to be set in the JobEvent class
+        :param job_attrs: The extra attributes (AttributeType class) (already job_id, queued_time and duration are mandatory) to be set in the JobEvent class
         :param job_mapper: Rename the the old key to a new key (using the value of the job_mapper dictionary)
 
         """
         self.resource_manager = None
         if resource_manager:
-            assert(isinstance(resource_manager, resource_manager_class)), 'Only subclases of :class:`.resource_manager_class` are accepted.'
+            assert(isinstance(resource_manager, ResourceManager)), 'Only subclases of :class:`.ResourceManager` are accepted.'
             self.resource_manager = resource_manager
             self.resource_manager_setup()
 
-        assert(issubclass(job_class, event)), 'Only subclasses of event class are accepted. Received: {} class'.format(_class.__name__)
+        assert(issubclass(job_class, Event)), 'Only subclasses of event class are accepted. Received: {} class'.format(_class.__name__)
 
         if job_attrs:
             assert(isinstance(job_attrs, list)), 'jobs_attrs must be a list'
-            assert(all(isinstance(attr_type, attribute_type) for attr_type in job_attrs)), 'The elements of jobs_attrs must be of :class:`.attribute_type` class.'
+            assert(all(isinstance(attr_type, AttributeType) for attr_type in job_attrs)), 'The elements of jobs_attrs must be of :class:`.AttributeType` class.'
 
         self.obj_type = job_class
         self.obj_parameters = list(signature(self.obj_type).parameters)
@@ -180,7 +180,7 @@ class job_factory:
 
     def set_resource_manager(self, resource_manager):
         if resource_manager:
-            assert(isinstance(resource_manager, resource_manager_class)), 'Only subclases of :class:`.resource_manager` are accepted.'
+            assert(isinstance(resource_manager, ResourceManager)), 'Only subclases of :class:`.resource_manager` are accepted.'
             self.resource_manager = resource_manager
             self.resource_manager_setup()
 
@@ -246,17 +246,17 @@ class job_factory:
         """
         # Calculate only if it is not present
         if not hasattr(obj, 'requested_nodes'):
-            _partition = 0
+            _times = 0
             for _res in self.system_resources:
                 _total_request = getattr(obj, _res)
                 assert(_total_request >= 0), 'The request for {} is no feasible ({}). Accepted values are equal or greater than 0. Job {} must be tweaked before re-run. See the example.'.format(_res, _total_request, obj.id)
-                _partition = max([_partition] + [round(getattr(obj, _res) / _resources[_res]) for _resources in self.group_resources.values()])
-            setattr(obj, 'requested_nodes', _partition)
+                _times = max([_times] + [round(getattr(obj, _res) / _resources[_res]) for _resources in self.group_resources.values()])
+            setattr(obj, 'requested_nodes', _times)
         if not hasattr(obj, 'requested_resources'):
-            _partition = getattr(obj, 'requested_nodes')
-            setattr(obj, 'requested_resources', {_res: getattr(obj, _res) // _partition for _res in self.system_resources})
+            _times = getattr(obj, 'requested_nodes')
+            setattr(obj, 'requested_resources', {_res: getattr(obj, _res) // _times for _res in self.system_resources})
 
-class event_mapper:
+class EventMapper:
 
     def __init__(self, resource_manager, debug=False, **kwargs):
         """
@@ -267,7 +267,7 @@ class event_mapper:
         :param \*\*kwargs: nothing for the moment.
 
         """
-        assert(isinstance(resource_manager, resource_manager_class)), 'Wrong type for the resource_manager argument.'
+        assert(isinstance(resource_manager, ResourceManager)), 'Wrong type for the resource_manager argument.'
         self.resource_manager = resource_manager
         self.constants = CONSTANT()
         self.debug = debug
@@ -291,12 +291,12 @@ class event_mapper:
         self._writers = []
         if self.constants.SCHEDULING_OUTPUT:
             _sched_fp = path.join(self.constants.RESULTS_FOLDER_PATH, self.constants.SCHED_PREFIX + self.constants.WORKLOAD_FILENAME)
-            self._sched_writer = async_writer(path=_sched_fp, pre_process_fun=event_mapper._schd_write_preprocessor)
+            self._sched_writer = AsyncWriter(path=_sched_fp, pre_process_fun=EventMapper._schd_write_preprocessor)
             self._writers.append(self._sched_writer)
         
         if self.constants.PPRINT_OUTPUT:
             _pprint_fp = path.join(self.constants.RESULTS_FOLDER_PATH, self.constants.PPRINT_PREFIX + self.constants.WORKLOAD_FILENAME)
-            self._pprint_writer = async_writer(path=_pprint_fp, pre_process_fun=event_mapper._schd_pprint_preprocessor)
+            self._pprint_writer = AsyncWriter(path=_pprint_fp, pre_process_fun=EventMapper._schd_pprint_preprocessor)
             self._writers.append(self._pprint_writer)
 
     def load_events(self, es):
@@ -309,10 +309,10 @@ class event_mapper:
         """
         if isinstance(es, list):
             for e in es:
-                assert(isinstance(e, event)), 'Only subclasses of event can be simulated.'
+                assert(isinstance(e, Event)), 'Only subclasses of event can be simulated.'
                 self.load_event(e)
         else:
-            assert(isinstance(es, event)), 'Only subclasses of event can be simulated.'
+            assert(isinstance(es, Event)), 'Only subclasses of event can be simulated.'
             self.load_event(es)
 
     def load_event(self, e):
@@ -323,7 +323,7 @@ class event_mapper:
         :param e: Single job (event subclass).
 
         """
-        assert(isinstance(e, event)), 'Using %s, expecting a single %s' % (e.__class__, event.__name__)
+        assert(isinstance(e, Event)), 'Using {}, expecting a single {}'.format(e.__class__, Event.__name__)
         if not self.current_time:
             self.current_time = e.queued_time - 1
             self.time_points.add(self.current_time)
@@ -335,7 +335,7 @@ class event_mapper:
             self.loaded[e.queued_time].append(e.id)
             self.time_points.add(e.queued_time)
         else:
-            raise Exception('Time sync problem, the actual event was loaded after the real submit time. This a programming error, must be checked.')
+            raise EventException('Time sync problem, the actual event was loaded after the real submit time. This a programming error, must be checked.')
 
     def move_to_finished(self, events_dict):
         """
@@ -595,7 +595,7 @@ class event_mapper:
     @staticmethod
     def _schd_write_preprocessor(event):
         """
-        To be used as a pre-processor for async_writer objects applied to event schedules.
+        To be used as a pre-processor for AsyncWriter objects applied to event schedules.
         Pre-processes an event object and converts it to a String representation.
         It uses the format specified in the SCHEDULE_OUTPUT constant.
 
@@ -615,7 +615,7 @@ class event_mapper:
     @staticmethod
     def _schd_pprint_preprocessor(event):
         """
-        To be used as a pre-processor for async_writer objects applied to pretty-print event schedules.
+        To be used as a pre-processor for AsyncWriter objects applied to pretty-print event schedules.
         Pre-processes an event object and converts it to a String representation.
         It uses the format specified in the PPRINT_SCHEDULE_OUTPUT constant.
 
@@ -646,3 +646,6 @@ class event_mapper:
 
         """
         return 'Loaded: {}\nQueued: {}\nRunning: {}\nReal job finish on: {},\nFinished: {}\nNext time events: {}'.format(self.loaded, self.queued, self.running, self.real_ending, self.finished, self.time_points)
+
+class EventException(Exception):
+    pass

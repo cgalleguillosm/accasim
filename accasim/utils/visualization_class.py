@@ -21,18 +21,18 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib.cm as mplcm
 import matplotlib.colors as colors
 import time
 import matplotlib.animation as Animation
-from accasim.utils.misc import sorted_object_list, str_datetime
+from accasim.utils.misc import str_datetime
+from sortedcontainers import SortedListWithKey as sorted_object_list
 from collections import namedtuple
 from threading import Thread
 
-class system_utilization:
+class SystemUtilization:
     """
     Using the matplotlib animation feature, this class will create a plot and update it during the simulation execution.
     """

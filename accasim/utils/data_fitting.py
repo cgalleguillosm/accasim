@@ -22,12 +22,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 import warnings
-from multiprocessing import Pool as _Pool, cpu_count as _cpu_count
+from multiprocessing import Pool, cpu_count
 from scipy import stats as _statistical_distributions
-from numpy import sum as _sum, power as _power, roll as _roll, histogram as _histogram
+from numpy import sum, power, roll, histogram
 
 
-class distribution_fit:
+class DistributionFitting:
     KINT64MAX = 2 ** 63 - 1
     CONTINUOUS_DISTRIBUTIONS = {
         'alpha': 'An alpha continuous random variable.',
@@ -149,13 +149,13 @@ class distribution_fit:
         :param y:
         :return:
         """
-        y, x = _histogram(data, bins='auto', density=True)
+        y, x = histogram(data, bins='auto', density=True)
         self.data = data
         self.y = y
-        self.x = (x + _roll(x, -1))[:-1] / 2.0
+        self.x = (x + roll(x, -1))[:-1] / 2.0
         try:
             results = []
-            with _Pool(self.cpus) as p:
+            with Pool(self.cpus) as p:
                 for dist_name in self.dist_names:
                     p.apply_async(self._best_fit, (dist_name,), callback=results.append)
                 p.close()
@@ -174,7 +174,7 @@ class distribution_fit:
             self.cpus = cpus
 
         try:
-            self.cpus = _cpu_count() - 1
+            self.cpus = cpu_count() - 1
         except NotImplementedError:
             self.cpus = 1
 
@@ -192,5 +192,5 @@ class distribution_fit:
             loc = params[-2]
             scale = params[-1]
             pdf = dist.pdf(self.x, loc=loc, scale=scale, *arg)
-            sse = _sum(_power(self.y - pdf, 2.0))
+            sse = sum(power(self.y - pdf, 2.0))
         return (dist_name, sse, params)

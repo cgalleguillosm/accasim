@@ -25,7 +25,7 @@ from abc import ABC, abstractclassmethod
 
 from accasim.utils.file import file_exists 
 
-class workload_writer(ABC):
+class WorkloadWriter(ABC):
     
     def __init__(self, path, overwrite=False, append=False):
         """
@@ -85,9 +85,9 @@ class workload_writer(ABC):
             self.close_file()
 
 
-class default_writer(workload_writer):
+class DefaultWriter(WorkloadWriter):
     """
-    Implementation of the workload_writer class targeted at writing workload files in SWF format
+    Implementation of the WorkloadWriter class targeted at writing workload files in SWF format
     """
 
     # A list of attributes used to identify and form SWF job entries
@@ -125,7 +125,7 @@ class default_writer(workload_writer):
         :param overwrite: If True, any existing files with the same name will be overwritten
         :param append: If True, the new workload will be appended to a file with the same name, if it exists
         """
-        workload_writer.__init__(self, path, overwrite, append)
+        WorkloadWriter.__init__(self, path, overwrite, append)
         self.max_time = max_time
         
     def process_dictionary(self, job_dict):

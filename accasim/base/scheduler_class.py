@@ -29,11 +29,11 @@ from abc import abstractmethod, ABC
 from sortedcontainers.sortedlist import SortedListWithKey
 from enum import Enum
 
-from accasim.base.resource_manager_class import resource_manager as resource_manager_class 
-from accasim.base.allocator_class import allocator_base
+from accasim.base.resource_manager_class import ResourceManager 
+from accasim.base.allocator_class import AllocatorBase
 from accasim.utils.misc import CONSTANT
 
-class DispatcherException(Exception):
+class DispatcherError(Exception):
     pass
     
 class JobVerification(Enum):
@@ -47,9 +47,9 @@ class SchedulerBase(ABC):
     
     """
     
-        This class allows to implement dispatching methods by integrating with an implementation of this class an allocator (:class:`accasim.base.allocator_class.allocator_base`). 
+        This class allows to implement dispatching methods by integrating with an implementation of this class an allocator (:class:`accasim.base.allocator_class.AllocatorBase`). 
         An implementation of this class could also serve as a entire dispatching method if the allocation class is not used as default (:class:`.allocator` = None), but the resource manager must
-        be set on the allocator using :func:`accasim.base.allocator_class.allocator_base.set_resource_manager`.
+        be set on the allocator using :func:`accasim.base.allocator_class.AllocatorBase.set_resource_manager`.
         
     """
     MAXSIZE = maxsize
@@ -78,7 +78,7 @@ class SchedulerBase(ABC):
         self._nodes_capacity = None
         
         if allocator:
-            assert isinstance(allocator, allocator_base), 'Allocator not valid for scheduler'
+            assert isinstance(allocator, AllocatorBase), 'Allocator not valid for scheduler'
             self.allocator = allocator
         self.set_resource_manager(resource_manager)
         
@@ -134,7 +134,7 @@ class SchedulerBase(ABC):
         if resource_manager:
             if self.allocator:
                 self.allocator.set_resource_manager(resource_manager)
-            assert isinstance(resource_manager, resource_manager_class), 'Resource Manager not valid for scheduler'
+            assert isinstance(resource_manager, ResourceManager), 'Resource Manager not valid for scheduler'
             self.resource_manager = resource_manager
         else:
             self.resource_manager = None
@@ -236,7 +236,7 @@ class SchedulerBase(ABC):
                         return True
             
             return False
-        raise DispatcherException('Invalid option.')    
+        raise DispatcherError('Invalid option.')    
     
     def __str__(self):
         return self.get_id()
@@ -283,16 +283,16 @@ class SimpleHeuristic(SchedulerBase):
         to_schedule = SortedListWithKey(jobs, **self.sorting_parameters)
         return to_schedule, to_reject
 
-class fifo_sched(SimpleHeuristic):
+class FirstInFirstOut(SimpleHeuristic):
     """
 
-    **FIFO scheduling policy.** 
+    **FirstInFirstOut scheduling policy.** 
     
-    The first come, first served (commonly called FIFO ‒ first in, first out) 
+    The first come, first served (commonly called FirstInFirstOut ‒ first in, first out) 
     process scheduling algorithm is the simplest process scheduling algorithm. 
         
     """
-    name = 'FIFO'
+    name = 'FirstInFirstOut'
     """ Name of the Scheduler policy. """
     
     sorting_arguments = {
@@ -303,12 +303,12 @@ class fifo_sched(SimpleHeuristic):
     def __init__(self, _allocator, _resource_manager=None, _seed=0, **kwargs):
         """
         
-        FIFO Constructor
+        FirstInFirstOut Constructor
         
         """
         SimpleHeuristic.__init__(self, _seed, _resource_manager, _allocator, self.name, self.sorting_arguments, **kwargs)
         
-class ljf_sched(SimpleHeuristic):
+class LongestJobFirst(SimpleHeuristic):
     """
     
     **LJF scheduling policy.**
@@ -332,7 +332,7 @@ class ljf_sched(SimpleHeuristic):
         """
         SimpleHeuristic.__init__(self, _seed, _resource_manager, _allocator, self.name, self.sorting_arguments, **kwargs)
         
-class sjf_sched(SimpleHeuristic):
+class ShortestJobFirst(SimpleHeuristic):
     """
     
     **SJF scheduling policy.**
@@ -356,7 +356,7 @@ class sjf_sched(SimpleHeuristic):
         """
         SimpleHeuristic.__init__(self, _seed, _resource_manager, _allocator, self.name, self.sorting_arguments, **kwargs)
 
-class easybf_sched(SchedulerBase):
+class EASYBackfilling(SchedulerBase):
     """
     
     EASY Backfilling scheduler. 
@@ -452,7 +452,7 @@ class easybf_sched(SchedulerBase):
         # This var stores the info for allocated jobs
         # If there is no blocked job, we execute the first part of the schedule, same as in the simple scheduler
         if not self.blocked_resources:     
-            self.logger.trace('{}: there is not a blocked job. The algorithms performs FIFO Scheduling'.format(cur_time))       
+            self.logger.trace('{}: there is not a blocked job. The algorithms performs FirstInFirstOut Scheduling'.format(cur_time))       
             _tmp_jobs_allocated, _id_jobs_nallocated = self._job_allocation(cur_time, queued_jobs, es_dict)
             _jobs_allocated += [_j[0] for _j in _tmp_jobs_allocated]
             _ready_dispatch += [_j[1] for _j in _tmp_jobs_allocated]
