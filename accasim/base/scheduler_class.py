@@ -53,8 +53,9 @@ class SchedulerBase(ABC):
         
     """
     MAXSIZE = maxsize
+    ALLOW_MAPPING_SAME_NODE = True
     
-    def __init__(self, _seed, resource_manager, allocator=None, job_check=JobVerification.NO_CHECK):
+    def __init__(self, _seed, resource_manager, allocator=None, job_check=JobVerification.CHECK_REQUEST, **kwargs):
         """
         
         Construct a scheduler
@@ -62,6 +63,11 @@ class SchedulerBase(ABC):
         :param seed: Seed for the random state
         :param resource_manager: A Resource Manager object for dealing with system resources.
         :param allocator: Allocator object to be used by the scheduler to allocater after schedule generation. If an allocator isn't defined, the scheduler class must generate the entire dispatching plan.
+        :param job_check: A job may be rejected if it doesnt comply with:
+                    - JobVerification.REJECT: Any job is rejected
+                    - JobVerification.NO_CHECK: All jobs are accepted
+                    - JobVerification.CHECK_TOTAL: If the job requires more resources than the available in the system.
+                    - JobVerification.CHECK_REQUEST: if an individual request by node requests more resources than the available one.
                  
         """
         seed(_seed)
@@ -75,7 +81,8 @@ class SchedulerBase(ABC):
         self.set_resource_manager(resource_manager)
         self.internal_ref = {}
         self._job_check = job_check
-        self._min_required_availability = None  # ['core', 'mem']
+        self._min_required_availability = kwargs.pop('min_resources', None)  # ['core', 'mem']
+        
         
     @property
     def name(self):
@@ -137,7 +144,7 @@ class SchedulerBase(ABC):
         :param es_dict: dictionary with full data of the events
         :param es: events to be scheduled
         
-        :return: a tuple of (time to schedule, event id, list of assigned nodes)
+        :return: a tuple of (time to schedule, event id, list of assigned nodes), array of rejected job ids.
         
         """
         assert(self.resource_manager is not None), 'The resource manager is not defined. It must defined prior to run the simulation.'
@@ -161,29 +168,30 @@ class SchedulerBase(ABC):
         for e in es:
             job = es_dict[e]
             if not self._check_job_request(job):
-                logging.trace('{} has been rejected by the dispatcher. (Verification policy)'.format(e))
+                logging.critical('{} has been rejected by the dispatcher. (Verification policy)'.format(e))
                 rejected.append(e)
                 continue
             accepted.append(job)
         to_schedule, to_reject = self.scheduling_method(cur_time, accepted, es_dict)
         rejected += to_reject
         for e in to_reject:
-            logging.trace('{} has been rejected by the dispatcher. (Scheduling policy)'.format(e))         
+            logging.critical('{} has been rejected by the dispatcher. (Scheduling policy)'.format(e))         
         
         if self.allocator:
             dispatching_plan = self.allocator.allocate(to_schedule, cur_time)
         else:
             dispatching_plan = to_schedule
+            
         return dispatching_plan, rejected
     
-    def _check_job_request(self, job):
+    def _check_job_request(self, _job):
         """
 
-        Simple method that checks if the loaded job violates the system's resource constraints.
+        Simple method that checks if the loaded _job violates the system's resource constraints.
 
-        :param job: Job object
+        :param _job: Job object
 
-        :return: True if the job is valid, false otherwise
+        :return: True if the _job is valid, false otherwise
 
         """
         if self._job_check == JobVerification.REJECT:
@@ -191,24 +199,34 @@ class SchedulerBase(ABC):
         elif self._job_check == JobVerification.NO_CHECK:
             return True
         elif self._job_check == JobVerification.CHECK_TOTAL:
-            # Improve and implement the next option        
-            resGroups = self.resource_manager.groups_available_resource()
-            res_total = self.resource_manager.get_total_resources()
-            print(resGroups)
-            print(res_total)
-            validGroups = 0
-            for group in resGroups.values():
-                valid = True
-                for k, res in job.requested_resources.items():
-                    print(k, res)
-                    if group[k] < res:
-                        valid = False
-                        break
-                if valid:
-                    validGroups += 1
-            return validGroups > 0
+            # We verify that the _job does not violate the system's resource constraints by comparing the total
+            for t in requested_resources.keys():
+                if _job.requested_resources[t] * _job.requested_nodes > self._base_availability[t]:
+                    return False                    
         elif self._job_check == JobVerification.CHECK_REQUEST:
-            pass
+            _nodes_cap = self.resource_manager.system_capacity('nodes')
+            # We verify the _job request can be fitted in the system        
+            _requested_resources = _job.requested_resources
+            _requested_nodes = _job.requested_nodes
+            _fits = 0
+            _diff_node = 0 
+            for _node, _attrs in _nodes_cap.items():
+                # How many time a request fits on the node
+                _nfits = min([_attrs[_attr] // req for _attr, req in _requested_resources.items() if req > 0 ])
+                
+                # Update current number of times the current job fits in the nodes
+                if _nfits > 0:
+                    _fits += _nfits
+                    _diff_node += 1
+                    
+                if self.ALLOW_MAPPING_SAME_NODE:
+                    # Since _fits >> _diff_node this logical comparison is omitted.
+                    if _fits >= _requested_nodes: 
+                        return True
+                else:
+                    if _diff_node >= _requested_nodes:
+                        return True
+            return False
         raise DispatcherException('Invalid option.')    
     
     def __str__(self):
@@ -378,8 +396,8 @@ class easybf_sched(SchedulerBase):
         This function must map the queued events to available nodes at the current time.
         
         :param cur_time: current time
-        :param es_dict: dictionary with full data of the events
         :param queued_jobs: events to be scheduled
+        :param es_dict: dictionary with full data of the events
         
         :return: a tuple of (time to schedule, event id, list of assigned nodes)  
 

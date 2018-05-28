@@ -33,6 +33,8 @@ class resources_class:
     """
     ON = 1
     OFF = 0
+    SYSTEM_CAPACITY_TOTAL = None
+    SYSTEM_CAPACITY_NODES = None
     
     def __init__(self, groups, resources, **kwargs):
         """
@@ -45,14 +47,19 @@ class resources_class:
             - used_prefix: This will set the prefix of the used resources. Internal use
         
         """
-        self.definition = [{'nodes': q, 'resources':groups[k]} for k, q in resources.items() ]
+        self.definition = ({'nodes': q, 'resources':groups[k]} for k, q in resources.items())
         self.constants = CONSTANT()
         self.groups = {}
         self.resources = {}
         self.resources_status = {}
         self.system_resource_types = []
-        self.system_total_resources = None
         self.node_prefix = kwargs['node_prefix'] if 'node_prefix' in kwargs else 'node_' 
+        
+        # @TODO
+        # Separate available and used resources dictionary in:
+        #    - Used in a normal dictionary
+        #    - Available in a frozen dictionary (capacity of the system)
+        
         self.available_prefix = kwargs['available_prefix'] if 'available_prefix' in kwargs else 'a_'
         self.used_prefix = kwargs['used_prefix'] if 'available_prefix' in kwargs else 'u_'
 
@@ -88,14 +95,11 @@ class resources_class:
         :return: A dictionary with the resources and its values.
             
         """
-        if self.system_total_resources:
-            return self.system_total_resources
-        avl_types = {_type: 0 for _type in self.system_resource_types}
-        for _node, _node_values in self.resources.items():
-            for _type in avl_types.keys():
-                avl_types[_type] += _node_values[self.available_resource_key(_type)]
-        self.system_total_resources = FrozenDict(**avl_types)
-        return avl_types
+        #=======================================================================
+        # @TODO
+        # To be replaced by syste_capacity method 
+        #=======================================================================
+        return self.system_capacity()
 
     def define_group(self, name, group):
         """
@@ -107,7 +111,7 @@ class resources_class:
         
         """
         assert(isinstance(group, dict))
-        assert(name not in self.groups), ('Repreated name group: %s. Select another one.' % (name))
+        assert(name not in self.groups), 'Repreated name group: {}. Select another one.'.format(name)
         self.groups[name] = group
 
     def allocate(self, node_name, **kwargs):
@@ -119,14 +123,13 @@ class resources_class:
         :param \*\*kwargs: Dictionary of the system resources and its values to be used. 
         
         """
-        # TODO: Update using self.system_resource_types
         assert(self.resources), 'The resources must be setted before jobs allocation'
         assert(self.resources_status[node_name] == self.ON), 'The Node {} is {}, it is impossible to allocate any job'
         _resources = self.resources[node_name]
         _done = []
         for k, v in kwargs.items():
-            avl_key = '{}{}'.format(self.available_prefix, k)
-            used_key = '{}{}'.format(self.used_prefix, k)
+            avl_key = self.available_resource_key(k)
+            used_key = self.used_resource_key(k)
             _rem_attr = _resources[avl_key] - _resources[used_key]
             try:
                 assert(v <= _rem_attr), 'The event requested {} {}, but there are only {} available.'.format(v, k, _rem_attr)
@@ -149,12 +152,11 @@ class resources_class:
         :param \*\*kwargs: Dictionary of the system resources and its values to be released. 
         
         """
-        # TODO: Update using self.system_resource_types
         assert(self.resources), 'The resources must be setted before release resources'
         assert(self.resources_status[node_name] == self.ON), 'The Node {} is {}.'
         _resources = self.resources[node_name]
         for k, v in kwargs.items():
-            _key = '{}{}'.format(self.used_prefix, k)
+            _key = self.used_resource_key(k)
             _resources[_key] -= v
             assert(_resources[_key] >= 0), 'The event was request to release {} {}, but there is only {} available. It is impossible less than 0 resources'.format(v, k, _resources['%s%s' % (self.used_prefix, k)])
         self.update_full(node_name)
@@ -173,7 +175,7 @@ class resources_class:
             if self.resources_status[node] == self.OFF:
                 continue 
             _a[node] = {
-                attr: (attrs['{}{}'.format(self.available_prefix, attr)] - attrs['{}{}'.format(self.used_prefix, attr)]) for attr in self.system_resource_types
+                attr: (attrs[self.available_resource_key(attr)] - attrs[self.used_resource_key(attr)]) for attr in self.system_resource_types
             }
         return _a
 
@@ -185,7 +187,6 @@ class resources_class:
         :return: Return a string of the system usage 
         
         """
-        # TODO: Update using self.system_resource_types
         _str = "System usage: "
         _str_usage = []
         usage = {k: 0 for k in list(self.resources.values())[0]}
@@ -194,28 +195,41 @@ class resources_class:
                 usage[k] += v
         if not type:
             for _attr in self.system_resource_types:
-                if usage['{}{}'.format(self.available_prefix, _attr)] > 0:
-                    _str_usage.append("{}: {:.2%}".format(_attr, usage['{}{}'.format(self.used_prefix, _attr)] / usage['{}{}'.format(self.available_prefix, _attr)]))
-
+                if usage[self.available_resource_key(_attr)] > 0:
+                    _str_usage.append("{}: {:.2%}".format(_attr, usage[self.used_resource_key(_attr)] / usage[self.available_resource_key(_attr)]))
             return (_str + ', '.join(_str_usage))
         elif type == 'dict':
-            return {_attr: usage['{}{}'.format(self.used_prefix, _attr)] / usage['{}{}'.format(self.available_prefix, _attr)] * 100 if usage['{}{}'.format(self.available_prefix, _attr)] > 0 else 0 for _attr in self.system_resource_types}
+            return {_attr: usage[self.used_resource_key(_attr)] / usage[self.available_resource_key(_attr)] * 100 if usage[self.available_resource_key(_attr)] > 0 else 0 for _attr in self.system_resource_types}
         else:
             raise NotImplementedError()
 
-    def system_capacity(self):
+    def system_capacity(self, type='total'):
         """
         
-        :return: Return total system capacity 
+        :param type: 
+            'total' to return the total per resource type
+            'nodes' to return the capacity of nodes
+                        
+        
+        :return: Return system capacity 
         
         """
-        _capacity = {
-            r: {'total':
-                sum([attrs[self.available_prefix + r] for _, attrs in self.resources.items()]) 
-            } 
-            for r in self.system_resource_types
-        }
-        return _capacity
+        if type == 'total':
+            if not self.SYSTEM_CAPACITY_TOTAL:
+                self.SYSTEM_CAPACITY_TOTAL = FrozenDict(**{
+                    r: sum([attrs[self.available_resource_key(r)] for _, attrs in self.resources.items()]) 
+                    for r in self.system_resource_types
+                })
+            return self.SYSTEM_CAPACITY_TOTAL
+        elif type == 'nodes':
+            if not self.SYSTEM_CAPACITY_NODES:
+                self.SYSTEM_CAPACITY_NODES = FrozenDict(**{ 
+                    node: { 
+                        attr: attrs[self.available_resource_key(attr) ] for attr in self.system_resource_types
+                    } for node, attrs in self.resources.items()
+                })
+            return self.SYSTEM_CAPACITY_NODES
+        raise ResourceException('System Capacity: \'{}\' type not defined'.format(type))
     
     def resource_manager(self):
         """
@@ -240,13 +254,26 @@ class resources_class:
         assert(_key in self.system_resource_types), '{} is not a resource type'.format(_key)
         return '{}{}'.format(self.available_prefix, _key)        
 
+    def used_resource_key(self, _key):
+        """
+        
+        Generate the resource key names
+        
+        :param _key: Name of the resource
+            
+        :return: Return the Resource key name. 
+        
+        """
+        assert(_key in self.system_resource_types), '{} is not a resource type'.format(_key)
+        return '{}{}'.format(self.used_prefix, _key)        
+
+
     def __str__(self):
         _str = "Resources:\n"
         for node, attrs in self.resources.items():
             formatted_attrs = ""
-            # for attr in set([attr.split('_')[1] for attr in attrs]):
             for attr in self.system_resource_types:
-               formatted_attrs += '{}: {}/{}, '.format(attr, attrs['{}{}'.format(self.used_prefix, attr)], attrs['{}{}'.format(self.available_prefix, attr)])
+               formatted_attrs += '{}: {}/{}, '.format(attr, attrs[self.used_resource_key(attr)], attrs[self.available_resource_key(attr)])
             _str += '- {}: {}\n'.format(node, formatted_attrs)
         return _str
     
@@ -258,7 +285,7 @@ class resources_class:
             if self.resources_status[node] == self.OFF:
                 continue
             for attr in _system_resource_types:
-                if (attrs['{}{}'.format(self.available_prefix, attr)] - attrs['{}{}'.format(self.used_prefix, attr)]) > 0:
+                if (attrs[self.available_resource_key(attr)] - attrs[self.used_resource_key(attr)]) > 0:
                     _system_resource_types.remove(attr)
             if not _system_resource_types:
                 break
@@ -406,3 +433,18 @@ class resource_manager:
             return _group
         _group_key = self.resources.available_resource_key(_key)
         return {_group:_v[_group_key]  for _group, _v in self.resources.groups.items()} 
+    
+    def system_capacity(self, type):
+        """        
+        :param type: 
+            'total' to return the total per resource type
+            'nodes' to return the capacity of nodes            
+        
+        :return: Return system capacity 
+        """
+
+        return self.resources.system_capacity(type)
+
+class ResourceException(Exception):
+    pass
+    

@@ -614,8 +614,8 @@ class hpc_simulator(simulator_base):
         disp_method_ = 'Dispathing method: {}\n'.format(self.dispatcher)
         total_jobs_ = 'Total jobs: {}\n'.format(self.loaded_jobs)
         makespan_ = 'Makespan: {}\n'.format(self.mapper.last_run_time - self.mapper.first_time_dispatch if self.mapper.last_run_time and self.mapper.first_time_dispatch else 'NA')
-        avg_wtimes_ = 'Avg. waiting times: {}\n'.format(reduce(lambda x, y: x + y, wtimes) / float(len(wtimes)) if wtimes else 'NA')
-        avg_slowdown_ = 'Avg. slowdown: {}\n'.format(reduce(lambda x, y: x + y, slds) / float(len(slds)) if slds else 'NA')
+        avg_wtimes_ = 'Avg. waiting times: {:.2f}\n'.format(reduce(lambda x, y: x + y, wtimes) / float(len(wtimes)) if wtimes else 'NA')
+        avg_slowdown_ = 'Avg. slowdown: {:.2f}\n'.format(reduce(lambda x, y: x + y, slds) / float(len(slds)) if slds else 'NA')
         if show:
             self.logger.info('\t ' + sim_time_[:-1])
             self.logger.info('\t ' + disp_method_[:-1])

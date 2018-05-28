@@ -59,6 +59,10 @@ class allocator_base(ABC):
         self._sorted_keys = []
         self.set_resource_manager(resource_manager)
         self.logger = None
+        # The list of resource types that are necessary for job execution. Used to determine wether a node can be used
+        # for allocation or not
+        self.nec_res_types = ['core', 'mem']
+
 
     @abstractmethod
     def get_id(self):
@@ -124,7 +128,7 @@ class allocator_base(ABC):
         """
         raise NotImplementedError
     
-    def allocate(self, es, cur_time, skip=False, reserved_time=None, reserved_nodes=None, debug=False):
+    def allocate(self, es, cur_time, skip=False, reserved_time=None, reserved_nodes=None):
         """
     
         This is the method that is called by the Scheduler to allocate the scheduled jobs. First, It verifies the data consistency and availability, 
@@ -146,10 +150,12 @@ class allocator_base(ABC):
             self.logger = logging.getLogger(self.constants.LOGGER_NAME)
 
         self.logger.debug('{}: {} queued jobs to be considered in the dispatching plan'.format(cur_time, len(es) if isinstance(es, (list, tuple, SortedList)) else 1))
-        
+
         # Update current available resources
         self.set_resources(self.resource_manager.availability())
-        return self.allocating_method(es, cur_time, skip, reserved_time, reserved_nodes)
+        dispatching_decision = self.allocating_method(es, cur_time, skip=skip, reserved_time=reserved_time, reserved_nodes=reserved_nodes)
+        
+        return dispatching_decision 
     
     def set_resource_manager(self, _resource_manager):
         """
@@ -199,9 +205,6 @@ class ff_alloc(allocator_base):
     
         """
         allocator_base.__init__(self, seed, resource_manager)
-        # The list of resource types that are necessary for job execution. Used to determine wether a node can be used
-        # for allocation or not
-        self.nec_res_types = ['core', 'mem']
         if self.resource_manager:
             self._base_availability = self.resource_manager.get_total_resources()
 
@@ -269,9 +272,6 @@ class ff_alloc(allocator_base):
         for e in es:
             requested_nodes = e.requested_nodes
             requested_resources = e.requested_resources
-            # We verify that the job does not violate the system's resource constraints
-            for t in requested_resources.keys():
-                assert requested_resources[t] * requested_nodes <= self._base_availability[t], 'There are %i %s total resources in the system, requested %i by job %s' % (self._base_availability[t], t, requested_resources[t] * requested_nodes, e.id)
 
             # If the input arguments relative to backfilling are not supplied, the method operates in regular mode.
             # Otherwise, backfilling mode is enabled, allowing the allocator to skip jobs and consider the reservation.
@@ -330,7 +330,8 @@ class ff_alloc(allocator_base):
                     # if jobs cannot be skipped, at the first allocation fail all subsequent jobs fail too
                     for ev in es[(success_counter + 1):]:
                         allocation.append((None, ev.id, []))
-                    self.logger.trace('Cannot skip jobs, %s additional pending allocations failed' % (len(es) - success_counter - 1))
+                    self.logger.trace('Cannot skip jobs, {} additional pending allocations failed {}'.format(len(es) - success_counter - 1, es[success_counter:]))
+                    self.logger.trace('')
                     break
         self.logger.trace('{}/{} successful allocations of events'.format(success_counter, len(es)))
         return allocation if listAsInput else allocation[0]
@@ -354,7 +355,7 @@ class ff_alloc(allocator_base):
         else:
             if not isinstance(reserved_time, (list, tuple)):
                 if cur_time + e.expected_duration > reserved_time:
-                    self.logger.trace('Backfill: Event %s is overlapping with reservation at time %s in backfilling mode' % (e.id, reserved_time))
+                    self.logger.trace('Backfill: Event {} is overlapping with reservation at time {} in backfilling mode'.format(e.id, reserved_time))
                     return reserved_nodes
                 else:
                     return []
@@ -362,7 +363,7 @@ class ff_alloc(allocator_base):
                 overlap_list = []
                 for ind, evtime in enumerate(reserved_time):
                     if cur_time + e.expected_duration > evtime:
-                        self.logger.trace('Backfill: Event %s is overlapping with reservation at time %s in backfilling mode' % (e.id, evtime))
+                        self.logger.trace('Backfill: Event {} is overlapping with reservation at time {} in backfilling mode'.format(e.id, evtime))
                         overlap_list += reserved_nodes[ind]
                 return list(set(overlap_list))
 

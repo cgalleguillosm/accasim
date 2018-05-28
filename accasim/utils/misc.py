@@ -930,7 +930,7 @@ class sorted_list:
 class FrozenDict(Mapping):
     """
 
-    Inmutable dictionary useful for storing parameter that are dinamycally loaded
+    Inmutable dictionary useful for storing parameters that are dinamycally loaded
 
     """
 
