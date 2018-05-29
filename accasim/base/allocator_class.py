@@ -152,7 +152,7 @@ class AllocatorBase(ABC):
         self.logger.debug('{}: {} queued jobs to be considered in the dispatching plan'.format(cur_time, len(es) if isinstance(es, (list, tuple, SortedList)) else 1))
 
         # Update current available resources
-        self.set_resources(self.resource_manager.availability())
+        self.set_resources(self.resource_manager.current_availability())
         dispatching_decision = self.allocating_method(es, cur_time, skip=skip, reserved_time=reserved_time, reserved_nodes=reserved_nodes)
         
         return dispatching_decision 
@@ -421,7 +421,7 @@ class FirstFit(AllocatorBase):
 
     def _set_aux_resources(self):
         # Generate an aux structure to speedup the allocation process
-        resource_types = self.resource_manager.resources.system_resource_types        
+        resource_types = self.resource_manager.system_resource_types()        
         self.aux_resources = {}
         for res_type in resource_types:
             if not (res_type in self.aux_resources):

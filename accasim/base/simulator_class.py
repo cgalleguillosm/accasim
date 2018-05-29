@@ -163,7 +163,7 @@ class SimulatorBase(ABC):
         :return: True if attributes are supported, False otherwise.
 
         """
-        _system_resources = self.resource_manager.resources.system_resource_types
+        _system_resources = self.resource_manager.system_resource_types()
         for _res in _system_resources:
             if not (_res in attrs_names):
                 print('Resource \'{}\' is not included in the Job dict.'.format(_res))

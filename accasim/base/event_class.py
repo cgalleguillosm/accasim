@@ -176,7 +176,7 @@ class JobFactory:
 
         """
         self.group_resources = self.resource_manager.groups_available_resource()
-        self.system_resources = self.resource_manager.resources.system_resource_types
+        self.system_resources = self.resource_manager.system_resource_types()
 
     def set_resource_manager(self, resource_manager):
         if resource_manager:
@@ -562,7 +562,7 @@ class EventMapper:
         :return: Return the availability of the system.
 
         """
-        return self.resource_manager.availability()
+        return self.resource_manager.current_availability()
 
     def usage(self):
         """
@@ -572,7 +572,7 @@ class EventMapper:
         :return: Return the usage of the system
 
         """
-        return self.resource_manager.resources.usage()
+        return self.resource_manager.current_usage()
 
     def simulated_current_time(self):
         """

@@ -248,8 +248,8 @@ class DefaultReader(Reader):
         else:
             self.parser = DefaultWorkloadParser()
             if not tweak_function:
-                resources = self.job_factory.resource_manager.resources
-                self.tweak_function = DefaultTweaker(start_time, equivalence, resources)
+                _resources = self.job_factory.resource_manager.system_resources()
+                self.tweak_function = DefaultTweaker(start_time, equivalence, _resources)
 
         if tweak_function:
             assert(isinstance(tweak_function, Tweaker)), 'The tweak_function argument must be an implementation of the :class:`.Tweaker`'

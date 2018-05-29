@@ -673,6 +673,9 @@ class FrozenDict(Mapping):
                 self._hash ^= hash(pair)
         return self._hash
     
+    def __str__(self):
+        return str(self._d)
+    
 class SystemStatus:
     """
     

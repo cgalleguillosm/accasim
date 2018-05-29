@@ -158,7 +158,7 @@ class SchedulerBase(ABC):
         self._counter += 1
         self.logger.debug("{} Dispatching: #{} decision".format(cur_time, self._counter))
         self.logger.debug('{} Dispatching: {} queued jobs'.format(cur_time, len(es)))
-        self.logger.debug('{} Dispatching: {}'.format(cur_time, self.resource_manager.resources.usage()))
+        self.logger.debug('{} Dispatching: {}'.format(cur_time, self.resource_manager.current_usage()))
 
         rejected = []
         
@@ -415,7 +415,7 @@ class EASYBackfilling(SchedulerBase):
         if not self.allocator_rm_set:
             self.nonauto_allocator.set_resource_manager(self.resource_manager)
                     
-        avl_resources = self.resource_manager.availability()
+        avl_resources = self.resource_manager.current_availability()
         self.nonauto_allocator.set_resources(avl_resources)
 
         reserved_time = self.reserved_slot[0]
@@ -528,7 +528,7 @@ class EASYBackfilling(SchedulerBase):
         :return: a tuple of time of the slot and nodes
 
         """
-        virtual_resources = self.resource_manager.availability()
+        virtual_resources = self.resource_manager.current_availability()
         
         self.logger.trace('Job {}: requested nodes {} x resources {}'.format(e.id, e.requested_nodes, e.requested_resources))
         self.logger.trace('Running: {}'.format(len(future_endings)))
