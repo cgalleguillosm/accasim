@@ -171,8 +171,8 @@ class SchedulerBase(ABC):
         
         for e in es:
             job = es_dict[e]
-            if not self._check_job_request(job):
-                logging.critical('{} has been rejected by the dispatcher. (Verification policy)'.format(e))
+            if not job.get_checked() and not self._check_job_request(job):
+                logging.critical('{} has been rejected by the dispatcher. ({})'.format(e, self._job_check))
                 rejected.append(e)
                 continue
             accepted.append(job)
@@ -198,6 +198,7 @@ class SchedulerBase(ABC):
         :return: True if the _job is valid, false otherwise
 
         """
+        _job.set_checked(True)
         if self._job_check == JobVerification.REJECT:
             return False
         

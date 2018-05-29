@@ -75,6 +75,7 @@ class Event(ABC):
         self.end_time = None
         self.duration = duration
         self.end_order = 0
+        self._checked = False
 
     def subattr(self, obj, attrs):
         """
@@ -105,6 +106,12 @@ class Event(ABC):
         except AttributeError as e:
             return 'NA'
         
+    def set_checked(self, state):
+        self._checked = state
+
+    def get_checked(self):
+        return self._checked
+
     def __str__(self):
         return str(self.id)
 
