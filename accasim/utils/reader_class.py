@@ -23,7 +23,7 @@ SOFTWARE.
 """
 
 from abc import abstractmethod, ABC
-from re import compile as _compile
+from re import compile
 
 from accasim.utils.misc import CONSTANT, DEFAULT_SWF_PARSE_CONFIG, obj_assertion
 from accasim.base.resource_manager_class import Resources
@@ -60,14 +60,15 @@ class DefaultWorkloadParser(WorkloadParserBase):
                 won't be readed by the parser. 
         """
         self.reg_exp_dict, self.avoid_tokens = DEFAULT_SWF_PARSE_CONFIG
+        self._compile_job_regexp()
+        self._compile_infeasible_regexp()
         
     def feasible_line(self, line):
         """
             :param line: Line to be checked
             :return: True if it can be parse (it does not match to any avoid token), False otherwise.
         """
-        for _token in self.avoid_tokens:
-            p = _compile(_token)
+        for p in self._compiled_infeasible_regexp:
             if p.fullmatch(line):
                 return False
         return True        
@@ -82,11 +83,7 @@ class DefaultWorkloadParser(WorkloadParserBase):
         """
         if not self.feasible_line(line):
             return None
-        reg_exp = r''
-        for _key, _reg_exp in self.reg_exp_dict.items():
-            reg_exp += _reg_exp[0].format(_key)
-        p = _compile(reg_exp)
-        _matches = p.match(line)
+        _matches = self._compiled_job_regexp.match(line)
         if not _matches:
             return None
         _dict = {k:self.reg_exp_dict[k][1](v) for k, v in _matches.groupdict().items()}
@@ -104,6 +101,17 @@ class DefaultWorkloadParser(WorkloadParserBase):
         else:
             return None 
         return _dict
+
+    def _compile_job_regexp(self):
+        reg_exp = r''
+        for _key, _reg_exp in self.reg_exp_dict.items():
+            reg_exp += _reg_exp[0].format(_key)
+        self._compiled_job_regexp = compile(reg_exp)
+        
+    def _compile_infeasible_regexp(self):
+        self._compiled_infeasible_regexp = []
+        for _token in self.avoid_tokens:
+            self._compiled_infeasible_regexp.append(compile(_token))
 
 class Reader(ABC):
     """
