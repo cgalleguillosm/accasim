@@ -58,7 +58,7 @@ class AllocatorBase(ABC):
         self._avl_resources = []
         self._sorted_keys = []
         self.set_resource_manager(resource_manager)
-        self.logger = None
+        self._logger = logging.getLogger('accasim')
         # The list of resource types that are necessary for job execution. Used to determine wether a node can be used
         # for allocation or not
         self.nec_res_types = ['core', 'mem']
@@ -146,10 +146,8 @@ class AllocatorBase(ABC):
 
         """
         assert(self.resource_manager is not None), 'The resource manager is not defined. It must defined prior to run the simulation.'
-        if not self.logger:
-            self.logger = logging.getLogger(self.constants.LOGGER_NAME)
 
-        self.logger.debug('{}: {} queued jobs to be considered in the dispatching plan'.format(cur_time, len(es) if isinstance(es, (list, tuple, SortedList)) else 1))
+        self._logger.debug('{}: {} queued jobs to be considered in the dispatching plan'.format(cur_time, len(es) if isinstance(es, (list, tuple, SortedList)) else 1))
 
         # Update current available resources
         self.set_resources(self.resource_manager.current_availability())
@@ -319,21 +317,21 @@ class FirstFit(AllocatorBase):
                 self._update_resources(assigned_nodes, requested_resources)
                 self._sorted_keys = self._adjust_resources(self._sorted_keys)
                 success_counter += 1
-                self.logger.trace('Allocation successful for event %s' % (e.id))
+                self._logger.trace('Allocation successful for event {}'.format(e.id))
             # If no correct allocation could be found, two scenarios are possible: 1) normally, the allocator stops
             # here and returns the jobs allocated so far 2) if the skip parameter is enabled, the job is just
             # skipped, and we proceed with the remaining ones.
             else:
-                self.logger.trace('Allocation failed for event %s with %s nodes left' % (e.id, nodes_left))
+                self._logger.trace('Allocation failed for event {} with {} nodes left'.format(e.id, nodes_left))
                 allocation.append((None, e.id, []))
                 if not skip:
                     # if jobs cannot be skipped, at the first allocation fail all subsequent jobs fail too
                     for ev in es[(success_counter + 1):]:
                         allocation.append((None, ev.id, []))
-                    self.logger.trace('Cannot skip jobs, {} additional pending allocations failed {}'.format(len(es) - success_counter - 1, es[success_counter:]))
-                    self.logger.trace('')
+                    self._logger.trace('Cannot skip jobs, {} additional pending allocations failed {}'.format(len(es) - success_counter - 1, es[success_counter:]))
+                    self._logger.trace('')
                     break
-        self.logger.trace('{}/{} successful allocations of events'.format(success_counter, len(es)))
+        self._logger.trace('{}/{} successful allocations of events'.format(success_counter, len(es)))
         return allocation if listAsInput else allocation[0]
 
     def _compute_reservation_overlaps(self, e, cur_time, reserved_time, reserved_nodes):
@@ -355,7 +353,7 @@ class FirstFit(AllocatorBase):
         else:
             if not isinstance(reserved_time, (list, tuple)):
                 if cur_time + e.expected_duration > reserved_time:
-                    self.logger.trace('Backfill: Event {} is overlapping with reservation at time {} in backfilling mode'.format(e.id, reserved_time))
+                    self._logger.trace('Backfill: Event {} is overlapping with reservation at time {} in backfilling mode'.format(e.id, reserved_time))
                     return reserved_nodes
                 else:
                     return []
@@ -363,7 +361,7 @@ class FirstFit(AllocatorBase):
                 overlap_list = []
                 for ind, evtime in enumerate(reserved_time):
                     if cur_time + e.expected_duration > evtime:
-                        self.logger.trace('Backfill: Event {} is overlapping with reservation at time {} in backfilling mode'.format(e.id, evtime))
+                        self._logger.trace('Backfill: Event {} is overlapping with reservation at time {} in backfilling mode'.format(e.id, evtime))
                         overlap_list += reserved_nodes[ind]
                 return list(set(overlap_list))
 

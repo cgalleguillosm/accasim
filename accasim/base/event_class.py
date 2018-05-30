@@ -147,6 +147,7 @@ class JobFactory:
         self.optional_attrs = {}
         self.job_mapper = job_mapper
         self.checked = False
+        self._logger = logging.getLogger('accasim')
 
         for attr in job_attrs:
             _attr_name = attr.name
@@ -167,11 +168,11 @@ class JobFactory:
         _req_resources = job_attrs['requested_resources']
         missing_res = {r for r in self.system_resources if r not in _req_resources.keys()}
         if missing_res:
-            logging.info('Some resources has not been included in the parser, assigning 0 to the {} resources in the job request.'.format(missing_res))
+            self._logger.info('Some resources has not been included in the parser, assigning 0 to the {} resources in the job request.'.format(missing_res))
             required = {'core', 'mem'}
             inter = missing_res & required
             if inter and len(inter) != len(required):
-                logging.error('Some mandatory attributes are missing: {}. The simulation will stop.'.format(inter))
+                self._logger.error('Some mandatory attributes are missing: {}. The simulation will stop.'.format(inter))
                 exit()
             self.missing_resources = missing_res
         self.checked = True
@@ -293,7 +294,7 @@ class EventMapper:
         self.running = []
         self.finished = 0
         
-        self.logger = logging.getLogger(self.constants.LOGGER_NAME)
+        self._logger = logging.getLogger('accasim')
         
         self._writers = []
         if self.constants.SCHEDULING_OUTPUT:
@@ -414,7 +415,7 @@ class EventMapper:
         # Try to allocate
         done, msg = self.resource_manager.allocate_event(_job, _nodes)
         if not done:
-            logging.error('{} Must be postponed. Reason: {}. If you see this message many times, probably you have to check your allocation heuristic.'.format(_id, msg))
+            self._logger.error('{} Must be postponed. Reason: {}. If you see this message many times, probably you have to check your allocation heuristic.'.format(_id, msg))
             self.submit_event(_id)
             return (0, 0, 1)
 
@@ -430,7 +431,7 @@ class EventMapper:
                 writer.start()
 
         if _job.duration == 0:
-            self.logger.trace('{}: {} Dispatched and Finished at the same moment. Job Lenght 0'.format(self.current_time, id))
+            self._logger.trace('{}: {} Dispatched and Finished at the same moment. Job Lenght 0'.format(self.current_time, id))
             self.finish_event(_job)
             return (0, 1, 0)
 
@@ -467,11 +468,11 @@ class EventMapper:
         if len(self.time_points) > 0:
             self.current_time = self.time_points.pop(0)
         else:
-            self.logger.trace('No more time points... but there still jobs in the queue')
+            self._logger.trace('No more time points... but there still jobs in the queue')
             self.current_time += 1
         submitted = self.loaded.pop(self.current_time, [])
         new_queue = self.queued + submitted
-        self.logger.trace('{} Next events: \n-Recently submited: {}\n-Already queued: {}'.format(self.current_time, submitted, self.queued))
+        self._logger.trace('{} Next events: \n-Recently submited: {}\n-Already queued: {}'.format(self.current_time, submitted, self.queued))
         self.queued.clear()
 
         return new_queue

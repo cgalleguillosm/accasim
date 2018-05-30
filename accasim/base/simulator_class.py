@@ -69,7 +69,7 @@ class SimulatorBase(ABC):
         self._log_level = kwargs.pop('LOG_LEVEL', self.LOG_LEVEL_INFO)
         self.define_default_constants(config_file, **kwargs)
 
-        self.define_logger()
+        self._logger = self.define_logger()
         self.real_init_time = datetime.now()
         
         assert (isinstance(_reader, Reader))
@@ -101,6 +101,7 @@ class SimulatorBase(ABC):
         logger.setLevel(getattr(logging, self._log_level))
         
         self.constants.load_constant('LOGGER_NAME', logger_name)
+        return logger
          
     def _define_trace_logger(self):
         level = logging.TRACE = logging.DEBUG - 5
@@ -253,22 +254,22 @@ class SimulatorBase(ABC):
         Shows the current simulator config
 
         """
-        logger = logging.getLogger(self.constants.LOGGER_NAME)
-        logger.info('Initializing the simulator')
-        logger.info('Settings: ')
-        logger.info('\tSystem Configuration file: {}'.format(self.constants.SYS_CONFIG_FILEPATH))
-        logger.info('\tWorkload file: {}'.format(self.constants.WORKLOAD_FILEPATH))
-        logger.info('\tResults folder: {}{}.'.format(self.constants.RESULTS_FOLDER_PATH,
+        # self._logger = logging.getLogger(self.constants.LOGGER_NAME)
+        self._logger.info('Initializing the simulator')
+        self._logger.info('Settings: ')
+        self._logger.info('\tSystem Configuration file: {}'.format(self.constants.SYS_CONFIG_FILEPATH))
+        self._logger.info('\tWorkload file: {}'.format(self.constants.WORKLOAD_FILEPATH))
+        self._logger.info('\tResults folder: {}{}.'.format(self.constants.RESULTS_FOLDER_PATH,
                                                ', Overwrite previous files' if self.constants.OVERWRITE_PREVIOUS else ''))
-        logger.info('\t\t ({}) Dispatching Plan Output. Prefix: {}'.format(self.on_off(self.constants.SCHEDULING_OUTPUT),
+        self._logger.info('\t\t ({}) Dispatching Plan Output. Prefix: {}'.format(self.on_off(self.constants.SCHEDULING_OUTPUT),
                                                                      self.constants.SCHED_PREFIX))
-        logger.info('\t\t ({}) Statistics Output. Prefix: {}'.format(self.on_off(self.constants.STATISTICS_OUTPUT),
+        self._logger.info('\t\t ({}) Statistics Output. Prefix: {}'.format(self.on_off(self.constants.STATISTICS_OUTPUT),
                                                                self.constants.STATISTICS_PREFIX))
-        logger.info('\t\t ({}) Dispatching Plan. Pretty Print Output. Prefix: {}'.format(
+        self._logger.info('\t\t ({}) Dispatching Plan. Pretty Print Output. Prefix: {}'.format(
             self.on_off(self.constants.PPRINT_OUTPUT), self.constants.PPRINT_PREFIX))
-        logger.info('\t\t ({}) Benchmark Output. Prefix: {}'.format(self.on_off(self.constants.BENCHMARK_OUTPUT),
+        self._logger.info('\t\t ({}) Benchmark Output. Prefix: {}'.format(self.on_off(self.constants.BENCHMARK_OUTPUT),
                                                               self.constants.BENCHMARK_PREFIX))
-        logger.info('Ready to Start')
+        self._logger.info('Ready to Start')
 
     def on_off(self, state):
         """
@@ -407,7 +408,7 @@ class HPCSimulator(SimulatorBase):
         self.loaded_jobs = 0
         self.dispatched_jobs = 0
         self.rejected_jobs = 0
-        self.logger = logging.getLogger(self.constants.LOGGER_NAME)
+        # self._logger = logging.getLogger(self.constants.LOGGER_NAME)
 
     def monitor_datasource(self, _stop):
         """
@@ -490,7 +491,7 @@ class HPCSimulator(SimulatorBase):
         self.start_simulation_time = clock()
         self.constants.load_constant('start_simulation_time', self.start_simulation_time)
 
-        self.logger.info('Starting the simulation process.')
+        self._logger.info('Starting the simulation process.')
         self.load_events(self.mapper.current_time, event_dict, self.mapper, self.max_sample)
         events = self.mapper.next_events()
 
@@ -554,7 +555,7 @@ class HPCSimulator(SimulatorBase):
                 'Loaded {} != dispatched + rejected {} jobs'.format(self.loaded_jobs, self.dispatched_jobs + self.rejected_jobs)
 
         self.statics_write_out(self.constants.SHOW_STATISTICS, self.constants.STATISTICS_OUTPUT)
-        self.logger.info('Simulation process completed.')
+        self._logger.info('Simulation process completed.')
         self.mapper.current_time = None
         
 
@@ -597,12 +598,12 @@ class HPCSimulator(SimulatorBase):
         avg_wtimes_ = 'Avg. waiting times: {:.2f}\n'.format(reduce(lambda x, y: x + y, wtimes) / float(len(wtimes)) if wtimes else 'NA')
         avg_slowdown_ = 'Avg. slowdown: {:.2f}\n'.format(reduce(lambda x, y: x + y, slds) / float(len(slds)) if slds else 'NA')
         if show:
-            self.logger.info('\t ' + sim_time_[:-1])
-            self.logger.info('\t ' + disp_method_[:-1])
-            self.logger.info('\t ' + total_jobs_[:-1])
-            self.logger.info('\t ' + makespan_[:-1])
-            self.logger.info('\t ' + avg_wtimes_[:-1])
-            self.logger.info('\t ' + avg_slowdown_[:-1])
+            self._logger.info('\t ' + sim_time_[:-1])
+            self._logger.info('\t ' + disp_method_[:-1])
+            self._logger.info('\t ' + total_jobs_[:-1])
+            self._logger.info('\t ' + makespan_[:-1])
+            self._logger.info('\t ' + avg_wtimes_[:-1])
+            self._logger.info('\t ' + avg_slowdown_[:-1])
             
         if save:
             _filepath = path.join(self.constants.RESULTS_FOLDER_PATH,

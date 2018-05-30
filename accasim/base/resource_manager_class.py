@@ -249,6 +249,7 @@ class ResourceManager:
         assert(isinstance(_resource, Resources)), ('Only {} class is acepted for resources'.format(Resources.__name__))
         self._resources = _resource
         self.running_jobs = {}
+        self._logger = logging.getLogger('accasim')
 
     def allocate_event(self, event, node_names):
         """
@@ -260,7 +261,7 @@ class ResourceManager:
         
         :return: Tuple: First element True if the event was allocated, False otherwise. Second element a message. 
         """
-        logging.trace('Allocating {} in nodes {}'.format(event.id, ', '.join([node for node in node_names])))
+        self._logger.trace('Allocating {} in nodes {}'.format(event.id, ', '.join([node for node in node_names])))
         _requested_res = event.requested_resources
         _attrs = _requested_res.keys()
         
@@ -280,7 +281,7 @@ class ResourceManager:
             if done:
                 _rollback.append((node_name, values))
             else:
-                logging.trace('Rollback for {}: {}'.format(event.id, _rollback + [(node_name, values)]))
+                self._logger.trace('Rollback for {}: {}'.format(event.id, _rollback + [(node_name, values)]))
                 _allocated = False
                 break
         

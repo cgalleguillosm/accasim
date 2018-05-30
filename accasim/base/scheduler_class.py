@@ -73,7 +73,7 @@ class SchedulerBase(ABC):
         self._counter = 0
         self.constants = CONSTANT()
         self.allocator = None
-        self.logger = None
+        self._logger = logging.getLogger('accasim')
         self._system_capacity = None
         self._nodes_capacity = None
         
@@ -152,19 +152,17 @@ class SchedulerBase(ABC):
         
         """
         assert(self.resource_manager is not None), 'The resource manager is not defined. It must defined prior to run the simulation.'
-        if not self.logger:
-            self.logger = logging.getLogger(self.constants.LOGGER_NAME)
 
         self._counter += 1
-        self.logger.debug("{} Dispatching: #{} decision".format(cur_time, self._counter))
-        self.logger.debug('{} Dispatching: {} queued jobs'.format(cur_time, len(es)))
-        self.logger.debug('{} Dispatching: {}'.format(cur_time, self.resource_manager.current_usage()))
+        self._logger.debug("{} Dispatching: #{} decision".format(cur_time, self._counter))
+        self._logger.debug('{} Dispatching: {} queued jobs'.format(cur_time, len(es)))
+        self._logger.debug('{} Dispatching: {}'.format(cur_time, self.resource_manager.current_usage()))
 
         rejected = []
         
         # At least a job need 1 core and 1 kb/mb/gb of mem to run
         if self._min_required_availability and any([self.resource_manager.resources.full[res] for res in self._min_required_availability]):
-            self.logger.debug("There is no availability of one of the min required resource to run a job. The dispatching process will be delayed until there is enough resources.")
+            self._logger.debug("There is no availability of one of the min required resource to run a job. The dispatching process will be delayed until there is enough resources.")
             return [(None, e, []) for e in es], rejected
 
         accepted = []
@@ -172,14 +170,14 @@ class SchedulerBase(ABC):
         for e in es:
             job = es_dict[e]
             if not job.get_checked() and not self._check_job_request(job):
-                logging.critical('{} has been rejected by the dispatcher. ({})'.format(e, self._job_check))
+                self._logger.critical('{} has been rejected by the dispatcher. ({})'.format(e, self._job_check))
                 rejected.append(e)
                 continue
             accepted.append(job)
         to_schedule, to_reject = self.scheduling_method(cur_time, accepted, es_dict)
         rejected += to_reject
         for e in to_reject:
-            logging.critical('{} has been rejected by the dispatcher. (Scheduling policy)'.format(e))         
+            self._logger.critical('{} has been rejected by the dispatcher. (Scheduling policy)'.format(e))         
         
         if self.allocator:
             dispatching_plan = self.allocator.allocate(to_schedule, cur_time)
@@ -428,11 +426,11 @@ class EASYBackfilling(SchedulerBase):
         # if reserved_time is not None and (reserved_time == cur_time or self.blocked_resources):  
         # Continue waiting until it finishes, for a more stricted it must kill the jobs when ==
         # Continue waiting until it finishes, for a more stricted it must kill the jobs when ==
-        if (reserved_time is not None and (reserved_time == cur_time or reserved_time < cur_time and self.blocked_resources)):  
-            self.logger.trace('{}: Allocating the blocked node'.format(cur_time))
+        if (reserved_time is not None and (reserved_time == cur_time or (reserved_time < cur_time and self.blocked_resources))):  
+            self._logger.trace('{}: Allocating the blocked node'.format(cur_time))
             _e = es_dict[self.blocked_job_id]
             blocked_job_allocation = self.nonauto_allocator.allocating_method(_e, cur_time, skip=False)
-            if blocked_job_allocation[0] is not None:
+            if blocked_job_allocation[0]:
                 _jobs_allocated.append(blocked_job_allocation)
                 assigned_nodes = blocked_job_allocation[2]
                 requested_resources = _e.requested_resources
@@ -444,16 +442,16 @@ class EASYBackfilling(SchedulerBase):
                 self.blocked_resources = False
                 _removed_id = queued_jobs[0]
                 queued_jobs = queued_jobs[1:]
-                self.logger.trace('{}: Removing the blocked job ({}) from the queue list '.format(cur_time, _removed_id))
-                self.logger.trace('The resources were unblocked')
+                self._logger.trace('{}: Removing the blocked job ({}) from the queue list '.format(cur_time, _removed_id))
+                self._logger.trace('The resources were unblocked')
             else:
-                self.logger.trace('{}: Nodes {}, are not already free for the blocked node.'.format(cur_time, reserved_nodes))
+                self._logger.trace('{}: Nodes {}, are not already free for the blocked node.'.format(cur_time, reserved_nodes))
                 for _node in reserved_nodes:
-                    self.logger.trace('{}: Resources {}'.format(cur_time, avl_resources[_node]))
+                    self._logger.trace('{}: Resources {}'.format(cur_time, avl_resources[_node]))
         # This var stores the info for allocated jobs
         # If there is no blocked job, we execute the first part of the schedule, same as in the simple scheduler
         if not self.blocked_resources:     
-            self.logger.trace('{}: there is not a blocked job. The algorithms performs FirstInFirstOut Scheduling'.format(cur_time))       
+            self._logger.trace('{}: there is not a blocked job. The algorithms performs FirstInFirstOut Scheduling'.format(cur_time))       
             _tmp_jobs_allocated, _id_jobs_nallocated = self._job_allocation(cur_time, queued_jobs, es_dict)
             _jobs_allocated += [_j[0] for _j in _tmp_jobs_allocated]
             _ready_dispatch += [_j[1] for _j in _tmp_jobs_allocated]
@@ -474,15 +472,15 @@ class EASYBackfilling(SchedulerBase):
         for_backfilling = _id_jobs_nallocated[1:]
         running_events = self.resource_manager.running_jobs
         
-        self.logger.trace('{}: Blocked Job: {} Request: {} x {}'.format(cur_time, self.blocked_job_id, es_dict[self.blocked_job_id].requested_nodes, es_dict[self.blocked_job_id].requested_resources))
-        self.logger.trace('{}: Jobs Allocated: {} Available to Fill the GAP {}'.format(cur_time, _jobs_allocated, for_backfilling))
+        self._logger.trace('{}: Blocked Job: {} Request: {} x {}'.format(cur_time, self.blocked_job_id, es_dict[self.blocked_job_id].requested_nodes, es_dict[self.blocked_job_id].requested_resources))
+        self._logger.trace('{}: Jobs Allocated: {} Available to Fill the GAP {}'.format(cur_time, _jobs_allocated, for_backfilling))
 
 
         # If no reservation was already made for the blocked job, we make one
         if not reserved_time:
             # All running events are computed, and the earliest slot in which the blocked job fits is computed.
-            self.logger.trace("{}: Reserved time {}".format(cur_time, reserved_time))
-            self.logger.trace("{}: Running events {}".format(cur_time, running_events))
+            self._logger.trace("{}: Reserved time {}".format(cur_time, reserved_time))
+            self._logger.trace("{}: Running events {}".format(cur_time, running_events))
             revents = [(job_id, es_dict[job_id].start_time + es_dict[job_id].expected_duration, assigns) for job_id, assigns in running_events.items()]
             future_endings = revents + _ready_dispatch
             # Sorting by soonest finishing
@@ -495,7 +493,7 @@ class EASYBackfilling(SchedulerBase):
         assert(self.reserved_slot[0]), 'There is no reserved time!'
         # Backfilling the schedule
         # running_events is a dict with the job id as key. Its value corresponds to the assignation {node: {resource: value}}
-        self.logger.trace('{}: Blocked node {} until {}'.format(cur_time, self.blocked_job_id, self.reserved_slot))
+        self._logger.trace('{}: Blocked node {} until {}'.format(cur_time, self.blocked_job_id, self.reserved_slot))
         
         _jobs_allocated = [(None, self.blocked_job_id, []) ] + _jobs_allocated
         
@@ -503,7 +501,7 @@ class EASYBackfilling(SchedulerBase):
             # If there are not jobs for backfilling return the allocated job plus the blocked one
             return _jobs_allocated, to_reject  
         
-        self.logger.trace('{}: To fill: {}'.format(cur_time, for_backfilling))
+        self._logger.trace('{}: To fill: {}'.format(cur_time, for_backfilling))
 
         # Trying to backfill the remaining jobs in the queue
         to_schedule_e_backfill = for_backfilling
@@ -531,10 +529,10 @@ class EASYBackfilling(SchedulerBase):
         """
         virtual_resources = self.resource_manager.current_availability()
         
-        self.logger.trace('Job {}: requested nodes {} x resources {}'.format(e.id, e.requested_nodes, e.requested_resources))
-        self.logger.trace('Running: {}'.format(len(future_endings)))
+        self._logger.trace('Job {}: requested nodes {} x resources {}'.format(e.id, e.requested_nodes, e.requested_resources))
+        self._logger.trace('Running: {}'.format(len(future_endings)))
         for i, fe in enumerate(future_endings):
-            self.logger.trace('{} future ending: {}'.format(i, fe))
+            self._logger.trace('{} future ending: {}'.format(i, fe))
             _time = fe[1]
             for node, used_resources in fe[2].items():
                 for attr, attr_value in used_resources.items(): 
