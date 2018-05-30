@@ -40,7 +40,7 @@ class Experiment:
     SIMULATOR_ATTRIBUTES = {'scheduling_output': True, 'pprint_output': False, 'benchmark_output': True,
                             'statistics_output': True, 'job_factory': None, 'reader': None,
                             'save_parameters': ['RESOURCE_ORDER'], 'timeout': None, 'id': None, 'skip':False, 'LOG_LEVEL': 'INFO'}
-    RUN_SIMULATOR_ATTRIBUTES = {'debug': False}
+    RUN_SIMULATOR_ATTRIBUTES = {'system_status': False}
     
     _SEPARATOR = '_'
     _RESULTS_FOLDER = 'results/{}/{}'

@@ -27,7 +27,6 @@ from inspect import stack
 from time import perf_counter as clock, sleep
 from datetime import datetime
 from abc import abstractmethod, ABC
-from threading import Thread, Event as THEvent
 from os import getpid, path
 from psutil import Process
 from _functools import reduce
@@ -424,7 +423,7 @@ class HPCSimulator(SimulatorBase):
             self.constants.running_at['running_jobs'] = {x: self.mapper.events[x] for x in self.mapper.running}
             sleep(self.constants.running_at['interval'])
 
-    def start_simulation(self, system_status=False, system_utilization=False, **kwargs):
+    def start_simulation(self, system_status=False, **kwargs):
         """
 
         Initializes the simulation
@@ -435,24 +434,10 @@ class HPCSimulator(SimulatorBase):
         :param \*\*kwargs: a 'tweak_function' to deal with the workloads.
 
         """
-        if system_utilization:
-            from accasim.utils.visualization_class import system_utilization as system_utilization_class
-            running_at = {
-                'interval': 1,
-                'current_time': self.mapper.current_time,
-                'running_jobs': {}
-            }
-            self.constants.load_constant('running_at', running_at)
-            _stop = THEvent()
-            monitor = Thread(target=self.monitor_datasource, args=[_stop])
-            monitor.daemon = True
-            self.daemons['system_utilization'] = {
-                'class': system_utilization_class,
-                'args': [(None, 'constants.running_at'), (None, 'resource_manager.resources.system_capacity',)],
-                'object': None
-            }
-            monitor.start()
-
+        #=======================================================================
+        # System status is the main entry point to get access to the current 
+        # simulation data. It is used also for the visualization component.
+        #=======================================================================
         if system_status:
             functions = {
                 'usage_function': self.mapper.usage,
@@ -464,33 +449,29 @@ class HPCSimulator(SimulatorBase):
                 'class': SystemStatus,
                 'args': [self.constants.WATCH_PORT, functions],
                 'object': None
-            }
-
+            }        
+        
+        # @TODO
+        # Add the usage_writer to the daemons array to auto-on/off process 
         if self._usage_writer:
             self._usage_writer.start()
-
-        simulation = Thread(target=self.start_hpc_simulation, kwargs=kwargs)
-        simulation.start()
-
+            
         # Starting the daemons
         self.daemon_init()
-        simulation.join()
         
+        self.start_hpc_simulation(**kwargs)
         
-        # Stopping the daemons
         [d['object'].stop() for d in self.daemons.values() if d['object']]
-        if system_utilization:
-            _stop.set()
-            
+                     
         if self._usage_writer:
             self._usage_writer.stop()
             self._usage_writer = None
-
+ 
+        # @TODO
         self.mapper.stop_writers()
-
+        
         filepaths = self._generated_filepaths()
         self._clean_simulator_constants()
-        
         return filepaths
 
     def start_hpc_simulation(self, **kwargs):
@@ -498,7 +479,7 @@ class HPCSimulator(SimulatorBase):
 
         Initializes the simulation in a new thread. It is called by the start_timulation using its arguments.
 
-        """
+        """        
         if self.timeout:
             init_sim_time = time()
             ontime = True
@@ -575,6 +556,7 @@ class HPCSimulator(SimulatorBase):
         self.statics_write_out(self.constants.SHOW_STATISTICS, self.constants.STATISTICS_OUTPUT)
         self.logger.info('Simulation process completed.')
         self.mapper.current_time = None
+        
 
     @staticmethod
     def usage_metrics_preprocessor(entry):

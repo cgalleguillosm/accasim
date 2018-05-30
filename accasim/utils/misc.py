@@ -29,6 +29,7 @@ import socket
 from threading import Thread as _Thread
 from os import path as _path, remove as _remove
 from json import dump as _dump, dumps as _dumps, load as _load, loads as _loads
+from time import perf_counter as clock
 from datetime import datetime as _datetime
 from re import compile as _compile
 from collections import Mapping
@@ -740,10 +741,10 @@ class SystemStatus:
                         response = {}
                         response['actual_time'] = str(str_datetime(self.call_inner_function('current_time_function')))
                         if data == 'progress':
-                            response['input_filepath'] = self.const.input_filepath
-                            response['progress'] = _path.getsize(self.const.sched_output_filepath) / _path.getsize(
-                                self.const.input_filepath)
-                            response['time'] = _clock() - self.const.start_time
+                            response['input_filepath'] = self.const.WORKLOAD_FILEPATH
+                            response['progress'] = _path.getsize(self.const.SCHEDULING_OUTPUT) / _path.getsize(
+                                self.const.WORKLOAD_FILEPATH)
+                            response['time'] = clock() - self.const.start_simulation_time
                         elif data == 'usage':
                             response['simulation_status'] = self.call_inner_function('simulated_status_function')
                             response['usage'] = self.call_inner_function('usage_function')
@@ -751,7 +752,7 @@ class SystemStatus:
                             response['input_filepath'] = self.const.input_filepath
                             response['progress'] = _path.getsize(self.const.sched_output_filepath) / _path.getsize(
                                 self.const.input_filepath)
-                            response['time'] = _clock() - self.const.start_time
+                            response['time'] = clock() - self.const.start_simulation_time
                             response['simulation_status'] = self.call_inner_function('simulated_status_function')
                             response['usage'] = self.call_inner_function('usage_function')
                         connection.sendall(_dumps(response).encode())
