@@ -54,7 +54,7 @@ class PlotFactory:
     EFFICIENCY_PLOT = 'efficiency'
     SCALABILITY_PLOT = 'scalability'
     SIMULATION_TIME_PLOT = 'sim_time'
-    SIMULAION_MEMORY_PLOT ='sim_memory'
+    SIMULAION_MEMORY_PLOT = 'sim_memory'
 
     PLOT_TYPES = {
         SCHEDULE_CLASS: [SLOWDOWN_PLOT, QUEUE_SIZE_PLOT, LOAD_RATIO_PLOT, EFFICIENCY_PLOT],
@@ -81,7 +81,7 @@ class PlotFactory:
             plot_class = self.SCHEDULE_CLASS
         self._plot_class = plot_class
 
-        self._sim_params_fname = sim_params_fname #if sim_params_fname is not None and isfile(sim_params_fname) else None
+        self._sim_params_fname = sim_params_fname  # if sim_params_fname is not None and isfile(sim_params_fname) else None
         self._config = config
         self._resource = resource
         self._workload_parser = workload_parser
@@ -189,7 +189,7 @@ class PlotFactory:
 
         return self._preprocessed
 
-    def produce_plot(self, type, title='', scale='linear', xlim=(None,None), ylim=(None,None), legend=True, figsize=(7,5), meansonly=False, alpha=0.005, smooth=30, output='Output.pdf', groups = 1, **kwargs):
+    def produce_plot(self, type, title='', scale='linear', xlim=(None, None), ylim=(None, None), legend=True, figsize=(7, 5), meansonly=False, alpha=0.005, smooth=30, output='Output.pdf', groups=1, **kwargs):
         """
         Produces a single plot on the pre-processed files.
         
@@ -246,7 +246,7 @@ class PlotFactory:
         :return: True if successful, False otherwise;
         """
         if self._debug:
-            print("- Pre-processing file "+filepath+"...")
+            print("- Pre-processing file " + filepath + "...")
         # Tries to read from the file, aborts if an error is encountered
         try:
             f = open(filepath)
@@ -291,7 +291,7 @@ class PlotFactory:
         for i in range(bins):
             mappinglist.append([])
         step = (maxqueuesize) / (bins - 1)
-        for qsize,stime in schedtimes:
+        for qsize, stime in schedtimes:
             index = int(floor(qsize / step))
             mappinglist[index].append(stime)
         finallist = []
@@ -581,11 +581,15 @@ class PlotFactory:
         try:
             config = load_config(config_path)
             equiv = config.pop('equivalence', {})
-            resources = Resources(**config, node_prefix='')
+            # PEP 448 - Additional Unpacking Generalizations 
+            # python 3.5 and newer 
+            if not(node_prefix in config):
+                config[node_prefix] = ''
+            resources = Resources(**config)
             return resources, equiv
         except Exception as e:
             if config_path != '':
-                print("Could not load system config: "+str(e))
+                print("Could not load system config: " + str(e))
             else:
                 print("A system configuration file must be specified.")
             exit()
@@ -602,7 +606,7 @@ class PlotFactory:
         """
         _assignations_list = assignations_str.split(str_resources.SEPARATOR)[0:-1]
         _nodes_list = [assign.split(';')[0] for assign in _assignations_list]
-        _request = { k:int(v) for k,v in zip(_resource_order, _assignations_list[0].split(';')[1:])}
+        _request = { k:int(v) for k, v in zip(_resource_order, _assignations_list[0].split(';')[1:])}
         return _request, _nodes_list
 
     def _getResourceEfficiency(self, reqres, nodes, sys_res, resource):
@@ -686,7 +690,7 @@ class PlotFactory:
         stats['quartiles'] = np.percentile(data, range(0, 100, 25))
         return stats
 
-    def box_plot(self, data, title='', ylabel='', scale='linear', xlim=(None,None), ylim=(None,None), figsize=(7,5), meansonly=False, output='Output.pdf', groups=1):
+    def box_plot(self, data, title='', ylabel='', scale='linear', xlim=(None, None), ylim=(None, None), figsize=(7, 5), meansonly=False, output='Output.pdf', groups=1):
         """
         Produces a box-and-whiskers plot for the input data's distributions.
         
@@ -714,25 +718,25 @@ class PlotFactory:
         linecol = 'black'
         tricol = 'black'
         vertlinecol = 'gray'
-        #rectcol = 'blue'
+        # rectcol = 'blue'
 
         fig, ax = plt.subplots(figsize=figsize)
 
         c_group = 0
         c = groups
-        for i,d in enumerate(data):
+        for i, d in enumerate(data):
             rectcol = cycler[c_group]
             mydata = self._getDistributionStats(d)
             if not meansonly:
-                ax.add_patch(patches.Rectangle((ind[i], mydata.get('quartiles')[1]), width,mydata.get('quartiles')[3] - mydata.get('quartiles')[1], facecolor=rectcol, alpha=0.75))
-                ax.plot([ind[i] + width/2, ind[i] + width/2], [mydata.get('min'), mydata.get('max')], color=vertlinecol, linestyle='-', linewidth=2, zorder=1)
-                ax.scatter(ind[i] + width/2, mydata.get('max'), marker='_', s=markersize, zorder=2, color=linecol)
-                ax.scatter(ind[i] + width/2, mydata.get('min'), marker='_', s=markersize, zorder=2, color=linecol)
-                ax.scatter(ind[i] + width/2, mydata.get('median'), marker='_', s=markersize, zorder=2, color=linecol)
-                ax.scatter(ind[i] + width/2, mydata.get('avg'), marker='^', s=markersize/4, zorder=2, color=tricol)
+                ax.add_patch(patches.Rectangle((ind[i], mydata.get('quartiles')[1]), width, mydata.get('quartiles')[3] - mydata.get('quartiles')[1], facecolor=rectcol, alpha=0.75))
+                ax.plot([ind[i] + width / 2, ind[i] + width / 2], [mydata.get('min'), mydata.get('max')], color=vertlinecol, linestyle='-', linewidth=2, zorder=1)
+                ax.scatter(ind[i] + width / 2, mydata.get('max'), marker='_', s=markersize, zorder=2, color=linecol)
+                ax.scatter(ind[i] + width / 2, mydata.get('min'), marker='_', s=markersize, zorder=2, color=linecol)
+                ax.scatter(ind[i] + width / 2, mydata.get('median'), marker='_', s=markersize, zorder=2, color=linecol)
+                ax.scatter(ind[i] + width / 2, mydata.get('avg'), marker='^', s=markersize / 4, zorder=2, color=tricol)
             else:
                 # If meansonly is True, only a path is drawn for the mean values.
-                ax.add_patch(patches.Rectangle((ind[i], 0), width,mydata.get('avg'), facecolor=rectcol, alpha=0.75))
+                ax.add_patch(patches.Rectangle((ind[i], 0), width, mydata.get('avg'), facecolor=rectcol, alpha=0.75))
                 ax.scatter(ind[i] + width / 2, mydata.get('avg'), marker='_', s=markersize / 4, zorder=0, color=linecol)
             c -= 1
             if c == 0:
@@ -756,7 +760,7 @@ class PlotFactory:
         ff.savefig(fig)
         ff.close()
 
-    def box_plot_times(self, dataman, datasched, title='', scale='linear', xlim=(None,None), ylim=(None,None), figsize=(7,5), legend=True, output='Output.pdf'):
+    def box_plot_times(self, dataman, datasched, title='', scale='linear', xlim=(None, None), ylim=(None, None), figsize=(7, 5), legend=True, output='Output.pdf'):
         """
         Produces a bar plot for the timings in the simulations, across test instances.
         
@@ -792,7 +796,7 @@ class PlotFactory:
             avgman = np.average(np.array(dataman[i]))
             avgsched = np.average(np.array(datasched[i]))
             if i == 0:
-                ax.add_patch(patches.Rectangle((ind[i], 0), width, avgman, facecolor='orange', edgecolor='black', hatch='//', alpha=0.75))#, label='Simulation'))
+                ax.add_patch(patches.Rectangle((ind[i], 0), width, avgman, facecolor='orange', edgecolor='black', hatch='//', alpha=0.75))  # , label='Simulation'))
                 ax.add_patch(patches.Rectangle((ind[i], avgman), width, avgsched, facecolor='blue', edgecolor='black', hatch='\\', alpha=0.75, label='Dispatching decision'))
             else:
                 ax.add_patch(patches.Rectangle((ind[i], 0), width, avgman, facecolor='orange', edgecolor='black', hatch='//', alpha=0.75))
@@ -819,7 +823,7 @@ class PlotFactory:
         ff.savefig(fig)
         ff.close()
 
-    def box_plot_memory(self, data, title='', scale='linear', xlim=(None,None), ylim=(None,None), figsize=(7,5), legend=True, output='Output.pdf'):
+    def box_plot_memory(self, data, title='', scale='linear', xlim=(None, None), ylim=(None, None), figsize=(7, 5), legend=True, output='Output.pdf'):
         """
         Produces a bar plot for the memory usage in the simulations, across test instances.
         
@@ -850,7 +854,7 @@ class PlotFactory:
         for i in range(N):
             avgmem = np.average(np.array(data[i]))
             maxmem = np.max(np.array(data[i]))
-            if i==0:
+            if i == 0:
                 ax.add_patch(patches.Rectangle((ind[i], 0), width, avgmem, facecolor='orange', edgecolor='black', hatch='//', alpha=0.75, label='Avg. Mem'))
                 ax.add_patch(patches.Rectangle((ind[i], avgmem), width, maxmem - avgmem, facecolor='blue', edgecolor='black', hatch='\\', alpha=0.75, label='Max. Mem'))
             else:
@@ -911,7 +915,7 @@ class PlotFactory:
         divideFactor = smooth
 
         for i in range(len(xdata)):
-            markeroffset = floor(max(xdata[i])/20 + i*2)
+            markeroffset = floor(max(xdata[i]) / 20 + i * 2)
             if divideFactor > 1 and len(ydata[i]) >= divideFactor:
                 win_len = floor(len(ydata[i]) / divideFactor)
                 win_len += (win_len + 1) % 2
@@ -920,7 +924,7 @@ class PlotFactory:
                 yfiltered = savgol_filter(ydata[i], win_len, 3)
             else:
                 yfiltered = ydata[i]
-            ax.plot(xdata[i],yfiltered,label=self._labels[i], linestyle=linestyles[i % numstyles], marker=markers[i % numstyles], markevery=markeroffset, zorder=2 if markers[i % numstyles] is None else 0)
+            ax.plot(xdata[i], yfiltered, label=self._labels[i], linestyle=linestyles[i % numstyles], marker=markers[i % numstyles], markevery=markeroffset, zorder=2 if markers[i % numstyles] is None else 0)
 
         ax.set_ylabel('Time [ms]', fontsize=fontsize)
         ax.set_xlabel('Queue size', fontsize=fontsize)
@@ -940,7 +944,7 @@ class PlotFactory:
         ff.savefig(fig)
         ff.close()
 
-    def distribution_scatter_plot(self, xdata, ydata, title='', scale='linear', xlim=(0,1.05), ylim=(0,1.05), figsize=(7,5), alpha=0.005, output='Output.pdf'):
+    def distribution_scatter_plot(self, xdata, ydata, title='', scale='linear', xlim=(0, 1.05), ylim=(0, 1.05), figsize=(7, 5), alpha=0.005, output='Output.pdf'):
         """
         Creates a distribution scatter plot for the system's resource efficiency. 
         
@@ -1026,7 +1030,7 @@ class PlotFactory:
         else:
             return self._slowdowns, self._queuesizes, self._efficiencies, self._loadratiosX, self._loadratiosY
 
-if __name__=='__main__':
+if __name__ == '__main__':
     # This is an example. It should not be executed here, but in a script in the project's root, where also
     # basic_example.py is, so that all imports can be resolved correctly.
     resultpath = ['Path/to/benchmark/file',
@@ -1034,6 +1038,6 @@ if __name__=='__main__':
     resultlabel = ['Label',
                    'Label2']
     plots = PlotFactory('benchmark')
-    plots.set_files(resultpath,resultlabel)
+    plots.set_files(resultpath, resultlabel)
     plots.pre_process()
     plots.produce_plot(type='scalability', title='My Scalability Plot')
