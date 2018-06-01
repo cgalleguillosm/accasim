@@ -24,6 +24,7 @@ SOFTWARE.
 
 from collections import deque
 from threading import Thread, Semaphore
+from multiprocessing import Process
 
 
 class AsyncWriter:
@@ -31,7 +32,7 @@ class AsyncWriter:
     This class handles asynchronous IO of files, using a thread and queue-based implementation.
     """
 
-    def __init__(self, path, pre_process_fun=None):
+    def __init__(self, path, pre_process_fun=None, buffer_size=10000):
         """
         Constructor for the class
 
@@ -45,6 +46,8 @@ class AsyncWriter:
         self._thread = None
         self._deque = deque()
         self._sem = Semaphore(value=0)
+        self._buffer_size = buffer_size
+        self._buf_counter = 0
         if pre_process_fun is None:
             self._pre_processor = AsyncWriter._dummy_pre_process
         else:
@@ -57,7 +60,10 @@ class AsyncWriter:
         :param data_obj: The object to be pre-processed to string format, and written to output
         """
         self._deque.append(data_obj)
-        self._sem.release()
+        self._buf_counter += 1
+        if self._buf_counter >= self._buffer_size:
+            self._buf_counter = 0
+            self._sem.release()
 
     def start(self):
         """
@@ -75,7 +81,7 @@ class AsyncWriter:
             self._sem.release()
             self._thread.join()
             self._thread = None
-            
+
         if self._outfile is not None:
             self._outfile.close()
             self._outfile = None
@@ -85,16 +91,30 @@ class AsyncWriter:
         self._outfile = open(self._path, 'a')
         while not self._toTerminate or len(self._deque) > 0:
             self._sem.acquire()
-            if len(self._deque) > 0:
-                entry = self._deque.popleft()
-                str_out = self._pre_processor(entry)
-                if isinstance(str_out, (list, tuple)) and len(str_out) > 1:
-                    for str_el in str_out:
-                        self._outfile.write(str_el)
-                else:
-                    self._outfile.write(str_out)
+            process = Process(target=self._flush_queue)
+            process.start()
+            process.join()
+            counter_pop = 0
+            while counter_pop < self._buffer_size and len(self._deque) > 0:
+                self._deque.popleft()
+                counter_pop += 1
         self._outfile.close()
         self._outfile = None
+
+    def _flush_queue(self):
+        counter_flushed = 0
+        buffer = ''
+        while counter_flushed < self._buffer_size and len(self._deque) > 0:
+            entry = self._deque.popleft()
+            str_out = self._pre_processor(entry)
+            if isinstance(str_out, (list, tuple)) and len(str_out) > 1:
+                for str_el in str_out:
+                    buffer += str_el
+            else:
+                buffer += str_out
+            counter_flushed += 1
+        if len(buffer) > 0:
+            self._outfile.write(buffer)
 
     @staticmethod
     def _dummy_pre_process(data_obj):
