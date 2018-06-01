@@ -676,7 +676,7 @@ class FrozenDict(Mapping):
     
     def __str__(self):
         return str(self._d)
-    
+        
 class SystemStatus:
     """
     

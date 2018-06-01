@@ -90,6 +90,13 @@ class AllocatorBase(ABC):
     
         """
         raise NotImplementedError
+    
+    def get_resources(self):
+        """
+            Returns the internal reference to the dictionary of available resources in the system. 
+            It includes the last virtual allocations.
+        """
+        return self._avl_resources
 
     @abstractmethod
     def set_attr(self, **kwargs):

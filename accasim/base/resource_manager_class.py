@@ -248,7 +248,7 @@ class ResourceManager:
         """
         assert(isinstance(_resource, Resources)), ('Only {} class is acepted for resources'.format(Resources.__name__))
         self._resources = _resource
-        self.running_jobs = {}
+        self._running_jobs = {}
         self._logger = logging.getLogger('accasim')
 
     def allocate_event(self, event, node_names):
@@ -281,12 +281,12 @@ class ResourceManager:
             if done:
                 _rollback.append((node_name, values))
             else:
-                self._logger.trace('Rollback for {}: {}'.format(event.id, _rollback + [(node_name, values)]))
+                self._logger.error('Rollback for {}: {}'.format(event.id, _rollback + [(node_name, values)]))
                 _allocated = False
                 break
         
         if _allocated:
-            self.running_jobs[event.id] = _allocation
+            self._running_jobs[event.id] = _allocation
         else:
             while _rollback:
                 node_name, values = _rollback.pop()
@@ -302,7 +302,7 @@ class ResourceManager:
         :param id: Job Id 
         
         """
-        for node_name, values in self.running_jobs.pop(id).items():
+        for node_name, values in self._running_jobs.pop(id).items():
             self._resources.release(node_name, **values)
 
     def node_resources(self, *args):
@@ -392,6 +392,9 @@ class ResourceManager:
     
     def current_usage(self):
         return self._resources.usage()
+    
+    def current_allocations(self):
+        return self._running_jobs
 
 class ResourceError(Exception):
     pass  

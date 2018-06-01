@@ -30,7 +30,7 @@ from builtins import str, filter
 from inspect import signature
 from sortedcontainers import SortedSet, SortedDict
 
-from accasim.utils.misc import CONSTANT
+from accasim.utils.misc import CONSTANT, FrozenDict
 from accasim.base.resource_manager_class import ResourceManager
 from accasim.utils.async_writer import AsyncWriter
 
@@ -69,8 +69,8 @@ class Event(ABC):
         self.constants = CONSTANT()
         self.id = str(job_id)
         self.queued_time = queued_time
-        self.requested_nodes = requested_nodes
-        self.requested_resources = requested_resources
+        self.requested_nodes = requested_nodes        
+        self.requested_resources = FrozenDict(**requested_resources)
         self.start_time = None
         self.end_time = None
         self.duration = duration
@@ -113,10 +113,10 @@ class Event(ABC):
         return self._checked
 
     def __str__(self):
-        return str(self.id)
+        return 'Job_{}'.format(self.id)
 
     def __repr__(self):
-        return self.id
+        return 'Job_{}'.format(self.id)
 
 class JobFactory:
     def __init__(self, resource_manager=None, job_class=Event, job_attrs=[], job_mapper={}):
@@ -403,7 +403,7 @@ class EventMapper:
         :return: True if the allocation must be performed, false otherwise. False for jobs that have duration equal to 0
 
         """
-        id = _job.id
+        _id = _job.id
         start_time = _time + _time_diff
         
         #=======================================================================
@@ -431,12 +431,12 @@ class EventMapper:
                 writer.start()
 
         if _job.duration == 0:
-            self._logger.trace('{}: {} Dispatched and Finished at the same moment. Job Lenght 0'.format(self.current_time, id))
+            self._logger.trace('{}: {} Dispatched and Finished at the same moment. Job Lenght 0'.format(self.current_time, _id))
             self.finish_event(_job)
             return (0, 1, 0)
 
         # Move to running jobs
-        self.running.append(id)
+        self.running.append(_id)
 
         # Include real ending time int time points
         real_end_time = _job.start_time + _job.duration
@@ -445,17 +445,17 @@ class EventMapper:
         # Relate ending time with job id
         if real_end_time not in self.real_ending:
             self.real_ending[real_end_time] = []
-        self.real_ending[real_end_time].append(id)
+        self.real_ending[real_end_time].append(_id)
 
         return (1, 0, 0)    
 
-    def submit_event(self, e_id):
+    def submit_event(self, _id):
         """
 
         Internal method for Job's queueing.
 
         """
-        self.queued.append(e_id)
+        self.queued.append(_id)
 
     def next_events(self):
         """
@@ -506,7 +506,7 @@ class EventMapper:
         n_post = 0
         
         for (_time, _id, _nodes) in to_dispatch:
-            assert(isinstance(_id, str)), 'Please check your return tuple in your Dispatching method. _id must be a str type. Received wrong type: {}'.format(e.__class__)
+            assert(isinstance(_id, str)), 'Please check your return tuple in your Dispatching method. _id must be a str type. Received wrong type: {}'.format(_id.__class__)
             assert(_time is None or _time >= self.current_time), 'Receiving wrong schedules.'
 
             #===================================================================
