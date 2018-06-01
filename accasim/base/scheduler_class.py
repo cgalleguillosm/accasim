@@ -433,7 +433,6 @@ class EASYBackfilling(SchedulerBase):
             queued_jobs = queued_jobs[1:]
             
             allocation = self.nonauto_allocator.allocating_method(blocked_job, cur_time, skip=False)
-            avl_resources = self.nonauto_allocator.get_resources()
                 
             if allocation[-1]:
                 self._logger.trace('{}: {} blocked job can be allocated. Unblocking'.format(cur_time, self._blocked_job_id))
@@ -462,7 +461,6 @@ class EASYBackfilling(SchedulerBase):
                     # Current reservation (future time, reserved nodes)
                     self._reserved_slot = self._calculate_slot(cur_time, deepcopy(avl_resources), _allocated_jobs[:blocked_idx], _prev_blocked, blocked_job, es_dict)
                     
-                    self.nonauto_allocator.set_resources(avl_resources)
                     self._logger.trace('Blocked {} Job: Nodes {} are reserved at {}'.format(self._blocked_job_id, self._reserved_slot[1], self._reserved_slot[0]))
                 
                 # Include the blocked job                
