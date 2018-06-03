@@ -87,6 +87,8 @@ class SchedulerBase(ABC):
         self.set_resource_manager(resource_manager)
 
         assert(isinstance(job_check, JobVerification)), 'job_check invalid type. {}'.format(job_check.__class__)
+        if job_check == JobVerification.REJECT:
+            print('All jobs will be rejected, and for performance purposes the rejection messages will be omitted.')
         self._job_check = job_check
         
         # Check resources
@@ -174,7 +176,8 @@ class SchedulerBase(ABC):
         for e in es:
             job = es_dict[e]
             if not job.get_checked() and not self._check_job_request(job):
-                self._logger.critical('{} has been rejected by the dispatcher. ({})'.format(e, self._job_check))
+                if self._job_check != JobVerification.REJECT:
+                    self._logger.critical('{} has been rejected by the dispatcher. ({})'.format(e, self._job_check))
                 rejected.append(e)
                 continue
             accepted.append(job)

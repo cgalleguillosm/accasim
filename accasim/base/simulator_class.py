@@ -72,7 +72,6 @@ class SimulatorBase(ABC):
         self.define_default_constants(config_file, **kwargs)
 
         self._logger, self._logger_listener = self.define_logger()
-        # self._logger_listener.start()
         self.real_init_time = datetime.now()
         
         assert (isinstance(_reader, Reader))
@@ -90,7 +89,6 @@ class SimulatorBase(ABC):
         self.mapper = EventMapper(self.resource_manager)
         self.additional_data = self.additional_data_init(_additional_data)
         
-        # self.show_config()
         if self.constants.OVERWRITE_PREVIOUS:
             self.remove_previous()
 
@@ -418,7 +416,6 @@ class HPCSimulator(SimulatorBase):
         self.loaded_jobs = 0
         self.dispatched_jobs = 0
         self.rejected_jobs = 0
-        # self._logger = logging.getLogger(self.constants.LOGGER_NAME)
 
     def monitor_datasource(self, _stop):
         """
