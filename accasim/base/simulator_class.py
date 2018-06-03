@@ -99,6 +99,7 @@ class SimulatorBase(ABC):
         queue = Queue(-1)
         queue_handler = handlers.QueueHandler(queue)
         handler = logging.StreamHandler()
+        handler.setLevel(self._log_level)
         listener = handlers.QueueListener(queue, handler)
         
         logger_name = 'accasim'
@@ -523,6 +524,8 @@ class HPCSimulator(SimulatorBase):
 
             if events:
                 to_dispatch, rejected = self.dispatcher.schedule(self.mapper.current_time, event_dict, events)
+                for r in rejected:
+                    del event_dict[r]
                 dispatched_len = len(to_dispatch)
                 rejected_len = len(rejected)
                 assert(queued_len == dispatched_len + rejected_len), 'Some queued jobs ({}/{}) were not included in the dispatching decision.'\

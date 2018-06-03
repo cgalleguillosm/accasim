@@ -177,7 +177,7 @@ class SchedulerBase(ABC):
             job = es_dict[e]
             if not job.get_checked() and not self._check_job_request(job):
                 if self._job_check != JobVerification.REJECT:
-                    self._logger.critical('{} has been rejected by the dispatcher. ({})'.format(e, self._job_check))
+                    self._logger.warning('{} has been rejected by the dispatcher. ({})'.format(e, self._job_check))
                 rejected.append(e)
                 continue
             accepted.append(job)
@@ -188,7 +188,7 @@ class SchedulerBase(ABC):
             to_allocate, to_reject = self.scheduling_method(cur_time, accepted, es_dict)
             rejected += to_reject
             for e in to_reject:
-                self._logger.critical('{} has been rejected by the dispatcher. (Scheduling policy)'.format(e))         
+                self._logger.warning('{} has been rejected by the dispatcher. (Scheduling policy)'.format(e))         
         
         # If there are scheduled jobs and an allocator defined, try to allocate the scheduled jobs. 
         if to_allocate and self.allocator:
