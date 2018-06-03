@@ -31,6 +31,8 @@ from os import getpid, path
 from psutil import Process
 from _functools import reduce
 from time import time
+from queue import Queue
+from logging import handlers
 
 from accasim.utils.reader_class import DefaultReader, Reader
 from accasim.utils.misc import CONSTANT, DEFAULT_SIMULATION, DEFAULT_SWF_MAPPER, load_config, clean_results
@@ -42,6 +44,7 @@ from accasim.base.scheduler_class import SchedulerBase
 from accasim.base.event_class import JobFactory
 from accasim.base.additional_data import AdditionalData
 from accasim.utils.async_writer import AsyncWriter
+from accasim.utils.logging import QueueListener
 
 class SimulatorBase(ABC):
     
@@ -69,7 +72,8 @@ class SimulatorBase(ABC):
         self._log_level = kwargs.pop('LOG_LEVEL', self.LOG_LEVEL_INFO)
         self.define_default_constants(config_file, **kwargs)
 
-        self._logger = self.define_logger()
+        self._logger, self._logger_listener = self.define_logger()
+        self._logger_listener.start()
         self.real_init_time = datetime.now()
         
         assert (isinstance(_reader, Reader))
@@ -94,14 +98,22 @@ class SimulatorBase(ABC):
     def define_logger(self):
         self._define_trace_logger()
         FORMAT = '%(asctime)-15s %(module)s-%(levelname)s: %(message)s'
-        logging.basicConfig(format=FORMAT)
+        # logging.basicConfig(format=FORMAT)
+        
+        queue = Queue(-1)
+        queue_handler = handlers.QueueHandler(queue)
+        handler = logging.StreamHandler()
+        listener = handlers.QueueListener(queue, handler)
         
         logger_name = 'accasim'
-        logger = logging.getLogger(logger_name)        
+        logger = logging.getLogger(logger_name)    
+        logger.addHandler(queue_handler)
+        formatter = logging.Formatter(FORMAT)
+        handler.setFormatter(formatter)
         logger.setLevel(getattr(logging, self._log_level))
         
         self.constants.load_constant('LOGGER_NAME', logger_name)
-        return logger
+        return logger, listener
          
     def _define_trace_logger(self):
         level = logging.TRACE = logging.DEBUG - 5
@@ -556,6 +568,7 @@ class HPCSimulator(SimulatorBase):
 
         self.statics_write_out(self.constants.SHOW_STATISTICS, self.constants.STATISTICS_OUTPUT)
         self._logger.info('Simulation process completed.')
+        self._logger_listener.stop()
         self.mapper.current_time = None
         
 
