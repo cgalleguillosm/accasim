@@ -44,7 +44,6 @@ from accasim.base.scheduler_class import SchedulerBase
 from accasim.base.event_class import JobFactory
 from accasim.base.additional_data import AdditionalData
 from accasim.utils.async_writer import AsyncWriter
-from accasim.utils.logging import QueueListener
 
 class SimulatorBase(ABC):
     
@@ -98,7 +97,6 @@ class SimulatorBase(ABC):
     def define_logger(self):
         self._define_trace_logger()
         FORMAT = '%(asctime)-15s %(module)s-%(levelname)s: %(message)s'
-        # logging.basicConfig(format=FORMAT)
         
         queue = Queue(-1)
         queue_handler = handlers.QueueHandler(queue)
