@@ -178,15 +178,18 @@ class SchedulerBase(ABC):
                 rejected.append(e)
                 continue
             accepted.append(job)
-        to_schedule, to_reject = self.scheduling_method(cur_time, accepted, es_dict)
-        rejected += to_reject
-        for e in to_reject:
-            self._logger.critical('{} has been rejected by the dispatcher. (Scheduling policy)'.format(e))         
+            
+        to_allocate = []
+        if accepted:
+            to_allocate, to_reject = self.scheduling_method(cur_time, accepted, es_dict)
+            rejected += to_reject
+            for e in to_reject:
+                self._logger.critical('{} has been rejected by the dispatcher. (Scheduling policy)'.format(e))         
         
-        if self.allocator:
-            dispatching_plan = self.allocator.allocate(to_schedule, cur_time)
+        if to_allocate and self.allocator:
+            dispatching_plan = self.allocator.allocate(to_allocate, cur_time)
         else:
-            dispatching_plan = to_schedule
+            dispatching_plan = to_allocate
             
         return dispatching_plan, rejected
     
