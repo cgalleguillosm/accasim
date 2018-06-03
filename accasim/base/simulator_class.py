@@ -72,7 +72,7 @@ class SimulatorBase(ABC):
         self.define_default_constants(config_file, **kwargs)
 
         self._logger, self._logger_listener = self.define_logger()
-        self._logger_listener.start()
+        # self._logger_listener.start()
         self.real_init_time = datetime.now()
         
         assert (isinstance(_reader, Reader))
@@ -90,7 +90,7 @@ class SimulatorBase(ABC):
         self.mapper = EventMapper(self.resource_manager)
         self.additional_data = self.additional_data_init(_additional_data)
         
-        self.show_config()
+        # self.show_config()
         if self.constants.OVERWRITE_PREVIOUS:
             self.remove_previous()
 
@@ -333,7 +333,7 @@ class HPCSimulator(SimulatorBase):
 
     """
 
-    def __init__(self, workload, sys_config, scheduler, resource_manager=None, reader=None, job_factory=None,
+    def __init__(self, workload, sys_config, dispatcher, resource_manager=None, reader=None, job_factory=None,
                  additional_data=[], simulator_config=None, overwrite_previous=True,
                  scheduling_output=True, pprint_output=False, benchmark_output=False, statistics_output=True, save_parameters=None,
                  show_statistics=True, **kwargs):
@@ -343,7 +343,7 @@ class HPCSimulator(SimulatorBase):
 
         :param workload: Filepath to the workload, it is used by the reader. If a reader is not given, the default one is used.
         :param sys_config: Filepath to the synthetic system configuration. Used by the resource manager to create the system.
-        :param scheduler: Dispatching method
+        :param dispatcher: Dispatching method
         :param resource_manager: Optional. Instantiation of the resource_manager class.
         :param reader: Optional. Instantiation of the reader class.
         :param job_factory: Optional. Instantiation of the job_factory class.
@@ -391,12 +391,12 @@ class HPCSimulator(SimulatorBase):
                                                                                additional_data)), 'Only subclasses of additional_data class are acepted as additional_data argument '
             additional_data = [additional_data]
 
-        scheduler.set_resource_manager(resource_manager)
+        dispatcher.set_resource_manager(resource_manager)
 
         for _u in _uargs:
             kwargs.pop(_u, None)
 
-        SimulatorBase.__init__(self, resource_manager, reader, job_factory, scheduler, additional_data,
+        SimulatorBase.__init__(self, resource_manager, reader, job_factory, dispatcher, additional_data,
                                 config_file=simulator_config, **kwargs)
 
         if save_parameters:
@@ -463,13 +463,15 @@ class HPCSimulator(SimulatorBase):
             }        
         
         # @TODO
-        # Add the usage_writer to the daemons array to auto-on/off process 
+        # Add the usage_writer to the daemons array to auto-on/off process
+        self._logger_listener.start() 
         if self._usage_writer:
             self._usage_writer.start()
             
         # Starting the daemons
         self.daemon_init()
         
+        self.show_config()
         self.start_hpc_simulation(**kwargs)
         
         [d['object'].stop() for d in self.daemons.values() if d['object']]
@@ -483,6 +485,7 @@ class HPCSimulator(SimulatorBase):
         
         filepaths = self._generated_filepaths()
         self._clean_simulator_constants()
+        self._logger_listener.stop()
         return filepaths
 
     def start_hpc_simulation(self, **kwargs):
@@ -566,7 +569,6 @@ class HPCSimulator(SimulatorBase):
 
         self.statics_write_out(self.constants.SHOW_STATISTICS, self.constants.STATISTICS_OUTPUT)
         self._logger.info('Simulation process completed.')
-        self._logger_listener.stop()
         self.mapper.current_time = None
         
 
