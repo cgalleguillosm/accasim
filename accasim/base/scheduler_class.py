@@ -170,7 +170,7 @@ class SchedulerBase(ABC):
             return [(None, e, []) for e in es], rejected
 
         accepted = []
-        
+        # Verify jobs with the defined Job Policy
         for e in es:
             job = es_dict[e]
             if not job.get_checked() and not self._check_job_request(job):
@@ -180,12 +180,14 @@ class SchedulerBase(ABC):
             accepted.append(job)
             
         to_allocate = []
+        # On accepted jobs by policy, try to schedule with the scheduling policy
         if accepted:
             to_allocate, to_reject = self.scheduling_method(cur_time, accepted, es_dict)
             rejected += to_reject
             for e in to_reject:
                 self._logger.critical('{} has been rejected by the dispatcher. (Scheduling policy)'.format(e))         
         
+        # If there are scheduled jobs and an allocator defined, try to allocate the scheduled jobs. 
         if to_allocate and self.allocator:
             dispatching_plan = self.allocator.allocate(to_allocate, cur_time)
         else:
