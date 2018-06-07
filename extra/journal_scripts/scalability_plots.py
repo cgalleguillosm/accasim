@@ -8,7 +8,7 @@ if __name__ == '__main__':
     workloadName = 'bench-HPC2N-2002-2.2.1-cln.swf'
     numRuns = 10
 
-    disp_names = ['FIFO-FF', 'FIFO-BF', 'LJF-FF', 'LJF-BF', 'SJF-FF', 'SJF-FF', 'EBF-FF', 'EBF-BF']
+    disp_names = ['FIFO-FF', 'FIFO-BF', 'LJF-FF', 'LJF-BF', 'SJF-FF', 'SJF-BF', 'EBF-FF', 'EBF-BF']
 
     paths = []
     for disp in disp_names:
