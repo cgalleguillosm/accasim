@@ -60,6 +60,9 @@ class Resources:
         for group_name, group_values in groups.items():
             self._system_resource_types += filter(lambda x: x not in self._system_resource_types, list(group_values.keys()))
         
+        # Here the current usage is maintained
+        self._total_resources = {r: 0 for r in self._system_resource_types}
+        
         #=======================================================================
         # Create the corresponding group attributes and add 0 to absent attributes.
         # This is performed in case that the user doesn't assign an absent attribute in the system config.
@@ -128,11 +131,15 @@ class Resources:
             try:
                 assert(v <= _rem_res), 'The event requested {} {}, but there are only {} available.'.format(v, res, _rem_res)
                 _used_resources[res] += v
+                # Update totals
+                self._total_resources[res] += v
                 _done.append((res, v))
             except AssertionError as e:
                 while _done:
                     key, req = _done.pop()
                     _used_resources[key] -= req
+                    # Update totals
+                    self._total_resources[key] -= req
                 return False, e
         return True, 'OK'
 
@@ -150,6 +157,7 @@ class Resources:
         _resources = self._resources[node_name]
         for _res, v in kwargs.items():
             _resources[_res] -= v
+            self._total_resources[_res] -= v
             assert(_resources[_res] >= 0), 'The event was request to release {} {}, but there is only {} available. It is impossible less than 0 resources'.format(v, _res, _resources['%s%s' % (self.used_prefix, _res)])
         
     def availability(self):
@@ -180,14 +188,14 @@ class Resources:
         """
         _str = "System usage: "
         _str_usage = []
-        usage = {res: sum([node_resources[res] for node_resources in self._resources.values()]) for res in self._system_resource_types}
+        
         if not type:
             for res, value in self.SYSTEM_CAPACITY_TOTAL.items():
-                _str_usage.append("{}: {:.2%}".format(res, usage[res] / value))
+                _str_usage.append("{}: {:.2%}".format(res, self._total_resources[res] / value))
             return (_str + ', '.join(_str_usage))
         elif type == 'dict':
             return {
-                res: (usage[res] / value) * 100                
+                res: (self._total_resources[res] / value) * 100                
                 for res, value in self.SYSTEM_CAPACITY_TOTAL.items()
             }
         else:
