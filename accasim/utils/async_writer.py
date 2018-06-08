@@ -45,7 +45,7 @@ class AsyncWriter:
         self._deque = deque()
         self._sem = Semaphore(value=0)
         self._buffer_size = buffer_size
-        self._buf_counter = 0        
+        self._buf_counter = 0
         self._pre_processor_wrapper = QueueFlusher(path, pre_process_fun)
 
     def push(self, data_obj):
@@ -82,26 +82,36 @@ class AsyncWriter:
     def _working_loop(self):
         while not self._toTerminate or len(self._deque) > 0:
             self._sem.acquire()
-            process = Process(target=self._pre_processor_wrapper.flush, args=(self._deque,))
+            process = Process(target=self._pre_processor_wrapper.flush, args=(self._deque, self._buffer_size))
             process.start()
             process.join()
-            self._deque.clear()
+            counter_pop = 0
+            while counter_pop < self._buffer_size and len(self._deque) > 0:
+                self._deque.popleft()
+                counter_pop += 1
 
     @staticmethod
     def _dummy_pre_process(data_obj):
         return str(data_obj)
 
 class QueueFlusher:
-    
+
     def __init__(self, path, func=AsyncWriter._dummy_pre_process):
         self._path = path
         self._func = func
-        
-    def flush(self, data, **kwargs):
+
+    def flush(self, data, buffer_size, **kwargs):
         buffer = ''
-        
-        while data:
-            buffer += self._func(data.popleft())
-            
+        counter_flushed = 0
+        while counter_flushed < buffer_size and len(data) > 0:
+            entry = data.popleft()
+            str_out = self._func(entry)
+            if isinstance(str_out, (list, tuple)) and len(str_out) > 1:
+                for str_el in str_out:
+                    buffer += str_el
+            else:
+                buffer += str_out
+            counter_flushed += 1
+
         with open(self._path, 'a') as f:
             f.write(buffer)
