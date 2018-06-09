@@ -36,6 +36,7 @@ class Resources:
     SYSTEM_CAPACITY_TOTAL = None
     SYSTEM_CAPACITY_NODES = None
     GROUPS = None
+    NODE_LIST = []
     
     def __init__(self, groups, resources, **kwargs):
         """
@@ -51,6 +52,7 @@ class Resources:
         self.constants = CONSTANT()
         self._definition = ({'nodes': q, 'resources':groups[k]} for k, q in resources.items())
         self._resources = {}
+        self._current_capacity = {}
         self._resources_status = {}
         self._system_resource_types = []
         
@@ -91,10 +93,12 @@ class Resources:
                 _attrs_values = self.GROUPS[group_name]
                 
                 _nodes_capacity[_node_name] = deepcopy(_attrs_values)
+                self._current_capacity[_node_name] = deepcopy(_attrs_values)
                 self._resources[_node_name] = deepcopy(_node_capacity)
-                self._resources_status[_node_name] = self.ON             
+                self._resources_status[_node_name] = self.ON
+                self.NODE_LIST.append(_node_name)   
                 j += 1
-                              
+
         self.SYSTEM_CAPACITY_NODES = FrozenDict(**_nodes_capacity)
         self.SYSTEM_CAPACITY_TOTAL = FrozenDict(**_system_capacity)
 
@@ -133,6 +137,7 @@ class Resources:
                 _used_resources[res] += v
                 # Update totals
                 self._total_resources[res] += v
+                self._current_capacity[node_name][res] -= v
                 _done.append((res, v))
             except AssertionError as e:
                 while _done:
@@ -140,6 +145,7 @@ class Resources:
                     _used_resources[key] -= req
                     # Update totals
                     self._total_resources[key] -= req
+                    self._current_capacity[node_name][key] += req
                 return False, e
         return True, 'OK'
 
@@ -157,31 +163,26 @@ class Resources:
         _resources = self._resources[node_name]
         for _res, v in kwargs.items():
             _resources[_res] -= v
+            # Update totals
             self._total_resources[_res] -= v
+            self._current_capacity[node_name][_res] += v
             assert(_resources[_res] >= 0), 'The event was request to release {} {}, but there is only {} available. It is impossible less than 0 resources'.format(v, _res, _resources['%s%s' % (self.used_prefix, _res)])
         
     def availability(self):
         """
         
-        System availablity calculation
+        Returns the current system availablity. It just return nodes that are ON.
         
         :return: Return a dictionary with the system availability. In terms of {node: {resource: value}}
         
         """
-        assert(self._resources)
-        _a = {}
-        for node, node_resources in self._resources.items():
-            if self._resources_status[node] == self.OFF:
-                continue 
-            _a[node] = {
-                res: (self.SYSTEM_CAPACITY_NODES[node][res] - node_resources[res]) for res in self._system_resource_types
-            }
-        return _a
+        return {node: {k:v for k, v in self._current_capacity[node].items()} for node in self.NODE_LIST if self._resources_status[node] == self.ON}
 
     def usage(self, type=None):
         """
         
         System usage calculation
+        @todo: Use NODE_LIST instead items
         
         :return: Return a string of the system usage 
         
@@ -229,6 +230,9 @@ class Resources:
         return ResourceManager(self)
 
     def __str__(self):
+        """
+        @todo: Use NODE_LIST instead items
+        """
         _str = "Resources:\n"
         for node, attrs in self._resources.items():
             formatted_attrs = ""
@@ -340,19 +344,20 @@ class ResourceManager:
         """
         return self._resources._system_resource_types
 
-    def get_nodes(self):
+    def get_node_names(self):
         """
         
         :return: Return node names
         
         """
-        return list(self._resources._resources.keys())
+        return self._resources.NODE_LIST
     
     def get_total_resources(self, *args):
         """
         
         Return the total system resource for the required argument. The resource has to exist in the system. 
         If no arguments is proportioned all resources are returned.
+        @todo: Use NODE_LIST instead items
         
         :param \*args: Depends on the system configuration. But at least it must have ('core', 'mem') resources.
             
@@ -372,6 +377,7 @@ class ResourceManager:
         """
         
         :param _key: None for values of all types for all groups. Giving a specific key will return the resource for the specific type
+        :todo: Use NODE_LIST instead items
         
         :return: Dictionary of {group{type: value}}   
         

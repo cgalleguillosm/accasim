@@ -425,6 +425,9 @@ class FirstFit(AllocatorBase):
         return self._trim_nodes(sorted_keys)
 
     def _set_aux_resources(self):
+        """
+        @todo: Check how to improve
+        """
         # Generate an aux structure to speedup the allocation process
         resource_types = self.resource_manager.system_resource_types()        
         self.aux_resources = {}
