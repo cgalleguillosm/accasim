@@ -59,7 +59,7 @@ class SchedulerBase(ABC):
     MAXSIZE = maxsize
     ALLOW_MAPPING_SAME_NODE = True
     
-    def __init__(self, _seed, resource_manager, allocator=None, job_check=JobVerification.NO_CHECK, **kwargs):
+    def __init__(self, _seed, resource_manager, allocator=None, job_check=JobVerification.CHECK_REQUEST, **kwargs):
         """
         
         Construct a scheduler
