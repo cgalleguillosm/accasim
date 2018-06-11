@@ -470,7 +470,11 @@ class HPCSimulator(SimulatorBase):
         self.daemon_init()
         
         self.show_config()
-        self.start_hpc_simulation(**kwargs)
+        try:
+            self.start_hpc_simulation(**kwargs)
+        except Exception as e:
+            sleep(1)
+            print('The simulation will be stopped. Reason: {}'.format(e))
         
         [d['object'].stop() for d in self.daemons.values() if d['object']]
                      
@@ -648,11 +652,12 @@ class HPCSimulator(SimulatorBase):
         :param time_samples: Default 2. It load the next two time steps.
 
         """
-        nt_points, ps_jobs = self.reader.next(current_time, time_points=time_samples)
+        next_tpoints, parsed_jobs = self.reader.next(current_time, time_points=time_samples)
         tmp_dict = {}
         job_list = []
-        for nt_point, jobs in ps_jobs.items():
-            for job in jobs:
+
+        for next_tpoint in next_tpoints:
+            for job in parsed_jobs[next_tpoint]:
                 self.loaded_jobs += 1
                 tmp_dict[job.id] = job
                 job_list.append(job)
