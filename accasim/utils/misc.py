@@ -43,26 +43,26 @@ _SWF_INT_PATTERN = ('\s*(?P<{}>[-+]?\d+)', int)
 _SWF_FLOAT_PATTERN = ('\s*(?P<{}>[-+]?\d+\.\d+|[-+]?\d+)', float)
 _SWF_AVOID_REGEXPS = [r'^;.*']
 DEFAULT_SWF_PARSE_CONFIG = (
-    {
-        'job_number': _SWF_INT_PATTERN,
-        'queued_time': _SWF_INT_PATTERN,
-        'wait_time': _SWF_INT_PATTERN,
-        'duration': _SWF_INT_PATTERN,
-        'allocated_processors': _SWF_INT_PATTERN,
-        'avg_cpu_time': _SWF_FLOAT_PATTERN,
-        'used_memory': _SWF_INT_PATTERN,
-        'requested_number_processors': _SWF_INT_PATTERN,
-        'requested_time': _SWF_INT_PATTERN,
-        'requested_memory': _SWF_INT_PATTERN,
-        'status': _SWF_INT_PATTERN,
-        'user_id': _SWF_INT_PATTERN,
-        'group_id': _SWF_INT_PATTERN,
-        'executable_number': _SWF_INT_PATTERN,
-        'queue_number': _SWF_INT_PATTERN,
-        'partition_number': _SWF_INT_PATTERN,
-        'preceding_job_number': _SWF_INT_PATTERN,
-        'think_time_prejob': _SWF_INT_PATTERN
-    }, _SWF_AVOID_REGEXPS)
+    (
+        ('job_number', _SWF_INT_PATTERN),
+        ('queued_time', _SWF_INT_PATTERN),
+        ('wait_time', _SWF_INT_PATTERN),
+        ('duration', _SWF_INT_PATTERN),
+        ('allocated_processors', _SWF_INT_PATTERN),
+        ('avg_cpu_time', _SWF_FLOAT_PATTERN),
+        ('used_memory', _SWF_INT_PATTERN),
+        ('requested_number_processors', _SWF_INT_PATTERN),
+        ('requested_time', _SWF_INT_PATTERN),
+        ('requested_memory', _SWF_INT_PATTERN),
+        ('status', _SWF_INT_PATTERN),
+        ('user_id', _SWF_INT_PATTERN),
+        ('group_id', _SWF_INT_PATTERN),
+        ('executable_number', _SWF_INT_PATTERN),
+        ('queue_number', _SWF_INT_PATTERN),
+        ('partition_number', _SWF_INT_PATTERN),
+        ('preceding_job_number', _SWF_INT_PATTERN),
+        ('think_time_prejob', _SWF_INT_PATTERN)
+    ), _SWF_AVOID_REGEXPS)
 
 DEFAULT_SWF_MAPPER = {
     'job_number': 'job_id',

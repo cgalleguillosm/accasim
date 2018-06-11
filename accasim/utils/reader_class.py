@@ -59,7 +59,8 @@ class DefaultWorkloadParser(WorkloadParserBase):
             :param avoid_token: List of reg_exp to avoid reading lines. The lines that are avoided 
                 won't be readed by the parser. 
         """
-        self.reg_exp_dict, self.avoid_tokens = DEFAULT_SWF_PARSE_CONFIG
+        self.reg_exp, self.avoid_tokens = DEFAULT_SWF_PARSE_CONFIG
+        self.reg_exp_dict = {}
         self._compile_job_regexp()
         self._compile_infeasible_regexp()
         
@@ -104,7 +105,8 @@ class DefaultWorkloadParser(WorkloadParserBase):
 
     def _compile_job_regexp(self):
         reg_exp = r''
-        for _key, _reg_exp in self.reg_exp_dict.items():
+        for (_key, _reg_exp) in self.reg_exp:
+            self.reg_exp_dict[_key] = _reg_exp
             reg_exp += _reg_exp[0].format(_key)
         self._compiled_job_regexp = compile(reg_exp)
         
@@ -159,9 +161,9 @@ class Reader(ABC):
         # the next_jobs variable.
         #=======================================================================
         time_samples = time_points
-        next_points, next_jobs = self.reload_jobs(current_time, stime_name)
+        next_points, next_jobs = self._reload_jobs(current_time, stime_name)
         while self.submission_enabled and time_samples >= 0:
-            _dict = self.read(current_time)
+            _dict = self._read(current_time)
             if not _dict:
                 continue
             if self.last_time != _dict[stime_name]:
@@ -179,7 +181,7 @@ class Reader(ABC):
             
         return (next_points, next_jobs)
     
-    def reload_jobs(self, current_time, stime_name):
+    def _reload_jobs(self, current_time, stime_name):
         """
         
         Takes the already loaded jobs from a previous load process which exceeded the time steps requested.
@@ -202,7 +204,7 @@ class Reader(ABC):
         return (time_points, jobs_dict)
     
     @abstractmethod
-    def read(self, current_time):
+    def _read(self, current_time):
         """
         
         This method must return a dictionary with all the required keys for covering the job attributes. 
@@ -257,7 +259,7 @@ class DefaultReader(Reader):
             self.parser = DefaultWorkloadParser()
             if not tweak_function:
                 _resources = self.job_factory.resource_manager.system_resources()
-                self.tweak_function = DefaultTweaker(start_time, equivalence, _resources)
+                self.tweak_function = DefaultTweaker(start_time, _resources, equivalence)
 
         if tweak_function:
             assert(isinstance(tweak_function, Tweaker)), 'The tweak_function argument must be an implementation of the :class:`.Tweaker`'
@@ -294,7 +296,7 @@ class DefaultReader(Reader):
             self.EOF = False    
         return self.file
     
-    def read_next_lines(self, n_lines=1):
+    def _read_next_lines(self, n_lines=1):
         """
 
         :param n_lines:
@@ -317,13 +319,13 @@ class DefaultReader(Reader):
             return lines
         return None
     
-    def read(self, current_time=0):
+    def _read(self, current_time=0):
         """
 
         :param current_time:
         :return:
         """
-        line = self.read_next_lines()
+        line = self._read_next_lines()
         # No more lines. End of File
         if not line:
             return None
@@ -354,7 +356,7 @@ class Tweaker(ABC):
 
 class DefaultTweaker(Tweaker):
 
-    def __init__(self, start_time, equivalence, system_resources):
+    def __init__(self, start_time, system_resources, equivalence):
         """
 
         :param start_time:
@@ -362,7 +364,7 @@ class DefaultTweaker(Tweaker):
         """
         obj_assertion(system_resources, Resources)
         self.start_time = start_time
-        self.equivalence = equivalence       
+        self.equivalence = equivalence if equivalence else {'processor': {'core': 1}}       
         
     def tweak_function(self, _dict):
         """

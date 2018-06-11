@@ -851,6 +851,6 @@ class WorkloadGenerator:
         _func2 = self._update_distinct_woption('mem', 'requested_memory', '-1', 'used_memory', int)
         _func3 = self._update_name('queue_time', 'queued_time', int)
    
-        tweaker = DefaultTweaker(start_time, equivalence, resources)
+        tweaker = DefaultTweaker(start_time, resources, equivalence)
         
         return WorkloadFileReader(workload, reg_exp, tweaker, [_func1, _func2, _func3])
