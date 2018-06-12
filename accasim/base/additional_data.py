@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 from abc import abstractmethod, ABC
-from accasim.base.event_class import EventMapper
+from accasim.base.event_class import EventManager
 from builtins import int
 
 class AdditionalDataType:
@@ -54,7 +54,7 @@ class AdditionalData(ABC):
     """
 
     Additional data class enables to add new behavior to the system, by executing a custom process which can use the current state of the system to create new data
-    The current state of the system is maintained in the :class:`accasim.base.event_class.EventMapper` object.
+    The current state of the system is maintained in the :class:`accasim.base.event_class.EventManager` object.
 
     """
     
@@ -62,7 +62,7 @@ class AdditionalData(ABC):
         """
         
         Constructor. 
-        The event mapper (:class:`accasim.base.event_class.EventMapper`) must be defined at the instantiation or later, but it is mandatory for working.
+        The event mapper (:class:`accasim.base.event_class.EventManager`) must be defined at the instantiation or later, but it is mandatory for working.
         
         :param event_manager: Event manager object.
         
@@ -116,12 +116,12 @@ class AdditionalData(ABC):
 
         Set the system event manager
             
-        :param event_manager: An instantiation of a :class:`accasim.base.event_class.EventMapper` class or None
+        :param event_manager: An instantiation of a :class:`accasim.base.event_class.EventManager` class or None
 
         """       
         if self.event_mapper:
             return
          
         self.allocator.set_resource_manager(event_manager)
-        assert isinstance(event_manager, EventMapper), 'Event Mapper not valid for scheduler'
+        assert isinstance(event_manager, EventManager), 'Event Mapper not valid for scheduler'
         self.event_mapper = event_manager

@@ -25,7 +25,7 @@ from builtins import str
 from os.path import join
 from accasim.base.allocator_class import AllocatorBase
 from accasim.base.scheduler_class import SchedulerBase 
-from accasim.base.simulator_class import HPCSimulator
+from accasim.base.simulator_class import Simulator
 from accasim.utils.file import file_exists, dir_exists, remove_dir, find_file_by
 from accasim.utils.misc import obj_assertion, list_class_assertion
 from accasim.utils.plot_factory import PlotFactory
@@ -144,7 +144,7 @@ class Experiment:
 
         :param dispatcher: A dispatcher instantiation
         """
-        simulator = HPCSimulator(self.workload, self.sys_config, dispatcher,
+        simulator = Simulator(self.workload, self.sys_config, dispatcher,
             simulator_config=self.simulator_config, **
             self.SIMULATOR_ATTRIBUTES)
         simulator.start_simulation(**self.RUN_SIMULATOR_ATTRIBUTES)

@@ -33,17 +33,19 @@ from _functools import reduce
 from time import time
 from queue import Queue
 from logging import handlers
+from sys import version_info
 
 from accasim.utils.reader_class import DefaultReader, Reader
 from accasim.utils.misc import CONSTANT, DEFAULT_SIMULATION, DEFAULT_SWF_MAPPER, load_config, clean_results
 from accasim.utils.misc import SystemStatus
 from accasim.utils.file import path_leaf, save_jsonfile, dir_exists
-from accasim.base.event_class import EventMapper, AttributeType
+from accasim.base.event_class import EventManager, AttributeType
 from accasim.base.resource_manager_class import Resources, ResourceManager
 from accasim.base.scheduler_class import SchedulerBase
 from accasim.base.event_class import JobFactory
 from accasim.base.additional_data import AdditionalData
 from accasim.utils.async_writer import AsyncWriter
+from distutils.version import StrictVersion
 
 class SimulatorBase(ABC):
     
@@ -86,7 +88,7 @@ class SimulatorBase(ABC):
         assert (isinstance(_dispatcher, SchedulerBase))
         self.dispatcher = _dispatcher
 
-        self.mapper = EventMapper(self.resource_manager)
+        self.mapper = EventManager(self.resource_manager)
         self.additional_data = self.additional_data_init(_additional_data)
         
         if self.constants.OVERWRITE_PREVIOUS:
@@ -138,7 +140,7 @@ class SimulatorBase(ABC):
     def load_events(self):
         """
 
-        Method that loads the job from a datasource. Check the default implementation in the HPCSimulator class.
+        Method that loads the job from a datasource. Check the default implementation in the Simulator class.
 
         """
         raise NotImplementedError('Must be implemented!')
@@ -203,7 +205,9 @@ class SimulatorBase(ABC):
         """
         kwargs['WORKLOAD_FILENAME'] = path_leaf(kwargs['WORKLOAD_FILEPATH'])[1]
         if 'RESULTS_FOLDER_PATH' not in kwargs:
-            script_path, script_name = path_leaf(stack()[-1].filename)
+            # New in 3.5 
+            filename = stack()[-1].filename
+            script_path, script_name = path_leaf(filename)
             rfolder = kwargs.pop('RESULTS_FOLDER_NAME')
             kwargs['RESULTS_FOLDER_PATH'] = path.join(script_path, rfolder)
         dir_exists(kwargs['RESULTS_FOLDER_PATH'], create=True)
@@ -325,7 +329,7 @@ class SimulatorBase(ABC):
         ]
         return {f[1]:f[2] for f in possible_filepaths if f[0]}
 
-class HPCSimulator(SimulatorBase):
+class Simulator(SimulatorBase):
     """
 
     Default implementation of the SimulatorBase class.
@@ -357,7 +361,9 @@ class HPCSimulator(SimulatorBase):
         :param show_statistics: Default True. Show Statistic after finishing the simulation.
         :param \*\*kwargs: Optional parameters to be included in the Constants.
 
-        """
+        """ 
+        assert(version_info >= (3, 5,)), 'Unsupported python version. Try with 3.5 or newer.' 
+        
         kwargs['OVERWRITE_PREVIOUS'] = overwrite_previous
         kwargs['SYS_CONFIG_FILEPATH'] = sys_config
         kwargs['WORKLOAD_FILEPATH'] = workload
@@ -404,7 +410,7 @@ class HPCSimulator(SimulatorBase):
         if benchmark_output:
             self._usage_writer = AsyncWriter(path=path.join(self.constants.RESULTS_FOLDER_PATH,
                 self.constants.BENCHMARK_PREFIX + self.constants.WORKLOAD_FILENAME),
-                pre_process_fun=HPCSimulator.usage_metrics_preprocessor)
+                pre_process_fun=Simulator.usage_metrics_preprocessor)
             self._process_obj = Process(getpid())
         else:
             self._usage_writer = None

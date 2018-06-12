@@ -50,7 +50,7 @@ class Resources:
         
         """
         self.constants = CONSTANT()
-        self._definition = ({'nodes': q, 'resources':groups[k]} for k, q in resources.items())
+        self._definition = tuple([{'nodes': q, 'resources':groups[k]} for k, q in resources.items()])
         self._resources = {}
         self._current_capacity = {}
         self._resources_status = {}

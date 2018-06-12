@@ -264,7 +264,7 @@ class JobFactory:
             _times = getattr(obj, 'requested_nodes')
             setattr(obj, 'requested_resources', {_res: getattr(obj, _res) // _times for _res in self.system_resources})
 
-class EventMapper:
+class EventManager:
 
     def __init__(self, resource_manager, debug=False, **kwargs):
         """
@@ -299,12 +299,12 @@ class EventMapper:
         self._writers = []
         if self.constants.SCHEDULING_OUTPUT:
             _sched_fp = path.join(self.constants.RESULTS_FOLDER_PATH, self.constants.SCHED_PREFIX + self.constants.WORKLOAD_FILENAME)
-            self._sched_writer = AsyncWriter(path=_sched_fp, pre_process_fun=EventMapper._schd_write_preprocessor)
+            self._sched_writer = AsyncWriter(path=_sched_fp, pre_process_fun=EventManager._schd_write_preprocessor)
             self._writers.append(self._sched_writer)
         
         if self.constants.PPRINT_OUTPUT:
             _pprint_fp = path.join(self.constants.RESULTS_FOLDER_PATH, self.constants.PPRINT_PREFIX + self.constants.WORKLOAD_FILENAME)
-            self._pprint_writer = AsyncWriter(path=_pprint_fp, pre_process_fun=EventMapper._schd_pprint_preprocessor)
+            self._pprint_writer = AsyncWriter(path=_pprint_fp, pre_process_fun=EventManager._schd_pprint_preprocessor)
             self._writers.append(self._pprint_writer)
 
     def load_events(self, es):
