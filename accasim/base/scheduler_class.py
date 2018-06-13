@@ -303,7 +303,7 @@ class FirstInFirstOut(SimpleHeuristic):
     process scheduling algorithm is the simplest process scheduling algorithm. 
         
     """
-    name = 'FirstInFirstOut'
+    name = 'FIFO'
     """ Name of the Scheduler policy. """
     
     sorting_arguments = {
@@ -380,7 +380,7 @@ class EASYBackfilling(SchedulerBase):
    
    """
    
-    name = 'EASY_Backfilling'
+    name = 'EASYBF'
     """ Name of the Scheduler policy. """
        
     def __init__(self, allocator, resource_manager=None, seed=0, **kwargs):
