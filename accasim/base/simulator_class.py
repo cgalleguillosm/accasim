@@ -195,7 +195,7 @@ class SimulatorBase(ABC):
         equiv = config.pop('equivalence', {})
         start_time = config.pop('start_time', 0)
         resources = Resources(**config)
-        return resources.resource_manager(), equiv, start_time
+        return ResourceManager(resources), equiv, start_time
 
     def define_filepaths(self, **kwargs):
         """
@@ -481,6 +481,7 @@ class Simulator(SimulatorBase):
         except Exception as e:
             sleep(1)
             print('The simulation will be stopped. Reason: {}'.format(e))
+            raise e
         
         [d['object'].stop() for d in self.daemons.values() if d['object']]
                      
@@ -494,6 +495,7 @@ class Simulator(SimulatorBase):
         filepaths = self._generated_filepaths()
         self._clean_simulator_constants()
         self._logger_listener.stop()
+
         return filepaths
 
     def start_hpc_simulation(self, **kwargs):
@@ -501,7 +503,7 @@ class Simulator(SimulatorBase):
 
         Initializes the simulation in a new thread. It is called by the start_timulation using its arguments.
 
-        """        
+        """
         if self.timeout:
             init_sim_time = time()
             ontime = True

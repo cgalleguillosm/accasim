@@ -59,7 +59,7 @@ class SchedulerBase(ABC):
     MAXSIZE = maxsize
     ALLOW_MAPPING_SAME_NODE = True
     
-    def __init__(self, _seed, resource_manager, allocator=None, job_check=JobVerification.CHECK_REQUEST, **kwargs):
+    def __init__(self, _seed, allocator=None, job_check=JobVerification.CHECK_REQUEST, **kwargs):
         """
         
         Construct a scheduler
@@ -75,16 +75,17 @@ class SchedulerBase(ABC):
         """
         seed(_seed)
         self._counter = 0
-        self.constants = CONSTANT()
+        # self.constants = CONSTANT()
         self.allocator = None
         self._logger = logging.getLogger('accasim')
         self._system_capacity = None
         self._nodes_capacity = None
+        self.resource_manager = None
         
         if allocator:
             assert isinstance(allocator, AllocatorBase), 'Allocator not valid for scheduler'
             self.allocator = allocator
-        self.set_resource_manager(resource_manager)
+        # self.set_resource_manager(resource_manager)
 
         assert(isinstance(job_check, JobVerification)), 'job_check invalid type. {}'.format(job_check.__class__)
         if job_check == JobVerification.REJECT:
@@ -262,8 +263,8 @@ class SimpleHeuristic(SchedulerBase):
     
     """
 
-    def __init__(self, seed, resource_manager, allocator, name, sorting_parameters, **kwargs):
-        SchedulerBase.__init__(self, seed, resource_manager, allocator, **kwargs)
+    def __init__(self, seed, allocator, name, sorting_parameters, **kwargs):
+        SchedulerBase.__init__(self, seed, allocator, **kwargs)
         self.name = name
         self.sorting_parameters = sorting_parameters
 
@@ -311,13 +312,13 @@ class FirstInFirstOut(SimpleHeuristic):
         }
     """ This sorting function allows to sort the jobs in relation of the scheduling policy. """
 
-    def __init__(self, _allocator, _resource_manager=None, _seed=0, **kwargs):
+    def __init__(self, _allocator, _seed=0, **kwargs):
         """
         
         FirstInFirstOut Constructor
         
         """
-        SimpleHeuristic.__init__(self, _seed, _resource_manager, _allocator, self.name, self.sorting_arguments, **kwargs)
+        SimpleHeuristic.__init__(self, _seed, _allocator, self.name, self.sorting_arguments, **kwargs)
         
 class LongestJobFirst(SimpleHeuristic):
     """
@@ -341,7 +342,7 @@ class LongestJobFirst(SimpleHeuristic):
         LJF Constructor
         
         """
-        SimpleHeuristic.__init__(self, _seed, _resource_manager, _allocator, self.name, self.sorting_arguments, **kwargs)
+        SimpleHeuristic.__init__(self, _seed, _allocator, self.name, self.sorting_arguments, **kwargs)
         
 class ShortestJobFirst(SimpleHeuristic):
     """
@@ -365,7 +366,7 @@ class ShortestJobFirst(SimpleHeuristic):
         SJF Constructor
     
         """
-        SimpleHeuristic.__init__(self, _seed, _resource_manager, _allocator, self.name, self.sorting_arguments, **kwargs)
+        SimpleHeuristic.__init__(self, _seed, _allocator, self.name, self.sorting_arguments, **kwargs)
 
 class EASYBackfilling(SchedulerBase):
     """
@@ -383,21 +384,18 @@ class EASYBackfilling(SchedulerBase):
     name = 'EASYBF'
     """ Name of the Scheduler policy. """
        
-    def __init__(self, allocator, resource_manager=None, seed=0, **kwargs):
+    def __init__(self, allocator, seed=0, **kwargs):
         """
    
        Easy BackFilling Constructor
       
        """
-        SchedulerBase.__init__(self, seed, resource_manager, allocator=None, **kwargs)
+        SchedulerBase.__init__(self, seed, allocator=None, **kwargs)
         self._blocked_job_id = None
         self._reserved_slot = (None, [],)
         self.nonauto_allocator = allocator
         self.allocator_rm_set = False
-        self.nonauto_allocator.set_resource_manager(resource_manager)
-        if self.allocator_rm_set:
-            if not self.nonauto_allocator.resource_manager:
-                self.allocator_rm_set = True   
+        # self.nonauto_allocator.set_resource_manager(resource_manager)
        
     def get_id(self):
         """
@@ -421,6 +419,8 @@ class EASYBackfilling(SchedulerBase):
         """
         if not self.allocator_rm_set:
             self.nonauto_allocator.set_resource_manager(self.resource_manager)
+            self.allocator_rm_set = True   
+
                    
         avl_resources = self.resource_manager.current_availability()
         self.nonauto_allocator.set_resources(avl_resources)
@@ -439,7 +439,7 @@ class EASYBackfilling(SchedulerBase):
 
             blocked_job = queued_jobs[0]
             queued_jobs = queued_jobs[1:]
-            
+                        
             allocation = self.nonauto_allocator.allocating_method(blocked_job, cur_time, skip=False)
                 
             if allocation[-1]:
@@ -447,14 +447,14 @@ class EASYBackfilling(SchedulerBase):
                 self._blocked_job_id = None
                 self._reserved_slot = (None, [])
                 _prev_blocked = [allocation]
+                    
             else:
-                # There are jobs still using the reserved nodes
-                self._reserved_slot = (cur_time, self._reserved_slot[1])                
+                # There are jobs still using the reserved nodes           
                 self._logger.trace('{} job is still blocked. Reservation {}'.format(self._blocked_job_id, self._reserved_slot))
             # Add the current allocation for the (un)blocked job.
             to_dispatch += [allocation]
         
-        if self._blocked_job_id is None:
+        if self._blocked_job_id is None and queued_jobs:
             # Tries to perform a FIFO allocation if there is no blocked job 
             # Returns the (partial) allocation and the idx for the blocked job, also sets the self._blocked_job_id var
             _allocated_jobs, blocked_idx = self._try_fifo_allocation(queued_jobs, cur_time)
@@ -468,7 +468,6 @@ class EASYBackfilling(SchedulerBase):
                    
                     # Current reservation (future time, reserved nodes)
                     self._reserved_slot = self._calculate_slot(cur_time, deepcopy(avl_resources), _allocated_jobs[:blocked_idx], _prev_blocked, blocked_job, es_dict)
-                    
                     self._logger.trace('Blocked {} Job: Nodes {} are reserved at {}'.format(self._blocked_job_id, self._reserved_slot[1], self._reserved_slot[0]))
                 
                 # Include the blocked job                
@@ -491,12 +490,12 @@ class EASYBackfilling(SchedulerBase):
             # Filling the gap between cur_time and res_time
             (reserved_time, reserved_nodes) = self._reserved_slot
             filling_allocation = self.nonauto_allocator.allocating_method(_to_fill, cur_time, \
-                                    reserved_time=reserved_time,
-                                    reserved_nodes=reserved_nodes,
-                                    skip=True
-                                )
+                                reserved_time=reserved_time,
+                                reserved_nodes=[],
+                                skip=True
+                            )
             # Include the remaining jobs
-            to_dispatch += filling_allocation
+            to_dispatch += filling_allocation        
         return to_dispatch, to_reject
     
     def _try_fifo_allocation(self, queued_jobs, cur_time):
@@ -515,13 +514,11 @@ class EASYBackfilling(SchedulerBase):
         _allocated_jobs = self.nonauto_allocator.allocating_method(queued_jobs, cur_time, skip=False)
         
         # Check if there is a blocked job (a job without an allocation)
-        blocked_idx = None
-        _nallocated = 0    
+        blocked_idx = None    
         for i, (_, job_id, allocated_nodes) in enumerate(_allocated_jobs):
             if not allocated_nodes:
                 self._blocked_job_id = job_id   
                 blocked_idx = i
-                _nallocated = i
                 break
         return _allocated_jobs, blocked_idx
 
@@ -562,12 +559,8 @@ class EASYBackfilling(SchedulerBase):
                         _dec_alloc[node][res] += v
             future_endings.add((job_id, cur_time + es_dict[job_id].expected_duration, _dec_alloc))
 
-        # Remove later
-        __jobs = [fe[0] for fe in future_endings]
-
         _required_alloc = blocked_job.requested_nodes
         _requested_resources = blocked_job.requested_resources
-        _sorted_nodes = []
         _partial_alloc = {}
 
         # Calculate the partial allocation on the current system state
@@ -588,10 +581,16 @@ class EASYBackfilling(SchedulerBase):
                 new_alloc = min([avl_resources[node][req] // _requested_resources[req] for req in _requested_resources])
                 _diff = new_alloc - cur_alloc
                 if _diff > 0:
-                    _partial_alloc[node] = _partial_alloc.get(node, 0) + _diff
-                    _sorted_nodes += node                                    
+                    _partial_alloc[node] = _partial_alloc.get(node, 0) + _diff                                    
             
             # At this point the blocked job can be allocated
             if sum(_partial_alloc.values()) >= _required_alloc:
-                return (res_time, _sorted_nodes[:_required_alloc],)
+                ctimes = 0
+                nodes = []
+                for node, times in _partial_alloc.items():
+                    ctimes += times
+                    nodes.append(node)
+                    if ctimes >= _required_alloc:
+                        break
+                return (res_time, nodes,)
         raise DispatcherError('Can\'t find the slot.... no end? :(')

@@ -24,6 +24,7 @@ SOFTWARE.
 import logging
 from copy import deepcopy
 from accasim.utils.misc import CONSTANT, FrozenDict
+from datetime import datetime
 
 class Resources:
     """
@@ -49,7 +50,6 @@ class Resources:
             - used_prefix: This will set the prefix of the used resources. Internal use
         
         """
-        self.constants = CONSTANT()
         self._definition = tuple([{'nodes': q, 'resources':groups[k]} for k, q in resources.items()])
         self._resources = {}
         self._current_capacity = {}
@@ -234,10 +234,11 @@ class Resources:
         @todo: Use NODE_LIST instead items
         """
         _str = "Resources:\n"
-        for node, attrs in self._resources.items():
+        for node in self.NODE_LIST:
+            attrs = self._resources[node]
             formatted_attrs = ""
             for attr in self._system_resource_types:
-               formatted_attrs += '{}: {}/{}, '.format(attr, attrs[self.used_resource_key(attr)], attrs[self.available_resource_key(attr)])
+               formatted_attrs += '{}: {}/{}, '.format(attr, attrs[attr], self.SYSTEM_CAPACITY_NODES[node][attr])
             _str += '- {}: {}\n'.format(node, formatted_attrs)
         return _str
     
@@ -344,7 +345,7 @@ class ResourceManager:
         """
         return self._resources._system_resource_types
 
-    def get_node_names(self):
+    def node_names(self):
         """
         
         :return: Return node names
@@ -352,7 +353,7 @@ class ResourceManager:
         """
         return self._resources.NODE_LIST
     
-    def get_total_resources(self, *args):
+    def total_resources(self, *args):
         """
         
         Return the total system resource for the required argument. The resource has to exist in the system. 

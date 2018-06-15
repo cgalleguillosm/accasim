@@ -30,8 +30,9 @@ from sortedcontainers import SortedSet, SortedList
 from abc import abstractmethod, ABC
 from _functools import reduce
 
-from accasim.utils.misc import CONSTANT
+from accasim.utils.misc import CONSTANT, FrozenDict
 from accasim.base.resource_manager_class import ResourceManager
+from datetime import datetime
 
 
 class AllocatorBase(ABC):
@@ -43,7 +44,7 @@ class AllocatorBase(ABC):
 
     MAXSIZE = maxsize
 
-    def __init__(self, _seed, resource_manager=None, **kwargs):
+    def __init__(self, _seed, **kwargs):
         """
     
         Allocator constructor (based on scheduler)
@@ -54,10 +55,10 @@ class AllocatorBase(ABC):
                  
         """
         seed(_seed)
-        self.constants = CONSTANT()
-        self._avl_resources = []
-        self._sorted_keys = []
-        self.set_resource_manager(resource_manager)
+        self.avl_resources = None
+        self.node_names = None
+        self.resource_manager = None
+        
         self._logger = logging.getLogger('accasim')
         # The list of resource types that are necessary for job execution. Used to determine wether a node can be used
         # for allocation or not
@@ -96,7 +97,7 @@ class AllocatorBase(ABC):
             Returns the internal reference to the dictionary of available resources in the system. 
             It includes the last virtual allocations.
         """
-        return self._avl_resources
+        return self.avl_resources
 
     @abstractmethod
     def set_attr(self, **kwargs):
@@ -153,7 +154,6 @@ class AllocatorBase(ABC):
 
         """
         assert(self.resource_manager is not None), 'The resource manager is not defined. It must defined prior to run the simulation.'
-
         self._logger.debug('{}: {} queued jobs to be considered in the dispatching plan'.format(cur_time, len(es) if isinstance(es, (list, tuple, SortedList)) else 1))
 
         # Update current available resources
@@ -171,12 +171,13 @@ class AllocatorBase(ABC):
              The dispathing process can't start without a resource manager. 
              
         """
-        if _resource_manager:
-            assert isinstance(_resource_manager, ResourceManager), 'Resource Manager not valid for scheduler'
-            self.resource_manager = _resource_manager
-            self._base_availability = self.resource_manager.get_total_resources()
-        else:
-            self.resource_manager = None
+        assert isinstance(_resource_manager, ResourceManager), 'Resource Manager not valid for scheduler'
+        self.resource_manager = _resource_manager
+        self._define_mappers()
+            
+    def _define_mappers(self):
+        if not self.node_names:
+            self.node_names = self.resource_manager.node_names()
 
     def __str__(self):
         """
@@ -197,9 +198,9 @@ class FirstFit(AllocatorBase):
     
     """
 
-    name = 'First_Fit'
+    name = 'FF'
 
-    def __init__(self, seed=0, resource_manager=None, **kwargs):
+    def __init__(self, seed=0, **kwargs):
         """
     
         Constructor for the class.
@@ -209,9 +210,8 @@ class FirstFit(AllocatorBase):
         :param kwargs: None at the moment
     
         """
-        AllocatorBase.__init__(self, seed, resource_manager)
-        if self.resource_manager:
-            self._base_availability = self.resource_manager.get_total_resources()
+        AllocatorBase.__init__(self, seed, **kwargs)    
+        self.sorted_keys = None    
 
     def get_id(self):
         return self.__class__.__name__
@@ -225,8 +225,8 @@ class FirstFit(AllocatorBase):
         :param res: the list of currently available resources for the system
     
         """
-        self._avl_resources = res
-        self._sorted_keys = self._sort_resources()
+        self.avl_resources = res
+        self._adjust_resources()
 
     def set_attr(self, **kwargs):
         """
@@ -269,11 +269,10 @@ class FirstFit(AllocatorBase):
             es = [es]
         else:
             listAsInput = True
-
+        
         allocation = []
         success_counter = 0
-        # Create aux resources for this allocation
-        self._set_aux_resources()
+
         for e in es:
             requested_nodes = e.requested_nodes
             requested_resources = e.requested_resources
@@ -285,56 +284,58 @@ class FirstFit(AllocatorBase):
 
             assigned_nodes = []
             nodes_left = requested_nodes
-            # Nodes that satisfy the request are retrieved including the number of request that they fit in total
-            # The auxiliar data is used to speed up the process.
-            # s_nodes, total_fits = self._find_sat_nodes(requested_resources)
-            s_nodes = self._find_sat_nodes(requested_resources)
-            # Only if there are the enough quantity resources the allocation is calculated.
-            # if requested_nodes <= total_fits: 
-            for node in self._sorted_keys:
-                if not (node in s_nodes):
-                    # If the node doesn't have the enough resources is skipped (previously calculated)
-                    continue 
-                # The algorithm check whether the given node belongs to the list of reserved nodes, in backfilling.
+                
+            for node in self.sorted_keys:
+                # Check whether the given node belongs to the list of reserved nodes, in backfilling.
                 # If it does, the node is discarded.
-                resources = self._avl_resources[node]
-                if backfilling_overlap and node in nodes_to_discard:
+                if backfilling_overlap:  # and node in nodes_to_discard:
                     continue
-                # We compute the number of job units fitting in the current node, and update the assignment
-                fits = int(self._event_fits_node(resources, requested_resources))
+                # First, compute the number of job units fitting in the current node, and then update the job assignment
+                resources = self.avl_resources[node]
+                fits = self._event_fits_node(resources, requested_resources)                   
+                
+                if fits == 0:
+                    continue
+                
                 if nodes_left <= fits:
                     assigned_nodes += [node] * nodes_left
                     nodes_left = 0
                 else:
                     assigned_nodes += [node] * fits
                     nodes_left -= fits
-                if nodes_left <= 0:
+                
+                # Break the loop when the request is satisfied
+                if nodes_left == 0:
                     break
 
             # If, after analyzing all nodes, the allocation is still not complete, the partial allocation
-            # is discarded.
+            # is discarded.            
             if nodes_left > 0:
                 assigned_nodes = []
-            assert not assigned_nodes or requested_nodes == len(assigned_nodes), 'Requested' + str(requested_nodes) + ' got ' + str(len(assigned_nodes))
+            assert len(assigned_nodes) in (0, requested_nodes,), 'Requested' + str(requested_nodes) + ' got ' + str(len(assigned_nodes))
 
             # If a correct allocation was found, we update the resources of the system, sort them again, and
             # add the allocation to the output list.
             if assigned_nodes:
                 allocation.append((cur_time, e.id, assigned_nodes))
+                # print(e.id, e.requested_nodes, e.requested_resources, len(assigned_nodes), assigned_nodes)
                 self._update_resources(assigned_nodes, requested_resources)
-                self._sorted_keys = self._adjust_resources(self._sorted_keys)
+                # Sort keys if it is necessary (BF)
+                self._adjust_resources(assigned_nodes)
                 success_counter += 1
                 self._logger.trace('Allocation successful for event {}'.format(e.id))
-            # If no correct allocation could be found, two scenarios are possible: 1) normally, the allocator stops
-            # here and returns the jobs allocated so far 2) if the skip parameter is enabled, the job is just
-            # skipped, and we proceed with the remaining ones.
+            #===================================================================
+            # If no correct allocation could be found, two scenarios are possible: 
+            #     1) normally, the allocator stops here and returns the jobs allocated so far 
+            #     2) if the skip parameter is enabled, the job is just skipped, and we proceed with the remaining ones.
+            #===================================================================
             else:
                 self._logger.trace('Allocation failed for event {} with {} nodes left'.format(e.id, nodes_left))
                 allocation.append((None, e.id, []))
                 if not skip:
                     # if jobs cannot be skipped, at the first allocation fail all subsequent jobs fail too
-                    for ev in es[(success_counter + 1):]:
-                        allocation.append((None, ev.id, []))
+                    for e in es[(success_counter + 1):]:
+                        allocation.append((None, e.id, []))
                     self._logger.trace('Cannot skip jobs, {} additional pending allocations failed {}'.format(len(es) - success_counter - 1, es[success_counter:]))
                     self._logger.trace('')
                     break
@@ -360,7 +361,6 @@ class FirstFit(AllocatorBase):
         else:
             if not isinstance(reserved_time, (list, tuple)):
                 if cur_time + e.expected_duration > reserved_time:
-                    self._logger.trace('Backfill: Event {} is overlapping with reservation at time {} in backfilling mode'.format(e.id, reserved_time))
                     return reserved_nodes
                 else:
                     return []
@@ -368,7 +368,6 @@ class FirstFit(AllocatorBase):
                 overlap_list = []
                 for ind, evtime in enumerate(reserved_time):
                     if cur_time + e.expected_duration > evtime:
-                        self._logger.trace('Backfill: Event {} is overlapping with reservation at time {} in backfilling mode'.format(e.id, evtime))
                         overlap_list += reserved_nodes[ind]
                 return list(set(overlap_list))
 
@@ -382,138 +381,57 @@ class FirstFit(AllocatorBase):
     
         """
         for node in reserved_nodes:
-            resource = self._avl_resources[node]
+            resource = self.avl_resources[node]
             for attr, v in requested_resources.items():
                 if v == 0:
                     continue
                 cur_q = resource[attr]
                 assert cur_q - v >= 0, 'In node {}, the resource {} is going below to 0'.format(node, attr)
-                # Remove node from the current quantity of resource
-                self.aux_resources[attr][cur_q].remove(node)
                 resource[attr] -= v
-                # Add the node to the new quantity of resource
-                new_q = resource[attr]
-                if new_q == 0:
-                    continue
-                if not (new_q in self.aux_resources[attr]):
-                    self.aux_resources[attr][new_q] = SortedSet()
-                self.aux_resources[attr][new_q].add(node)
 
-    def _sort_resources(self):
+    def _adjust_resources(self, nodes=None):
         """
 
-        Method which sorts the available resources dict. In this class it is used only to trim the nodes list, 
-        but can be overridden by extended classes.
-
-        :return: the sorted list of node keys (in this case, identical to the original minus the full nodes)
-
-        """      
-
-        return self._trim_nodes(list(self._avl_resources.keys()))
-
-    def _adjust_resources(self, sorted_keys):
-        """
-
-        Method which restores the resources' sorting after a successful allocation. In this class it is used only
-        to remove from the list nodes that have become full after an allocation, has to be overridden.
-
-        :param sorted_keys: the list of keys that needs to be adjusted
-
-        :return: the restored sorted_keys list
+        Method which must sort the node list at the beginning and after a successful allocation. 
+        It must sort the self.sorted_keys attribute.
 
         """
-        return self._trim_nodes(sorted_keys)
-
-    def _set_aux_resources(self):
-        """
-        @todo: Check how to improve
-        """
-        # Generate an aux structure to speedup the allocation process
-        resource_types = self.resource_manager.system_resource_types()        
-        self.aux_resources = {}
-        for res_type in resource_types:
-            if not (res_type in self.aux_resources):
-                self.aux_resources[res_type] = {}
-            for node in self._sorted_keys:
-                n_res = self._avl_resources[node][res_type]
-                if n_res == 0:  # This works similar to trim_nodes
-                    continue
-                if not (n_res in self.aux_resources[res_type]):
-                    self.aux_resources[res_type][n_res] = SortedSet()
-                self.aux_resources[res_type][n_res].add(node)
+        if not nodes:
+            self.sorted_keys = []
+            for node in self.node_names:
+                add = True
+                for res, avl in self.avl_resources[node].items():
+                    if res in self.nec_res_types and avl == 0:
+                        add = False
+                        break
+                if add:
+                    self.sorted_keys.append(node)
+        else:
+            to_remove = set()
+            for node in nodes:
+               for res, avl in self.avl_resources[node].items():
+                   if res in self.nec_res_types and avl == 0:
+                       to_remove.add(node)
+                       break
+            for node in to_remove:
+                self.sorted_keys.remove(node)
+                
 
     def _event_fits_node(self, resources, requested_resources):
-        """
-    
-        Checks if the job with requested_resources fits the node with resources available. Returns the number
-        of job units that fit the node
-        
-        :param resources: the node's available resources
-        :param requested_resources: the job's requested resources
-        
-        :return: the number of job units fitting in the node
-    
-        """
-        # min_availability is the number of job units fitting in the node. It is initialized at +infty,
-        # since we must compute a minimum
-        min_availability = self.MAXSIZE
-        # if a job requests 0 resources, the request is deemed as not valid
-        valid_request = False
-        for k, v in requested_resources.items():
-            # for each resource type, we compute the number of job units fitting for it, and refresh the minimum
-            if v > 0 and min_availability > (resources[k] // v):
-                valid_request = True
-                min_availability = resources[k] // v
-                # if the minimum reaches 0 (no fit) we break from the cycle
-                if min_availability <= 0:
-                    min_availability = 0
-                    break
-        if valid_request:
-            return min_availability
-        else:
-            return 0
+        _fits = self.MAXSIZE
 
-    def _trim_nodes(self, nodes):
-        """
-        Method which removes from a list of node IDs those elements that correspond to nodes that are full, i.e. they
-        have no available Memory or CPU resources, therefore they are thus useless for allocation.
-
-        :param nodes: A list of node IDs
-        :return: The trimmed list of nodes
-        """
-
-        # ALTERNATIVE SOLUTION: remove elements from list one by one
-        # for i in range(len(nodes) - 1, -1, -1):
-        #    if not all(self._avl_resources[nodes[i]][r] > 0 for r in self.nec_res_types):
-        #        nodes.pop(i)
-        return [n for n in nodes if all(self._avl_resources[n][r] > 0 for r in self.nec_res_types)]
-    
-    def _atoi(self, text):
-        return int(text) if text.isdigit() else text
-
-    def _natural_keys(self, text):
-        '''
-        alist.sort(key=natural_keys) sorts in human order
-        http://nedbatchelder.com/blog/200712/human_sorting.html
-        (See Toothy's implementation in the comments)
-        '''
-        return [ self._atoi(c) for c in split('(\d+)', text) ]
-    
-    # New function to find nodes that satisfies the node request, this is used in conjuction with the sorted node keys.
-    def _find_sat_nodes(self, req_resources):
-        sat_nodes = {}
-        
-        for t_res, n_res in req_resources.items():
-            if n_res == 0:
+        for res_type, req in requested_resources.items():
+            # The current res_type isnt requested 
+            if req == 0:
                 continue
-            if not(t_res in sat_nodes):
-                sat_nodes[t_res] = SortedSet(key=self._natural_keys)
-            for n, nodes in self.aux_resources[t_res].items():
-                if n >= n_res:
-                    sat_nodes[t_res].update(nodes)
-        nodes = reduce(SortedSet.intersection, sat_nodes.values())
-        
-        return nodes
+            fit = resources[res_type] // req
+            # The current res_type cannot be fitted in this node, returning without checking the remaining resource types.
+            if fit == 0:
+                return 0
+            # We maintain the minimum value 
+            if _fits > fit:
+                _fits = fit
+        return _fits
 
 class BestFit(FirstFit):
     """
@@ -528,7 +446,7 @@ class BestFit(FirstFit):
     
     name = 'Best_Fit'
 
-    def __init__(self, seed=0, resource_manager=None, **kwargs):
+    def __init__(self, seed=0, **kwargs):
         """
         
         Constructor for the class.
@@ -538,42 +456,40 @@ class BestFit(FirstFit):
         :param kwargs: None at the moment
         
         """
-        FirstFit.__init__(self, seed, resource_manager)
+        FirstFit.__init__(self, seed)
 
-        self.ranking = lambda x: sum(self._avl_resources[x].values())
+        self.ranking = lambda x: sum(self.avl_resources[x].values())
         """
         
-            Defines the ranking operator for sorting. Must use the self._avl_resources argument
+            Defines the ranking operator for sorting. Must use the self.avl_resources argument
             (the available resource dictionary). x represents a key.
         
         """
+        
+    def _adjust_resources(self, nodes=None):
+        """
 
-    def _sort_resources(self):
-        """
-        
-        This method sorts the keys of the available resources dictionary, basing on the ranking operator.
-        
-        It is called after the resources are set in the allocator.
-        
-        :return: the list of sorted keys (node ids) for the resources
-        
-        """
-        assert self._avl_resources is not None, 'The dictionary of available resources must be non-empty.'
-        return sorted(self._trim_nodes(list(self._avl_resources.keys())), key=self.ranking, reverse=False)
+        Method which must sort the node list at the beginning and after a successful allocation. 
+        It must sort the self.sorted_keys attribute.
 
-    def _adjust_resources(self, sorted_keys):
         """
-        
-        Adjusts the sorting of the resources after a successful allocation. 
-        
-        This method still uses python's sort method, because the Timsort implementation has O(n) complexity
-        on mostly sorted data. Even with a custom implementation, the average case would cost O(n) at best.
-        
-        :param sorted_keys: the list of keys, almost sorted, that needs to be adjusted
-        
-        """
-        assert self._avl_resources is not None, 'The dictionary of available resources must be non-empty.'
-        assert sorted_keys is not None, 'The list of keys must be non-empty'
-        sorted_keys = self._trim_nodes(sorted_keys)
-        sorted_keys.sort(key=self.ranking, reverse=False)
-        return sorted_keys
+        if not nodes:
+            self.sorted_keys = []
+            for node in self.node_names:
+                add = True
+                for res, avl in self.avl_resources[node].items():
+                    if res in self.nec_res_types and avl == 0:
+                        add = False
+                        break
+                if add:
+                    self.sorted_keys.append(node)
+        else:
+            to_remove = set()
+            for node in nodes:
+               for res, avl in self.avl_resources[node].items():
+                   if res in self.nec_res_types and avl == 0:
+                       to_remove.add(node)
+                       break
+            for node in to_remove:
+                self.sorted_keys.remove(node)
+        self.sorted_keys.sort(key=self.ranking, reverse=False)
