@@ -501,7 +501,7 @@ class Singleton(object):
         if class_ not in class_._instances:
             class_._instances[class_] = super(Singleton, class_).__new__(class_, *args, **kwargs)
         return class_._instances[class_]
-
+       
 
 class CONSTANT(Singleton):
     """

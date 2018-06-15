@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 from builtins import str
-from os.path import join
+from os.path import join, devnull
 from accasim.base.allocator_class import AllocatorBase
 from accasim.base.scheduler_class import SchedulerBase 
 from accasim.base.simulator_class import Simulator
@@ -30,7 +30,36 @@ from accasim.utils.file import file_exists, dir_exists, remove_dir, find_file_by
 from accasim.utils.misc import obj_assertion, list_class_assertion
 from accasim.utils.plot_factory import PlotFactory
 from accasim.experimentation.schedule_parser import define_result_parser
+import subprocess
+from string import Template
+from inspect import isclass
+from enum import Enum
+import sys
 
+
+_TEMPLATE = """
+import sys
+import os
+
+from accasim.base.simulator_class import Simulator
+$imports
+        
+def define_dispatcher():
+    sched_class = $sched_name
+    alloc_class = $alloc_name
+    kwargs = $kwargs
+    if alloc_class:
+        return sched_class(alloc_class(), **kwargs)
+    return sched_class(**kwargs)
+        
+if __name__ == '__main__':
+    workload = '$workload'
+    sys_config = '$sys_config'
+    dispatcher = define_dispatcher()
+    
+    sim = Simulator(workload, sys_config, dispatcher, **$sim_kwargs)
+    sim.start_simulation(**$run_kwargs)
+"""           
 
 class Experiment:
     
@@ -102,13 +131,11 @@ class Experiment:
         allocator as well.
 
         :param name: Dispatcher name.
-        :param dispatcher: Dispatcher instantiation.
+        :param dispatcher: (scheduler class, allocator class, kwargs). Allocator class and kwargs can be both None
 
         """
         obj_assertion(name, str, 'Received {} type as dispatcher name. str type expected.',
                       [dispatcher.__class__.__name__])
-        obj_assertion(dispatcher, SchedulerBase, 'Received {} type as dispatcher. {} subclass expected.',
-                      [dispatcher.__class__.__name__, SchedulerBase.__name__])
         if name in self.dispatchers:
             print('Dispatcher {} already set. Skipping it'.format(name))
         self.dispatchers[name] = dispatcher
@@ -133,23 +160,51 @@ class Experiment:
         for _alloc_class in allocator_list:
             _alloc = _alloc_class()
             for _sched_class in scheduler_list:
-                _dispatcher = _sched_class(_alloc, **kwargs)
-                _name = self._generate_name(_dispatcher.name, _alloc.name)
-                self.add_dispatcher(_name, _dispatcher)
+                _name = self._generate_name(_sched_class.name, _alloc_class.name)
+                self.add_dispatcher(_name, (_sched_class, _alloc_class, kwargs,))
 
 
-    def _run_simulation(self, dispatcher):
+    def _run_simulation(self, name, dispatcher):
         """
         Runs a single simulation instance, with a specified dispatcher
 
         :param dispatcher: A dispatcher instantiation
         """
-        simulator = Simulator(self.workload, self.sys_config, dispatcher,
-            simulator_config=self.simulator_config, **
-            self.SIMULATOR_ATTRIBUTES)
-        simulator.start_simulation(**self.RUN_SIMULATOR_ATTRIBUTES)
+        imports = ''
+        import_vars = [(dispatcher[0].__module__, dispatcher[0].__name__,), (dispatcher[1].__module__, dispatcher[1].__name__,)] + \
+                [ (v.__module__, v.__name__,) for k, v  in dispatcher[2].items() if isclass(v)]
+        for vars in import_vars:
+            imports += 'from {} import {}\n'.format(*vars)
+                           
+        template = Template(_TEMPLATE)
+        script = template.substitute(
+            {
+                'workload': self.workload,
+                'sys_config': self.sys_config,
+                'imports': imports,
+                'sched_name': dispatcher[0].__name__,
+                'alloc_name': dispatcher[1].__name__,
+                'kwargs': {kw: v.value if isinstance(v, Enum) else v for kw, v in dispatcher[2].items()},
+                'sim_kwargs': self.SIMULATOR_ATTRIBUTES,
+                'run_kwargs': self.RUN_SIMULATOR_ATTRIBUTES
+            }
+        )
+        
+        fp = '{}_{}.py'.format(self.name, name)
+        with open(fp, 'w+') as f:
+            f.write(script)
 
-    def run_simulation(self, generate_plot=True):
+        executable = sys.executable
+        if not executable:
+            executable = 'python3'
+
+        _cmd = '{},-u,{}'.format(executable, fp)
+        cwd = '.'
+        FNULL = open(devnull, 'w')
+        p_sim = subprocess.Popen(_cmd.split(','), cwd=cwd, stderr=subprocess.STDOUT)
+        p_sim.wait()
+        
+    def run_simulation(self, generate_plot=False):
         """
         Starts the simulation process. Its uses each instance of dispatching method to create the experiment.
         After that all experiments are run, the comparing plots are generated the :attr:`.generate_plot` option is set as True.
@@ -165,7 +220,7 @@ class Experiment:
             self.SIMULATOR_ATTRIBUTES['id'] = '{}_{}'.format(self.name, _name)
             self.SIMULATOR_ATTRIBUTES['RESULTS_FOLDER_NAME'] = result_folder
             print('{}/{}: Starting simulation of {}'.format(i + 1, _total, _name))
-            self._run_simulation(_dispatcher)
+            self._run_simulation(_name, _dispatcher)
             print('\n')
         
         # Generate all plots available in the plot factory class
