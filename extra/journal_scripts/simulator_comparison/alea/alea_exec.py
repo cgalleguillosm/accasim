@@ -43,15 +43,14 @@ def define_config(system, start_time, total_jobs):
 if __name__ == '__main__':
 
     # System name, start time, wl size
-    # instances = (('seth', 1027839845, 200500), ('ricc', 1272639895, 445000), ('mc', 1356994806, 5731100),)
-    instances = (('seth', 1027839845, 1000), ('ricc', 1272639895, 1000), ('mc', 1356994806, 1000),)
+    instances = (('seth', 1027839845, 200500), ('ricc', 1272639895, 445000), ('mc', 1356994806, 5731100),)
     exec_path = os.path.join(os.path.abspath('.'), 'alea')
     
     for (instance, start_time, total_jobs) in instances:
         
         define_config(instance, start_time, total_jobs)
         
-        for i in range(5):
+        for i in range(10):
             print('instance {} iter {}'.format(instance, i))
             FNULL = open(os.devnull, 'w')
             cmd = "java,-jar,Alea.jar"
