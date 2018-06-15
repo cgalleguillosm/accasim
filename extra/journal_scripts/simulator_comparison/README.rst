@@ -27,10 +27,13 @@ Now, you can run the experiment using the batsim_exec.py. To calculate the perfo
 
 Alea Experiments
 ================
-
+The following files must exist:
+	./alea/data-set/{instance}.swf Where instance could be seth, ricc or mc. 
 To run Alea experiments execute the alea_exec.py script with python 3.5 or newer. To calculate the performance metrics run the metrics_calculation.py script.
 
 Accasim Experiments
 ===================
 
-To run Accasim experiments execute the
+The following files must exist:
+	./workloads/{instance}.swf Where instance could be seth, ricc or mc. 
+To run Accasim experiments execute the accasim_exec.py script with python 3.5 or newer. To calculate the performance metrics run the metrics_calculation.py script.

@@ -29,6 +29,7 @@ if __name__ == '__main__':
     exec_path = os.path.abspath('.')
     for instance in instances:
         for i in range(10):
+            print('instance {} iter {}'.format(instance, i))
             FNULL = open(os.devnull, 'w')
 			# Simulator cmd line. All the args where given by Millian Poquet, those arguments disable any type of simulator logging
 			# The following files must exist:
