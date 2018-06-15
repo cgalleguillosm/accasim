@@ -22,38 +22,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 from accasim.base.allocator_class import FirstFit, BestFit
-from accasim.base.scheduler_class import FirstInFirstOut, JobVerification
-from accasim.base.scheduler_class import ShortestJobFirst, LongestJobFirst, EASYBackfilling
+from accasim.base.scheduler_class import FirstInFirstOut, ShortestJobFirst, LongestJobFirst, EASYBackfilling
 from accasim.experimentation.experiment import Experiment
-import os
 
 if __name__ == '__main__':
     workload = 'workloads/HPC2N-2002-2.2.1-cln.swf'
-    sys_cfg = 'config/HPC2N.config'
+    sys_cfg = 'HPC2N.config'
     numRuns = 10
 
     for i in range(numRuns):
-        childPid = os.fork()
-        if childPid == 0:
-            experiment = Experiment('Run_' + str(i), workload, sys_cfg)
-            dispatcher1 = FirstInFirstOut(FirstFit(), job_check=JobVerification.CHECK_REQUEST)
-            experiment.add_dispatcher('FIFO-FF', dispatcher1)
-            dispatcher2 = FirstInFirstOut(BestFit(), job_check=JobVerification.CHECK_REQUEST)
-            experiment.add_dispatcher('FIFO-BF', dispatcher2)
-            dispatcher3 = LongestJobFirst(FirstFit(), job_check=JobVerification.CHECK_REQUEST)
-            experiment.add_dispatcher('LJF-FF', dispatcher3)
-            dispatcher4 = LongestJobFirst(BestFit(), job_check=JobVerification.CHECK_REQUEST)
-            experiment.add_dispatcher('LJF-BF', dispatcher4)
-            dispatcher5 = ShortestJobFirst(FirstFit(), job_check=JobVerification.CHECK_REQUEST)
-            experiment.add_dispatcher('SJF-FF', dispatcher5)
-            dispatcher6 = ShortestJobFirst(BestFit(), job_check=JobVerification.CHECK_REQUEST)
-            experiment.add_dispatcher('SJF-BF', dispatcher6)
-            dispatcher7 = EASYBackfilling(FirstFit(), job_check=JobVerification.CHECK_REQUEST)
-            experiment.add_dispatcher('EBF-FF', dispatcher7)
-            dispatcher8 = EASYBackfilling(BestFit(), job_check=JobVerification.CHECK_REQUEST)
-            experiment.add_dispatcher('EBF-BF', dispatcher8)
-            experiment.run_simulation(generate_plot=False)
-            exit(0)
-        else:
-            os.waitpid(childPid, 0)
+        experiment_name = 'Run_{}'.format(i)
+        experiment = Experiment(experiment_name, workload, sys_cfg)
+        sched_list = [FirstInFirstOut, ShortestJobFirst, LongestJobFirst, EASYBackfilling]    
+        alloc_list = [FirstFit, BestFit]
+        experiment.generate_dispatchers(sched_list, alloc_list)
+        experiment.run_simulation()
+        
     exit(0)
