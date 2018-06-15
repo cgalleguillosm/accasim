@@ -439,7 +439,7 @@ class BestFit(FirstFit):
     
     """
     
-    name = 'Best_Fit'
+    name = 'BF'
 
     def __init__(self, seed=0, **kwargs):
         """

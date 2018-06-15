@@ -377,7 +377,7 @@ class EASYBackfilling(SchedulerBase):
    
    """
    
-    name = 'EASYBF'
+    name = 'EBF'
     """ Name of the Scheduler policy. """
        
     def __init__(self, allocator, seed=0, **kwargs):
