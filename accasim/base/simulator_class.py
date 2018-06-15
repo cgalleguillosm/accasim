@@ -45,7 +45,6 @@ from accasim.base.scheduler_class import SchedulerBase
 from accasim.base.event_class import JobFactory
 from accasim.base.additional_data import AdditionalData
 from accasim.utils.async_writer import AsyncWriter
-from distutils.version import StrictVersion
 
 class SimulatorBase(ABC):
     
@@ -53,15 +52,14 @@ class SimulatorBase(ABC):
     LOG_LEVEL_DEBUG = 'DEBUG'
     LOG_LEVEL_TRACE = 'TRACE'    
     
-    def __init__(self, _resource_manager, _reader, _job_factory, _dispatcher, _additional_data, config_file=None,
-                 **kwargs):
+    def __init__(self, config_file=None, **kwargs):
         """
 
         Simulator base constructor
 
-        :param _resource_manager: Resource manager class instantiation
-        :param _reader: Reader class instantiation
-        :param _job_factory: Job Factory instantiation
+        :param resource_manager: Resource manager class instantiation
+        :param reader: Reader class instantiation
+        :param job_factory: Job Factory instantiation
         :param _dispatcher: Dispatcher instantiation
         :param config_file: Path to the config file in json format.
         :param \*\*kwargs: Dictionary of key:value parameters to be used in the simulator. It overwrites the current parameters. All parameters will be available on the constant variable
@@ -76,21 +74,13 @@ class SimulatorBase(ABC):
         self._logger, self._logger_listener = self.define_logger()
         self.real_init_time = datetime.now()
         
-        assert (isinstance(_reader, Reader))
-        self.reader = _reader
-        
-        assert (isinstance(_resource_manager, ResourceManager))
-        self.resource_manager = _resource_manager
-        
-        assert (isinstance(_job_factory, JobFactory))
-        self.job_factory = _job_factory
-        
-        assert (isinstance(_dispatcher, SchedulerBase))
-        self.dispatcher = _dispatcher
-
-        self.mapper = EventManager(self.resource_manager)
-        self.additional_data = self.additional_data_init(_additional_data)
-        
+        self.dispatcher = None
+        self.reader = None
+        self.resource_manager = None
+        self.job_factory = None
+        self.mapper = None
+        self.additional_data = None
+               
         if self.constants.OVERWRITE_PREVIOUS:
             self.remove_previous()
 
@@ -267,7 +257,6 @@ class SimulatorBase(ABC):
         Shows the current simulator config
 
         """
-        # self._logger = logging.getLogger(self.constants.LOGGER_NAME)
         self._logger.info('Initializing the simulator')
         self._logger.info('Settings: ')
         self._logger.info('\tSystem Configuration file: {}'.format(self.constants.SYS_CONFIG_FILEPATH))
@@ -374,7 +363,7 @@ class Simulator(SimulatorBase):
         kwargs['SHOW_STATISTICS'] = show_statistics
 
         _uargs = []
-
+        
         if not resource_manager:
             resource_manager, equiv, start_time = self.generate_enviroment(sys_config)
             kwargs['equivalence'] = equiv
@@ -391,18 +380,31 @@ class Simulator(SimulatorBase):
             args = self.prepare_arguments(_reader_arguments, kwargs)
             reader = self.set_workload_input(workload, job_factory=job_factory, **args)
             _uargs += _reader_arguments
+        
+        for _u in _uargs:
+            kwargs.pop(_u, None)
+        SimulatorBase.__init__(self, config_file=simulator_config, **kwargs)
+        
         if not isinstance(additional_data, list):
             assert (isinstance(additional_data, additional_data) or issubclass(additional_data,
                                                                                additional_data)), 'Only subclasses of additional_data class are acepted as additional_data argument '
             additional_data = [additional_data]
-
+        
+        assert (isinstance(resource_manager, ResourceManager))
+        self.resource_manager = resource_manager
+        
+        assert (isinstance(dispatcher, SchedulerBase))
         dispatcher.set_resource_manager(resource_manager)
+        self.dispatcher = dispatcher
+            
+        assert (isinstance(reader, Reader))
+        self.reader = reader
+                
+        assert (isinstance(job_factory, JobFactory))
+        self.job_factory = job_factory
 
-        for _u in _uargs:
-            kwargs.pop(_u, None)
-
-        SimulatorBase.__init__(self, resource_manager, reader, job_factory, dispatcher, additional_data,
-                                config_file=simulator_config, **kwargs)
+        self.mapper = EventManager(self.resource_manager)
+        self.additional_data = self.additional_data_init(additional_data)
 
         if save_parameters:
             self._save_parameters(save_parameters)
