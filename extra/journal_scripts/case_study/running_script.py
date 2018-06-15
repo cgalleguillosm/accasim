@@ -27,7 +27,7 @@ from accasim.experimentation.experiment import Experiment
 
 if __name__ == '__main__':
     workload = 'workloads/HPC2N-2002-2.2.1-cln.swf'
-    sys_cfg = 'HPC2N.config'
+    sys_cfg = 'config/HPC2N.config'
     numRuns = 10
 
     for i in range(numRuns):
