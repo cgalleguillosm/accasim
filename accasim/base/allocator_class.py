@@ -25,14 +25,9 @@ import logging
 
 from random import seed
 from sys import maxsize 
-from re import split
-from sortedcontainers import SortedSet, SortedList
+from sortedcontainers import SortedList
 from abc import abstractmethod, ABC
-from _functools import reduce
-
-from accasim.utils.misc import CONSTANT, FrozenDict
 from accasim.base.resource_manager_class import ResourceManager
-from datetime import datetime
 
 
 class AllocatorBase(ABC):

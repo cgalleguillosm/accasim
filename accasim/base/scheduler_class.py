@@ -28,14 +28,11 @@ from random import seed
 from abc import abstractmethod, ABC
 from sortedcontainers.sortedlist import SortedListWithKey
 from enum import Enum
+from copy import deepcopy
 
 from accasim.base.resource_manager_class import ResourceManager 
 from accasim.base.allocator_class import AllocatorBase
-from accasim.utils.misc import CONSTANT
 
-# Temporal
-from copy import deepcopy, copy
-from re import split
 
 class DispatcherError(Exception):
     pass
@@ -75,7 +72,6 @@ class SchedulerBase(ABC):
         """
         seed(_seed)
         self._counter = 0
-        # self.constants = CONSTANT()
         self.allocator = None
         self._logger = logging.getLogger('accasim')
         self._system_capacity = None
