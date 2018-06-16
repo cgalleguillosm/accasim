@@ -62,13 +62,16 @@ class SimulatorBase(ABC):
         self.constants = CONSTANT()
         self.define_default_constants(config_file, **kwargs)
         self.real_init_time = datetime.now()
+        
         assert (isinstance(_reader, Reader))
         self.reader = _reader
+        
         assert (isinstance(_resource_manager, ResourceManager))
         self.resource_manager = _resource_manager
+        
         assert (isinstance(_job_factory, JobFactory))
-        # assert(self.check_request(_job_factory.attrs_names)), 'System resources must be included in Job Factory descrpition.'
         self.job_factory = _job_factory
+        
         assert (isinstance(_dispatcher, SchedulerBase))
         self.dispatcher = _dispatcher
 
@@ -305,7 +308,7 @@ class Simulator(SimulatorBase):
     def __init__(self, workload, sys_config, scheduler, resource_manager=None, reader=None, job_factory=None,
                  additional_data=[], simulator_config=None, overwrite_previous=True,
                  scheduling_output=True, pprint_output=False, benchmark_output=False, statistics_output=True, save_parameters=None,
-                 show_statistics=True, skip=False, **kwargs):
+                 show_statistics=True, **kwargs):
         """
 
         Constructor of the HPC Simulator class.
@@ -343,6 +346,7 @@ class Simulator(SimulatorBase):
             resource_manager, equiv, start_time = self.generate_enviroment(sys_config)
             kwargs['equivalence'] = equiv
             kwargs['start_time'] = start_time
+            
         if not job_factory:
             kwargs['job_mapper'] = DEFAULT_SWF_MAPPER
             kwargs['job_attrs'] = self.default_job_description()
@@ -350,14 +354,17 @@ class Simulator(SimulatorBase):
             args = self.prepare_arguments(_jf_arguments, kwargs)
             _uargs += _jf_arguments
             job_factory = JobFactory(resource_manager, **args)
+            
         if workload and not reader:
             _reader_arguments = ['max_lines', 'tweak_function', 'equivalence', 'start_time']
             args = self.prepare_arguments(_reader_arguments, kwargs)
             reader = self.set_workload_input(workload, job_factory=job_factory, **args)
             _uargs += _reader_arguments
+            
         if not isinstance(additional_data, list):
-            assert (isinstance(additional_data, AdditionalData) or issubclass(additional_data,
-                                                                               AdditionalData)), 'Only subclasses of AdditionalData class are acepted as additional_data argument '
+            assert (isinstance(additional_data, AdditionalData) or \
+                    issubclass(additional_data, AdditionalData)), \
+                    'Only subclasses of AdditionalData class are acepted as additional_data argument '
             additional_data = [additional_data]
 
         scheduler.set_resource_manager(resource_manager)
@@ -370,7 +377,6 @@ class Simulator(SimulatorBase):
 
         if save_parameters:
             self._save_parameters(save_parameters)
-        self._skip = skip
 
         if benchmark_output:
             self._usage_writer = AsyncWriter(path=path.join(self.constants.RESULTS_FOLDER_PATH,
@@ -401,35 +407,19 @@ class Simulator(SimulatorBase):
             self.constants.running_at['running_jobs'] = {x: self.mapper.events[x] for x in self.mapper.running}
             sleep(self.constants.running_at['interval'])
 
-    def start_simulation(self, system_status=False, system_utilization=False, **kwargs):
+    def start_simulation(self, system_status=False, **kwargs):
         """
-
         Initializes the simulation
-
-        :param init_unix_time: Adjustement for job timings. If the first job corresponds to 0, the init_unix_time must corresponds to the real submit time of the workload. Otherwise, if the job contains the real submit time, init_unix_time is 0.
+        :param init_unix_time: Adjustement for job timings. If the first job corresponds to 0, the init_unix_time \
+            must corresponds to the real submit time of the workload. Otherwise, if the job contains the real submit time, init_unix_time is 0.
         :param system_status: Initializes the system status daemon.
         :param system_utilization: Initializes the running jobs visualization using matplotlib.
         :param \*\*kwargs: a 'tweak_function' to deal with the workloads.
-
         """
-        if system_utilization:
-            from accasim.utils.visualization_class import system_utilization as system_utilization_class
-            running_at = {
-                'interval': 1,
-                'current_time': self.mapper.current_time,
-                'running_jobs': {}
-            }
-            self.constants.load_constant('running_at', running_at)
-            _stop = THEvent()
-            monitor = Thread(target=self.monitor_datasource, args=[_stop])
-            monitor.daemon = True
-            self.daemons['system_utilization'] = {
-                'class': system_utilization_class,
-                'args': [(None, 'constants.running_at'), (None, 'resource_manager.resources.system_capacity',)],
-                'object': None
-            }
-            monitor.start()
-
+        #=======================================================================
+        # System status is the main entry point to get access to the current 
+        # simulation data. It is used also for the visualization component.
+        #=======================================================================
         if system_status:
             functions = {
                 'usage_function': self.mapper.usage,
@@ -441,27 +431,32 @@ class Simulator(SimulatorBase):
                 'class': SystemStatus,
                 'args': [self.constants.WATCH_PORT, functions],
                 'object': None
-            }
-
+            }        
+        
+        # @TODO
+        # Add the usage_writer to the daemons array to auto-on/off process
         if self._usage_writer:
             self._usage_writer.start()
-
-        simulation = Thread(target=self.start_hpc_simulation, kwargs=kwargs)
-        simulation.start()
-
+            
         # Starting the daemons
         self.daemon_init()
-        simulation.join()
-        # Stopping the daemons
+        
+        try:
+            self.start_hpc_simulation(**kwargs)
+        except Exception as e:
+            sleep(1)
+            print('The simulation will be stopped. Reason: {}'.format(e))
+            raise e
+        
         [d['object'].stop() for d in self.daemons.values() if d['object']]
-        if system_utilization:
-            _stop.set()
+                     
         if self._usage_writer:
             self._usage_writer.stop()
             self._usage_writer = None
-
+ 
+        # @TODO
         self.mapper.stop_writers()
-
+        
         filepaths = self._generated_filepaths()
         self._clean_simulator_constants()
         return filepaths
@@ -488,14 +483,6 @@ class Simulator(SimulatorBase):
         self.load_events(self.mapper.current_time, event_dict, self.mapper, debug, self.max_sample)
         events = self.mapper.next_events()
 
-        if self._skip:
-            sys_usage_dict = self.resource_manager.resources.usage('dict')
-            sys_keys = sys_usage_dict.keys()
-            sys_usage = [ sys_usage_dict[key] for key in sys_keys]
-
-            prev_stats = (events, tuple(sys_usage))
-            time_stuck_counter = 0
-
         # =======================================================================
         # Loop until there are not loaded, queued and running jobs
         # =======================================================================
@@ -507,23 +494,7 @@ class Simulator(SimulatorBase):
             if debug:
                 print('{} INI: Loaded {}, Queued {}, Running {}, Finished {}'.format(_actual_time, self._loaded_jobs(), len(self.mapper.queued),
                                                                                          len(self.mapper.running),
-                                                                                         len(self.mapper.finished)))
-            if self._skip and events:
-                sys_usage_dict = self.resource_manager.resources.usage('dict')
-                sys_keys = sys_usage_dict.keys()
-                sys_usage = [ sys_usage_dict[key] for key in sys_keys]
-
-                cur_stats = (events, tuple(sys_usage))
-
-                # Current jobs were included wrt the previous iteration
-                if all([j1 in prev_stats[0] for j1 in cur_stats[0]]):
-                    # Stats are geq than the previous one:
-                    if all([ c >= p for c, p in zip(cur_stats[1], prev_stats[1])]):
-                        time_stuck_counter += 1
-                    else:  # Less system usage
-                        time_stuck_counter = 0
-                else:  # New jobs wrt the previous one
-                    time_stuck_counter = 0
+                                                                                         self.mapper.finished))
             # ===================================================================
             # External behavior
             # ===================================================================
@@ -533,11 +504,10 @@ class Simulator(SimulatorBase):
             schedStartTime = _clock() * 1000
             schedEndTime = schedStartTime
 
-            if events:  # and (not self._skip or self._skip and time_stuck_counter <= 1):
+            if events:
                 if debug:
                     print('{} DUR: To Schedule {}'.format(_actual_time, len(events)))
-                simulated_jobs = (self._loaded_jobs() + len(self.mapper.queued) + len(events) + len(self.mapper.running) + len(self.mapper.finished) + rejected_jobs)
-                assert(self.loaded_jobs == simulated_jobs), 'Some jobs were lost. {} != {}'.format(self.loaded_jobs, simulated_jobs)
+
                 to_dispatch, rejected = self.dispatcher.schedule(self.mapper.current_time, event_dict, events, debug)
                 
                 for r in rejected:
@@ -548,7 +518,7 @@ class Simulator(SimulatorBase):
                 rejected_jobs += rejected_len
                 
                 assert(queuelen == dispatched_len + rejected_len), \
-                    'Some queued jobs ({}/{}) were not included in the dispatching decision.'.format(dispatched_len + rejected_len, queued_len)
+                    'Some queued jobs ({}/{}) were not included in the dispatching decision.'.format(dispatched_len + rejected_len, queuelen)
                     
                 if debug:
                     print('{} DUR: To Dispatch {}. {}'.format(_actual_time, len(to_dispatch),
@@ -564,20 +534,15 @@ class Simulator(SimulatorBase):
                                                                                          self._loaded_jobs(),
                                                                                          len(self.mapper.queued),
                                                                                          len(self.mapper.running),
-                                                                                         len(self.mapper.finished)))
+                                                                                         self.mapper.finished))
                     exit()
             else:
                 for e in events:
                     self.mapper.submit_event(e)
-            if self._skip:
-                sys_usage_dict = self.resource_manager.resources.usage('dict')
-                sys_keys = sys_usage_dict.keys()
-                sys_usage = [ sys_usage_dict[key] for key in sys_keys]
 
-                prev_stats = (events, tuple(sys_usage))
 
             if debug:
-                print('{} END: Loaded {}, Queued {}, Running {}, Finished {}'.format(_actual_time, self._loaded_jobs(), len(self.mapper.queued), len(self.mapper.running), len(self.mapper.finished)))
+                print('{} END: Loaded {}, Queued {}, Running {}, Finished {}'.format(_actual_time, self._loaded_jobs(), len(self.mapper.queued), len(self.mapper.running), self.mapper.finished))
 
             # ===================================================================
             # Loading next jobs based on Time points
@@ -605,9 +570,8 @@ class Simulator(SimulatorBase):
 
         self.end_simulation_time = _clock()
         if not self.timeout or self.timeout and ontime:
-            assert (self.loaded_jobs == len(self.mapper.finished) + rejected_jobs), 'Loaded {} and Finished {}'.format(self.loaded_jobs,
-                                                                                                   len(
-                                                                                                       self.mapper.finished) + rejected_jobs)
+            assert (self.loaded_jobs == self.mapper.finished + rejected_jobs), \
+                'Loaded {} and Finished {}'.format(self.loaded_jobs, self.mapper.finished + rejected_jobs)
 
         self.statics_write_out(self.constants.SHOW_STATISTICS, self.constants.STATISTICS_OUTPUT)
         print('Simulation process completed.')
@@ -676,51 +640,20 @@ class Simulator(SimulatorBase):
         :param time_samples: Default 2. It load the next two time steps.
 
         """
-        nt_points, ps_jobs = self.reader.next(current_time, time_points=time_samples)
+        next_tpoints, parsed_jobs = self.reader.next(current_time, time_points=time_samples)
         tmp_dict = {}
         job_list = []
-        for nt_point, jobs in ps_jobs.items():
-            # TODO
-            for job in jobs:
-                if self._check_job_validity(job):
-                    self.loaded_jobs += 1
-                    tmp_dict[job.id] = job
-                    job_list.append(job)
-                else:
-                    _filepath = path.join(self.constants.RESULTS_FOLDER_PATH,
-                                           self.constants.SUBMISSION_ERROR_PREFIX + self.constants.WORKLOAD_FILENAME)
-                    error_msg = "Job {} violates the system's resource constraints and will be discarded".format(job.id)
-                    with open(_filepath, 'a') as f:
-                        f.write(error_msg + '\n')
-                    if _debug:
-                        print(error_msg)
+
+        for next_tpoint in next_tpoints:
+            for job in parsed_jobs[next_tpoint]:
+                self.loaded_jobs += 1
+                tmp_dict[job.id] = job
+                job_list.append(job)
         mapper.load_events(job_list)
         jobs_dict.update(tmp_dict)
 
     def _loaded_jobs(self):
         return sum([len(jobs) for _, jobs in self.mapper.loaded.items()])
-
-    def _check_job_validity(self, job):
-        """
-
-        Simple method that checks if the loaded job violates the system's resource constraints.
-
-        :param job: Job object
-
-        :return: True if the job is valid, false otherwise
-
-        """
-        resGroups = self.resource_manager.groups_available_resource()
-        validGroups = 0
-        for group in resGroups.values():
-            valid = True
-            for k, res in job.requested_resources.items():
-                if group[k] < res:
-                    valid = False
-                    break
-            if valid:
-                validGroups += 1
-        return validGroups > 0
 
     def daemon_init(self):
         """

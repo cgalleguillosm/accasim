@@ -156,7 +156,6 @@ class AllocatorBase(ABC):
         if _resource_manager:
             assert isinstance(_resource_manager, ResourceManager), 'Resource Manager not valid for scheduler'
             self.resource_manager = _resource_manager
-            self._base_availability = self.resource_manager.get_total_resources()
         else:
             self.resource_manager = None
 
@@ -195,8 +194,6 @@ class FirstFit(AllocatorBase):
         # The list of resource types that are necessary for job execution. Used to determine wether a node can be used
         # for allocation or not
         self.nec_res_types = ['core', 'mem']
-        if self.resource_manager:
-            self._base_availability = self.resource_manager.get_total_resources()
 
     def get_id(self):
         return self.__class__.__name__
@@ -249,7 +246,6 @@ class FirstFit(AllocatorBase):
         :return: a list of assigned nodes of length e.requested_nodes, for all events that could be allocated. The list is in the format (time,event,nodes) where time can be either cur_time or None.
     
         """
-        debug = False
         if not isinstance(es, (list, tuple)):
             listAsInput = False
             es = [es]
@@ -263,9 +259,6 @@ class FirstFit(AllocatorBase):
         for e in es:
             requested_nodes = e.requested_nodes
             requested_resources = e.requested_resources
-            # We verify that the job does not violate the system's resource constraints
-            for t in requested_resources.keys():
-                assert requested_resources[t] * requested_nodes <= self._base_availability[t], 'There are %i %s total resources in the system, requested %i by job %s' % (self._base_availability[t], t, requested_resources[t] * requested_nodes, e.id)
 
             # If the input arguments relative to backfilling are not supplied, the method operates in regular mode.
             # Otherwise, backfilling mode is enabled, allowing the allocator to skip jobs and consider the reservation.
@@ -403,8 +396,8 @@ class FirstFit(AllocatorBase):
         :return: the sorted list of node keys (in this case, identical to the original minus the full nodes)
 
         """      
-
-        return self._trim_nodes(list(self._avl_resources.keys()))
+        node_names = self.resource_manager.node_names()
+        return self._trim_nodes(node_names)
 
     def _adjust_resources(self, sorted_keys):
         """
@@ -433,11 +426,6 @@ class FirstFit(AllocatorBase):
                 if not (n_res in self.aux_resources[res_type]):
                     self.aux_resources[res_type][n_res] = SortedSet()
                 self.aux_resources[res_type][n_res].add(node)
-                #===============================================================
-                # if not (node in self.aux_resources['nodes']):
-                #     self.aux_resources['nodes'][node] = {} 
-                # self.aux_resources['nodes'][node][res_type] = n_res
-                #===============================================================
 
     def _event_fits_node(self, resources, requested_resources):
         """
@@ -478,47 +466,22 @@ class FirstFit(AllocatorBase):
         :param nodes: A list of node IDs
         :return: The trimmed list of nodes
         """
-
-        # ALTERNATIVE SOLUTION: remove elements from list one by one
-        # for i in range(len(nodes) - 1, -1, -1):
-        #    if not all(self._avl_resources[nodes[i]][r] > 0 for r in self.nec_res_types):
-        #        nodes.pop(i)
         trimNodes = [n for n in nodes if all(self._avl_resources[n][r] > 0 for r in self.nec_res_types)]
         return trimNodes
-    
-    def _atoi(self, text):
-        return int(text) if text.isdigit() else text
-
-    def _natural_keys(self, text):
-        '''
-        alist.sort(key=natural_keys) sorts in human order
-        http://nedbatchelder.com/blog/200712/human_sorting.html
-        (See Toothy's implementation in the comments)
-        '''
-        return [ self._atoi(c) for c in split('(\d+)', text) ]
-    
+        
     # New function to find nodes that satisfies the node request, this is used in conjuction with the sorted node keys.
     def _find_sat_nodes(self, req_resources):
         sat_nodes = {}
-        # fitting_nodes = {}
         for t_res, n_res in req_resources.items():
             if n_res == 0:
                 continue
             if not(t_res in sat_nodes):
-                sat_nodes[t_res] = SortedSet(key=self._natural_keys)
+                sat_nodes[t_res] = SortedSet()
             for n, nodes in self.aux_resources[t_res].items():
                 if n >= n_res:
                     sat_nodes[t_res].update(nodes)
-                    #===========================================================
-                    # for node in nodes:
-                    #     if not (node in fitting_nodes):
-                    #         fitting_nodes[node] = {}
-                    #     fitting_nodes[node][t_res] = n // n_res
-                    #===========================================================
-        # nodes = list(reduce(set.intersection, (set(val) for val in sat_nodes.values())))
-        # tot_fitting_reqs = sum([min(fitting_nodes[n].values()) for n in nodes])
         nodes = reduce(SortedSet.intersection, sat_nodes.values())
-        return nodes  # , tot_fitting_reqs
+        return nodes
 
 class BestFit(FirstFit):
     """

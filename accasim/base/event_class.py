@@ -160,7 +160,6 @@ class JobFactory:
         """
         _req_resources = job_attrs['requested_resources']
         missing_res = {r for r in self.system_resources if r not in _req_resources.keys()}
-        # assert(len(missing_res) == 0), 'Missing resources in the readed jobs: {}'.format(missing_res)
         if missing_res:
             print('Some resources has not been included in the parser, assigning 0 to the {} resources in the job request.'.format(missing_res))
             required = {'core', 'mem'}
@@ -281,16 +280,23 @@ class EventManager:
 
         self.current_time = None
         self.time_points = SortedSet()
-        # self.ending_time_points = sorted_list()
         self.events = {}
         self.loaded = {}
         self.queued = []
         self.real_ending = {}
         self.running = []
-        self.finished = []
+        self.finished = 0
 
-        self._sched_writer = None
-        self._pprint_writer = None
+        self._writers = []
+        if self.constants.SCHEDULING_OUTPUT:
+            _sched_fp = join(self.constants.RESULTS_FOLDER_PATH, self.constants.SCHED_PREFIX + self.constants.WORKLOAD_FILENAME)
+            self._sched_writer = AsyncWriter(path=_sched_fp, pre_process_fun=EventManager._schd_write_preprocessor)
+            self._writers.append(self._sched_writer)
+        
+        if self.constants.PPRINT_OUTPUT:
+            _pprint_fp = join(self.constants.RESULTS_FOLDER_PATH, self.constants.PPRINT_PREFIX + self.constants.WORKLOAD_FILENAME)
+            self._pprint_writer = AsyncWriter(path=_pprint_fp, pre_process_fun=EventManager._schd_pprint_preprocessor)
+            self._writers.append(self._pprint_writer)
 
 
     def load_events(self, es):
@@ -318,7 +324,6 @@ class EventManager:
 
         """
         assert(isinstance(e, Event)), 'Using %s, expecting a single %s' % (e.__class__, Event.__name__)
-        # print('load Event', self.time_points)
         if not self.current_time:
             self.current_time = e.queued_time - 1
             self.time_points.add(self.current_time)
@@ -369,19 +374,13 @@ class EventManager:
         e.slowdown = float("{0:.2f}".format((e.waiting_time + e.running_time) / e.running_time)) if e.running_time != 0 else e.waiting_time if e.waiting_time != 0 else 1.0
         self.slowdowns.append(e.slowdown)
         self.wtimes.append(e.waiting_time)
-        self.finished.append(e.id)
-        e.end_order = len(self.finished)
+        self.finished += 1
+        e.end_order = self.finished
+        
         if self.constants.SCHEDULING_OUTPUT:
-            if self._sched_writer is None:
-                self._sched_writer = AsyncWriter(path=join(self.constants.RESULTS_FOLDER_PATH,
-                    self.constants.SCHED_PREFIX + self.constants.WORKLOAD_FILENAME), pre_process_fun=EventManager._schd_write_preprocessor)
-                self._sched_writer.start()
             self._sched_writer.push(e)
+            
         if self.constants.PPRINT_OUTPUT:
-            if self._pprint_writer is None:
-                self._pprint_writer = AsyncWriter(path=join(self.constants.RESULTS_FOLDER_PATH,
-                    self.constants.PPRINT_PREFIX + self.constants.WORKLOAD_FILENAME), pre_process_fun=EventManager._schd_pprint_preprocessor)
-                self._pprint_writer.start()
             self._pprint_writer.push(e)
 
     def dispatch_event(self, _job, _time, _time_diff, _nodes):
@@ -410,12 +409,13 @@ class EventManager:
         # Used only for statistics
         if self.first_time_dispatch == None:
             self.first_time_dispatch = start_time
+            for writer in self._writers:
+                writer.start()
 
         if _job.duration == 0:
             if self.debug:
                 print('{}: {} Dispatched and Finished at the same moment. Job Lenght 0'.format(self.current_time, id))
             self.finish_event(_job)
-            # self.time_points.add(self.current_time)
             return False
 
         # Move to running jobs
@@ -426,10 +426,6 @@ class EventManager:
         expected_end_time = _job.start_time + _job.expected_duration
         real_end_time = _job.start_time + _job.duration
 
-        #=======================================================================
-        # if expected_end_time != self.current_time:
-        #     self.time_points.add(expected_end_time)
-        #=======================================================================
         self.time_points.add(real_end_time)
 
         if real_end_time not in self.real_ending:
@@ -550,7 +546,7 @@ class EventManager:
         :return: String including the system info.
 
         """
-        return ('Loaded {}, Queued {}, Running {}, and Finished {} Jobs'.format(len(self.loaded), len(self.queued), len(self.running), len(self.finished)))
+        return ('Loaded {}, Queued {}, Running {}, and Finished {} Jobs'.format(len(self.loaded), len(self.queued), len(self.running), self.finished))
 
     def availability(self):
         """
@@ -586,12 +582,9 @@ class EventManager:
         """
         Stops the output writer threads and closes the file streams
         """
-        if self._sched_writer is not None:
-            self._sched_writer.stop()
-            self._sched_writer = None
-        if self._pprint_writer is not None:
-            self._pprint_writer.stop()
-            self._pprint_writer = None
+        for writer in self._writers:
+            writer.stop()
+            writer = None
 
     @staticmethod
     def _schd_write_preprocessor(event):
@@ -611,9 +604,7 @@ class EventManager:
             except ValueError:
                 _attrs[a] = 'NA'
         output_format = _dict['format']
-        format_elements = findall('\{(\w+)\}', output_format)
-        values = {k: v for k, v in _attrs.items() if k in format_elements}
-        return output_format.format(**values) + '\n'
+        return output_format.format(**_attrs) + '\n'
 
     @staticmethod
     def _schd_pprint_preprocessor(event):
@@ -634,13 +625,13 @@ class EventManager:
             except ValueError:
                 _attrs[a] = 'NA'
         output_format = _dict['format']
-        format_elements = findall('\{(\w+)\}', output_format)
         values = [_attrs[k] for k in _order]
+        
         if event.end_order == 1:
             return (output_format.format(*_order) + '\n', output_format.format(*values) + '\n')
-        else:
-            return output_format.format(*values) + '\n'
-
+        
+        return output_format.format(*values) + '\n'
+        
     def __str__(self):
         """
 

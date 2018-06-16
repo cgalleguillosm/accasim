@@ -29,6 +29,7 @@ from enum import Enum
 
 from accasim.base.resource_manager_class import ResourceManager 
 from accasim.base.allocator_class import AllocatorBase
+from collections import Counter
 
 
 class DispatcherError(Exception):
@@ -154,30 +155,23 @@ class SchedulerBase(ABC):
         for e in es:
             job = es_dict[e]
             if not job.get_checked() and not self._check_job_request(job):
-                if self._job_check != JobVerification.REJECT:
-                    self._logger.warning('{} has been rejected by the dispatcher. ({})'.format(e, self._job_check))
+                if _debug and self._job_check != JobVerification.REJECT:
+                    print('{} has been rejected by the dispatcher. ({})'.format(e, self._job_check))
                 rejected.append(e)
                 continue
             accepted.append(e)
-        
-        # At least each job need 1 core and 1 kb/mb/gb of mem to run
-        min_required_avl = ['core', 'mem']
-        if any([self.resource_manager.resources.full[res] for res in min_required_avl]):
-            if _debug:
-                print("There is no availability of one of the min required resource to run a job. The dispatching process will be delayed until there is enough resources.")
-            return [ (None, e, []) for e in accepted], rejected      
-          
+                  
         if _debug:
             print('{}: {} queued jobs to be considered in the dispatching plan'.format(cur_time, len(es)))
         
         to_allocate = []
         # On accepted jobs by policy, try to schedule with the scheduling policy
         if accepted:
-            to_allocate, to_reject = self.scheduling_method(cur_time, es_dict, es, _debug)
+            to_allocate, to_reject = self.scheduling_method(cur_time, es_dict, accepted, _debug)
             rejected += to_reject
             if _debug:
                 for e in to_reject:
-                    self._logger.warning('{} has been rejected by the dispatcher. (Scheduling policy)'.format(e)) 
+                    print('{} has been rejected by the dispatcher. (Scheduling policy)'.format(e)) 
             
         if to_allocate and self.allocator:
             dispatching_plan = self.allocator.allocate(to_allocate, cur_time, _debug)
@@ -186,7 +180,6 @@ class SchedulerBase(ABC):
         
         if _debug:
             print("################## Dispatching decision n: {} #######################".format(self._counter))
-        
         return dispatching_plan, rejected
 
     def _check_job_request(self, _job):
@@ -289,10 +282,6 @@ class SimpleHeuristic(SchedulerBase):
         _time = cur_time
 
         return to_schedule_e, []
-        # allocated_events = self.allocator.allocate(to_schedule_e, _time, skip=False, debug=_debug)
-
-        # return allocated_events
-
     
 class FirstInFirstOut(SimpleHeuristic):
     """
@@ -448,12 +437,12 @@ class EASYBackfilling(SchedulerBase):
                 _jobs_allocated.append(blocked_job_allocation)
                 assigned_nodes = blocked_job_allocation[2]
                 requested_resources = _e.requested_resources
-                _ready_dispatch.append((_e.id, cur_time + _e.expected_duration, {node: requested_resources for node in assigned_nodes}))
+                _ready_dispatch.append((_e.id, cur_time + _e.expected_duration, {node: {res: v * times for res, v in requested_resources.items()} for node, times in Counter(assigned_nodes).items()}))
                 assert(queued_jobs[0] == self.blocked_job_id), '{}'.format(queued_jobs)
                 self.blocked_job_id = None
                 reserved_time, reserved_nodes = self.reserved_slot = (None, []) 
                 self.blocked_resources = False
-                _removed_id = queued_jobs[0]  # queued_jobs.pop(0)
+                _removed_id = queued_jobs[0]
                 queued_jobs = queued_jobs[1:]
                 if _debug:
                     print('{}: Removing the blocked job ({}) from the queue list '.format(cur_time, _removed_id))
@@ -499,7 +488,8 @@ class EASYBackfilling(SchedulerBase):
             if _debug:
                 print("{}: Reserved time {}".format(cur_time, reserved_time))
                 print("{}: Running events {}".format(cur_time, running_events))
-            revents = [(job_id, jobs_dict[job_id].start_time + jobs_dict[job_id].expected_duration, assigns) for job_id, assigns in running_events.items()]
+            revents = [(job_id, jobs_dict[job_id].start_time + jobs_dict[job_id].expected_duration, assigns) \
+                       for job_id, assigns in running_events.items()]
             future_endings = revents + _ready_dispatch
             # Sorting by soonest finishing
             future_endings.sort(key=lambda x: x[1], reverse=False)
@@ -550,8 +540,21 @@ class EASYBackfilling(SchedulerBase):
         virtual_allocator = copy(self.nonauto_allocator)
         
         if _debug:
-            print(e.requested_nodes, e.requested_resources)
+            print('blocked ', e.id, e.requested_nodes, e.requested_resources)
             print('Running: ', len(future_endings))
+        # Remove later
+        tmp = {'core': 0, 'mem': 0}
+        for node, res in virtual_resources.items():
+            for r, v in res.items():
+                tmp[r] += v
+        for fe in future_endings:
+            for _, used_resources in fe[2].items():
+                for attr, attr_value in used_resources.items(): 
+                    tmp[attr] += attr_value
+        
+        cap = self.resource_manager.get_total_resources()
+        assert(all([v == tmp[res] for res, v in cap.items()])), '{} != {}'.format(tmp, cap)            
+            
         for i, fe in enumerate(future_endings):
             if _debug:
                 print('{} future ending: {}'.format(i, fe))
@@ -561,9 +564,10 @@ class EASYBackfilling(SchedulerBase):
                     virtual_resources[node][attr] += attr_value
             # The algorithm first checks if the job fits on the new released virtual resources; if it does
             # then it passes them to the allocator, which sorts them
-            if self._event_fits_resources(virtual_resources, e.requested_nodes, e.requested_resources):
+            fits, n_fits = self._event_fits_resources(virtual_resources, e.requested_nodes, e.requested_resources)
+            if fits:
                 virtual_allocator.set_resources(virtual_resources)
-                reservation = virtual_allocator.allocate(e, _time, skip=False, debug=_debug)
+                reservation = virtual_allocator.allocating_method(e, _time, skip=False, debug=_debug)
                 if reservation[0] is not None:
                     return _time, reservation[2]
         raise Exception('Can\'t find the slot.... no end? :(')
@@ -572,7 +576,7 @@ class EASYBackfilling(SchedulerBase):
         nodes = 0
         for node, resources in avl_resources.items():
             nodes += self._event_fits_node(resources, requested_resources)
-        return nodes >= n_nodes
+        return nodes >= n_nodes, nodes
 
     def _event_fits_node(self, resources, requested_resources):
         # min_availability is the number of job units fitting in the node. It is initialized at +infty,
@@ -622,11 +626,11 @@ class EASYBackfilling(SchedulerBase):
         for al in allocation[:_idx_notdispatched]:
             _e = es_dict[al[1]]
             requested_resources = _e.requested_resources
-            assigned_nodes = al[2]
+            assigned_nodes = Counter(al[2])
             ready_distpach.append(
                 (
                     al,
-                    (_e.id, cur_time + _e.expected_duration, {node: requested_resources for node in assigned_nodes})
+                    (_e.id, cur_time + _e.expected_duration, {node: {res:v * times for res, v in requested_resources.items()} for (node, times) in assigned_nodes.items()})
                 )
             )
         # ids of jobs that could be used to backfilling the schedule
