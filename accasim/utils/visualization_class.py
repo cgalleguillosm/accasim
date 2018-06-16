@@ -26,13 +26,13 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib.cm as mplcm
 import matplotlib.colors as colors
-import time
 import matplotlib.animation as Animation
-from accasim.utils.misc import sorted_object_list, str_datetime
 from collections import namedtuple
 from threading import Thread
 
-class system_utilization:
+from accasim.utils.misc import sorted_object_list, str_datetime
+
+class SystemUtilization:
     """
     Using the matplotlib animation feature, this class will create a plot and update it during the simulation execution.
     """

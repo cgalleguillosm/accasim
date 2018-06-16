@@ -21,37 +21,37 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-import random
-import sys
+from sys import maxsize
+from random import seed
 from abc import abstractmethod, ABC
-from accasim.utils.misc import CONSTANT
-from accasim.base.resource_manager_class import resource_manager
 from _functools import reduce
-from sortedcontainers import SortedSet as _sorted_set
-import time
-from re import split as _split
+from sortedcontainers import SortedSet
+from re import split
+
+from accasim.utils.misc import CONSTANT
+from accasim.base.resource_manager_class import ResourceManager
 
 
 
 
-class allocator_base(ABC):
+class AllocatorBase(ABC):
     """
     
     The base abstract interface all allocators must comply to.
     
     """
 
-    def __init__(self, seed, resource_manager=None, **kwargs):
+    def __init__(self, _seed, resource_manager=None, **kwargs):
         """
     
         Allocator constructor (based on scheduler)
 
-        :param seed: Seed if there is any random event
+        :param _seed: Seed if there is any random event
         :param res_man: resource manager for the system.
         :param kwargs: Nothing for the moment
                  
         """
-        random.seed(seed)
+        seed(_seed)
         self._constants = CONSTANT()
         self._avl_resources = []
         self._sorted_keys = []
@@ -154,7 +154,7 @@ class allocator_base(ABC):
              
         """
         if _resource_manager:
-            assert isinstance(_resource_manager, resource_manager), 'Resource Manager not valid for scheduler'
+            assert isinstance(_resource_manager, ResourceManager), 'Resource Manager not valid for scheduler'
             self.resource_manager = _resource_manager
             self._base_availability = self.resource_manager.get_total_resources()
         else:
@@ -168,7 +168,7 @@ class allocator_base(ABC):
         """
         return self.get_id()
 
-class ff_alloc(allocator_base):
+class FirstFit(AllocatorBase):
     """
     
     A simple First-Fit allocator. Does not sort the resources.
@@ -191,7 +191,7 @@ class ff_alloc(allocator_base):
         :param kwargs: None at the moment
     
         """
-        allocator_base.__init__(self, seed, resource_manager)
+        AllocatorBase.__init__(self, seed, resource_manager)
         # The list of resource types that are necessary for job execution. Used to determine wether a node can be used
         # for allocation or not
         self.nec_res_types = ['core', 'mem']
@@ -391,7 +391,7 @@ class ff_alloc(allocator_base):
                 if new_q == 0:
                     continue
                 if not (new_q in self.aux_resources[attr]):
-                    self.aux_resources[attr][new_q] = _sorted_set()
+                    self.aux_resources[attr][new_q] = SortedSet()
                 self.aux_resources[attr][new_q].add(node)
 
     def _sort_resources(self):
@@ -431,7 +431,7 @@ class ff_alloc(allocator_base):
                 if n_res == 0:  # This works similar to trim_nodes
                     continue
                 if not (n_res in self.aux_resources[res_type]):
-                    self.aux_resources[res_type][n_res] = _sorted_set()
+                    self.aux_resources[res_type][n_res] = SortedSet()
                 self.aux_resources[res_type][n_res].add(node)
                 #===============================================================
                 # if not (node in self.aux_resources['nodes']):
@@ -453,7 +453,7 @@ class ff_alloc(allocator_base):
         """
         # min_availability is the number of job units fitting in the node. It is initialized at +infty,
         # since we must compute a minimum
-        min_availability = sys.maxsize
+        min_availability = maxsize
         # if a job requests 0 resources, the request is deemed as not valid
         valid_request = False
         for k, v in requested_resources.items():
@@ -495,7 +495,7 @@ class ff_alloc(allocator_base):
         http://nedbatchelder.com/blog/200712/human_sorting.html
         (See Toothy's implementation in the comments)
         '''
-        return [ self._atoi(c) for c in _split('(\d+)', text) ]
+        return [ self._atoi(c) for c in split('(\d+)', text) ]
     
     # New function to find nodes that satisfies the node request, this is used in conjuction with the sorted node keys.
     def _find_sat_nodes(self, req_resources):
@@ -505,7 +505,7 @@ class ff_alloc(allocator_base):
             if n_res == 0:
                 continue
             if not(t_res in sat_nodes):
-                sat_nodes[t_res] = _sorted_set(key=self._natural_keys)
+                sat_nodes[t_res] = SortedSet(key=self._natural_keys)
             for n, nodes in self.aux_resources[t_res].items():
                 if n >= n_res:
                     sat_nodes[t_res].update(nodes)
@@ -517,10 +517,10 @@ class ff_alloc(allocator_base):
                     #===========================================================
         # nodes = list(reduce(set.intersection, (set(val) for val in sat_nodes.values())))
         # tot_fitting_reqs = sum([min(fitting_nodes[n].values()) for n in nodes])
-        nodes = reduce(_sorted_set.intersection, sat_nodes.values())
+        nodes = reduce(SortedSet.intersection, sat_nodes.values())
         return nodes  # , tot_fitting_reqs
 
-class bf_alloc(ff_alloc):
+class BestFit(FirstFit):
     """
     
     Best-Fit Allocator
@@ -543,7 +543,7 @@ class bf_alloc(ff_alloc):
         :param kwargs: None at the moment
         
         """
-        ff_alloc.__init__(self, seed, resource_manager)
+        FirstFit.__init__(self, seed, resource_manager)
 
         self.ranking = lambda x: sum(self._avl_resources[x].values())
         """

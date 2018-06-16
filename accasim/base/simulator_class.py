@@ -21,33 +21,30 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-from time import perf_counter as _clock, sleep as _sleep
-from sys import path as _path
+from time import perf_counter as _clock, sleep, time
 from datetime import datetime
 from abc import abstractmethod, ABC
-from accasim.utils.reader_class import default_reader_class, reader_class
-from accasim.utils.misc import CONSTANT, DEFAULT_SIMULATION, load_config, clean_results, \
-    default_swf_mapper
-from accasim.utils.misc import system_status as system_status_class
-from accasim.utils.file import path_leaf, save_jsonfile
-from accasim.base.event_class import event_mapper, attribute_type
-from accasim.base.resource_manager_class import resources_class, resource_manager
-from accasim.base.scheduler_class import scheduler_base
-from accasim.base.event_class import job_factory as job_factory_class
-from accasim.base.additional_data import additional_data
 from threading import Thread, Event as THEvent
-from os import getpid as _getpid, path as _path, makedirs as _makedirs
-from psutil import Process as _Process
+from os import getpid, makedirs, path
+from psutil import Process
 from _functools import reduce
-import inspect
-import asyncio
-from builtins import exit as _exit
-from time import time as _time
-from accasim.utils.async_writer import async_writer
+from inspect import stack 
+from builtins import exit
 from sortedcontainers.sortedset import SortedSet
 
+from accasim.base.event_class import EventManager, AttributeType
+from accasim.base.resource_manager_class import Resources, ResourceManager
+from accasim.base.scheduler_class import SchedulerBase
+from accasim.base.event_class import JobFactory
+from accasim.base.additional_data import AdditionalData
+from accasim.utils.async_writer import AsyncWriter
+from accasim.utils.file import path_leaf, save_jsonfile
+from accasim.utils.reader_class import DefaultReader, Reader
+from accasim.utils.misc import CONSTANT, DEFAULT_SIMULATION, load_config, clean_results, \
+    DEFAULT_SWF_MAPPER, SystemStatus
 
-class simulator_base(ABC):
+
+class SimulatorBase(ABC):
     def __init__(self, _resource_manager, _reader, _job_factory, _dispatcher, _additional_data, config_file=None,
                  **kwargs):
         """
@@ -65,17 +62,17 @@ class simulator_base(ABC):
         self.constants = CONSTANT()
         self.define_default_constants(config_file, **kwargs)
         self.real_init_time = datetime.now()
-        assert (isinstance(_reader, reader_class))
+        assert (isinstance(_reader, Reader))
         self.reader = _reader
-        assert (isinstance(_resource_manager, resource_manager))
+        assert (isinstance(_resource_manager, ResourceManager))
         self.resource_manager = _resource_manager
-        assert (isinstance(_job_factory, job_factory_class))
+        assert (isinstance(_job_factory, JobFactory))
         # assert(self.check_request(_job_factory.attrs_names)), 'System resources must be included in Job Factory descrpition.'
         self.job_factory = _job_factory
-        assert (isinstance(_dispatcher, scheduler_base))
+        assert (isinstance(_dispatcher, SchedulerBase))
         self.dispatcher = _dispatcher
 
-        self.mapper = event_mapper(self.resource_manager)
+        self.mapper = EventManager(self.resource_manager)
         self.additional_data = self.additional_data_init(_additional_data)
 
         self.timeout = kwargs.pop('timeout', None)
@@ -98,7 +95,7 @@ class simulator_base(ABC):
     def load_events(self):
         """
 
-        Method that loads the job from a datasource. Check the default implementation in the hpc_simulator class.
+        Method that loads the job from a datasource. Check the default implementation in the Simulator class.
 
         """
         raise NotImplementedError('Must be implemented!')
@@ -106,22 +103,22 @@ class simulator_base(ABC):
     def additional_data_init(self, _additional_data):
         """
 
-        Initializes the additional_data classes or set the event manager in the objects
+        Initializes the AdditionalData classes or set the event manager in the objects
 
-        :param _additional_data: A list of additional_data objects or classes
+        :param _additional_data: A list of AdditionalData objects or classes
 
-        :return: Return a list with all the additional_data objects ready to be executed
+        :return: Return a list with all the AdditionalData objects ready to be executed
 
         """
         _ad = []
         for ad in _additional_data:
-            if isinstance(ad, additional_data):
+            if isinstance(ad, AdditionalData):
                 ad.set_event_manager(self.mapper)
                 _ad.append(ad)
-            elif issubclass(ad, additional_data):
+            elif issubclass(ad, AdditionalData):
                 _ad.append(ad(self.mapper))
             else:
-                raise ('Additional data class must be a subclass of the additional_data class')
+                raise ('Additional data class must be a subclass of the AdditionalData class')
         return _ad
 
     def check_request(self, attrs_names):
@@ -152,7 +149,7 @@ class simulator_base(ABC):
         config = load_config(config_path)
         equiv = config.pop('equivalence', {})
         start_time = config.pop('start_time', 0)
-        resources = resources_class(**config)
+        resources = Resources(**config)
         return resources.resource_manager(), equiv, start_time
 
     def define_filepaths(self, **kwargs):
@@ -163,13 +160,13 @@ class simulator_base(ABC):
         """
         kwargs['WORKLOAD_FILENAME'] = path_leaf(kwargs['WORKLOAD_FILEPATH'])[1]
         if 'RESULTS_FOLDER_PATH' not in kwargs:
-            script_path, script_name = path_leaf(inspect.stack()[-1].filename)
+            script_path, script_name = path_leaf(stack()[-1].filename)
             rfolder = kwargs.pop('RESULTS_FOLDER_NAME')
-            kwargs['RESULTS_FOLDER_PATH'] = _path.join(script_path, rfolder)
+            kwargs['RESULTS_FOLDER_PATH'] = path.join(script_path, rfolder)
         self.create_folder(kwargs['RESULTS_FOLDER_PATH'])
         return kwargs
 
-    def create_folder(self, path):
+    def create_folder(self, _path):
         """
 
         Create folder if it does not exists. Pass to misc
@@ -179,8 +176,8 @@ class simulator_base(ABC):
         :return: Path of the created folder
 
         """
-        if not _path.exists(path):
-            _makedirs(path)
+        if not path.exists(_path):
+            makedirs(_path)
         return path
 
     def set_workload_input(self, workload_path, **kwargs):
@@ -194,7 +191,7 @@ class simulator_base(ABC):
         :return: A reader object
 
         """
-        return default_reader_class(workload_path, **kwargs)
+        return DefaultReader(workload_path, **kwargs)
 
     def prepare_arguments(self, possible_arguments, arguments):
         """
@@ -221,7 +218,7 @@ class simulator_base(ABC):
         :param config_filepath: Path to the config file in json format
 
         """
-        config = DEFAULT_SIMULATION.parameters
+        config = DEFAULT_SIMULATION
         for k, v in config.items():
             if k not in kwargs:
                 kwargs[k] = v
@@ -275,7 +272,7 @@ class simulator_base(ABC):
                   (self.constants.PPRINT_OUTPUT, self.constants.PPRINT_PREFIX),
                   (self.constants.BENCHMARK_OUTPUT, self.constants.BENCHMARK_PREFIX)]
 
-        _paths = [_path.join(self.constants.RESULTS_FOLDER_PATH, _prefix + self.constants.WORKLOAD_FILENAME) for
+        _paths = [path.join(self.constants.RESULTS_FOLDER_PATH, _prefix + self.constants.WORKLOAD_FILENAME) for
                   state, _prefix in _wouts if state]
         clean_results(*_paths)
 
@@ -283,7 +280,7 @@ class simulator_base(ABC):
         self.constants.clean_constants()
 
     def _save_parameters(self, _parameters, filename='simulator_parameters.json'):
-        filename_path = _path.join(self.constants.RESULTS_FOLDER_PATH, filename)
+        filename_path = path.join(self.constants.RESULTS_FOLDER_PATH, filename)
         _dict = {
             _param: getattr(self.constants, _param) for _param in _parameters
         }
@@ -291,17 +288,17 @@ class simulator_base(ABC):
 
     def _generated_filepaths(self):
         possible_filepaths = [
-            (self.constants.STATISTICS_OUTPUT, self.constants.STATISTICS_PREFIX, _path.join(self.constants.RESULTS_FOLDER_PATH, self.constants.STATISTICS_PREFIX + self.constants.WORKLOAD_FILENAME)),
-            (self.constants.BENCHMARK_OUTPUT, self.constants.BENCHMARK_PREFIX, _path.join(self.constants.RESULTS_FOLDER_PATH, self.constants.BENCHMARK_PREFIX + self.constants.WORKLOAD_FILENAME)),
-            (self.constants.SCHEDULING_OUTPUT, self.constants.SCHED_PREFIX, _path.join(self.constants.RESULTS_FOLDER_PATH, self.constants.SCHED_PREFIX + self.constants.WORKLOAD_FILENAME)),
-            (self.constants.PPRINT_OUTPUT, self.constants.PPRINT_PREFIX, _path.join(self.constants.RESULTS_FOLDER_PATH, self.constants.PPRINT_PREFIX + self.constants.WORKLOAD_FILENAME))
+            (self.constants.STATISTICS_OUTPUT, self.constants.STATISTICS_PREFIX, path.join(self.constants.RESULTS_FOLDER_PATH, self.constants.STATISTICS_PREFIX + self.constants.WORKLOAD_FILENAME)),
+            (self.constants.BENCHMARK_OUTPUT, self.constants.BENCHMARK_PREFIX, path.join(self.constants.RESULTS_FOLDER_PATH, self.constants.BENCHMARK_PREFIX + self.constants.WORKLOAD_FILENAME)),
+            (self.constants.SCHEDULING_OUTPUT, self.constants.SCHED_PREFIX, path.join(self.constants.RESULTS_FOLDER_PATH, self.constants.SCHED_PREFIX + self.constants.WORKLOAD_FILENAME)),
+            (self.constants.PPRINT_OUTPUT, self.constants.PPRINT_PREFIX, path.join(self.constants.RESULTS_FOLDER_PATH, self.constants.PPRINT_PREFIX + self.constants.WORKLOAD_FILENAME))
         ]
         return {f[1]:f[2] for f in possible_filepaths if f[0]}
 
-class hpc_simulator(simulator_base):
+class Simulator(SimulatorBase):
     """
 
-    Default implementation of the simulator_base class.
+    Default implementation of the SimulatorBase class.
 
     """
 
@@ -319,7 +316,7 @@ class hpc_simulator(simulator_base):
         :param resource_manager: Optional. Instantiation of the resource_manager class.
         :param reader: Optional. Instantiation of the reader class.
         :param job_factory: Optional. Instantiation of the job_factory class.
-        :param additional_data: Optional. Array of Objects or Classes of additional_data class.
+        :param additional_data: Optional. Array of Objects or Classes of AdditionalData class.
         :param simulator_config: Optional. Filepath to the simulator config. For replacing the misc.DEFAULT_SIMULATION parameters.
         :param overwrite_previous: Default True. Overwrite previous results.
         :param scheduling_output: Default True. Dispatching plan output. Format modificable in DEFAULT_SIMULATION
@@ -347,20 +344,20 @@ class hpc_simulator(simulator_base):
             kwargs['equivalence'] = equiv
             kwargs['start_time'] = start_time
         if not job_factory:
-            kwargs['job_mapper'] = default_swf_mapper
+            kwargs['job_mapper'] = DEFAULT_SWF_MAPPER
             kwargs['job_attrs'] = self.default_job_description()
             _jf_arguments = ['job_class', 'job_attrs', 'job_mapper']
             args = self.prepare_arguments(_jf_arguments, kwargs)
             _uargs += _jf_arguments
-            job_factory = job_factory_class(resource_manager, **args)
+            job_factory = JobFactory(resource_manager, **args)
         if workload and not reader:
             _reader_arguments = ['max_lines', 'tweak_function', 'equivalence', 'start_time']
             args = self.prepare_arguments(_reader_arguments, kwargs)
             reader = self.set_workload_input(workload, job_factory=job_factory, **args)
             _uargs += _reader_arguments
         if not isinstance(additional_data, list):
-            assert (isinstance(additional_data, additional_data) or issubclass(additional_data,
-                                                                               additional_data)), 'Only subclasses of additional_data class are acepted as additional_data argument '
+            assert (isinstance(additional_data, AdditionalData) or issubclass(additional_data,
+                                                                               AdditionalData)), 'Only subclasses of AdditionalData class are acepted as additional_data argument '
             additional_data = [additional_data]
 
         scheduler.set_resource_manager(resource_manager)
@@ -368,7 +365,7 @@ class hpc_simulator(simulator_base):
         for _u in _uargs:
             kwargs.pop(_u, None)
 
-        simulator_base.__init__(self, resource_manager, reader, job_factory, scheduler, additional_data,
+        SimulatorBase.__init__(self, resource_manager, reader, job_factory, scheduler, additional_data,
                                 config_file=simulator_config, **kwargs)
 
         if save_parameters:
@@ -376,10 +373,10 @@ class hpc_simulator(simulator_base):
         self._skip = skip
 
         if benchmark_output:
-            self._usage_writer = async_writer(path=_path.join(self.constants.RESULTS_FOLDER_PATH,
+            self._usage_writer = AsyncWriter(path=path.join(self.constants.RESULTS_FOLDER_PATH,
                 self.constants.BENCHMARK_PREFIX + self.constants.WORKLOAD_FILENAME),
-                pre_process_fun=hpc_simulator.usage_metrics_preprocessor)
-            self._process_obj = _Process(_getpid())
+                pre_process_fun=Simulator.usage_metrics_preprocessor)
+            self._process_obj = Process(getpid())
         else:
             self._usage_writer = None
             self._process_obj = None
@@ -402,7 +399,7 @@ class hpc_simulator(simulator_base):
         while (not _stop.is_set()):
             self.constants.running_at['current_time'] = self.mapper.current_time
             self.constants.running_at['running_jobs'] = {x: self.mapper.events[x] for x in self.mapper.running}
-            _sleep(self.constants.running_at['interval'])
+            sleep(self.constants.running_at['interval'])
 
     def start_simulation(self, system_status=False, system_utilization=False, **kwargs):
         """
@@ -441,7 +438,7 @@ class hpc_simulator(simulator_base):
                 'current_time_function': self.mapper.simulated_current_time
             }
             self.daemons['system_status'] = {
-                'class': system_status_class,
+                'class': SystemStatus,
                 'args': [self.constants.WATCH_PORT, functions],
                 'object': None
             }
@@ -478,7 +475,7 @@ class hpc_simulator(simulator_base):
 
         """
         if self.timeout:
-            init_sim_time = _time()
+            init_sim_time = time()
             ontime = True
         # =======================================================================
         # Load events corresponding at the "current time" and the next one
@@ -557,7 +554,7 @@ class hpc_simulator(simulator_base):
                                                                                          len(self.mapper.queued),
                                                                                          len(self.mapper.running),
                                                                                          len(self.mapper.finished)))
-                    _exit()
+                    exit()
             else:
                 for e in events:
                     self.mapper.submit_event(e)
@@ -591,7 +588,7 @@ class hpc_simulator(simulator_base):
                 self._usage_writer.push((_actual_time, queuelen, benchEndTime - benchStartTime, scheduleTime,
                                         dispatchTime, benchMemUsage))
 
-            if self.timeout and self.timeout <= int(_time() - init_sim_time):
+            if self.timeout and self.timeout <= int(time() - init_sim_time):
                 ontime = False
                 break
 
@@ -608,7 +605,7 @@ class hpc_simulator(simulator_base):
     @staticmethod
     def usage_metrics_preprocessor(entry):
         """
-        To be used as a pre-processor for async_writer objects applied to usage metrics.
+        To be used as a pre-processor for AsyncWriter objects applied to usage metrics.
         Pre-processes a tuple of usage metrics containing 6 fields. The fields are the following:
 
         - time: the timestamp relative to the simulation step
@@ -646,7 +643,7 @@ class hpc_simulator(simulator_base):
         if show:
             print('\n\t' + '\t'.join([sim_time_, disp_method_, total_jobs_, makespan_, avg_wtimes_, avg_slowdown_]))
         if save:
-            _filepath = _path.join(self.constants.RESULTS_FOLDER_PATH,
+            _filepath = path.join(self.constants.RESULTS_FOLDER_PATH,
                                    self.constants.STATISTICS_PREFIX + self.constants.WORKLOAD_FILENAME)
             with open(_filepath, 'a') as f:
                 f.write(sim_time_)
@@ -678,7 +675,7 @@ class hpc_simulator(simulator_base):
                     tmp_dict[job.id] = job
                     job_list.append(job)
                 else:
-                    _filepath = _path.join(self.constants.RESULTS_FOLDER_PATH,
+                    _filepath = path.join(self.constants.RESULTS_FOLDER_PATH,
                                            self.constants.SUBMISSION_ERROR_PREFIX + self.constants.WORKLOAD_FILENAME)
                     error_msg = "Job {} violates the system's resource constraints and will be discarded".format(job.id)
                     with open(_filepath, 'a') as f:
@@ -753,14 +750,14 @@ class hpc_simulator(simulator_base):
 
         """
         # Attribute to identify the user
-        user_id = attribute_type('user_id', int)
+        user_id = AttributeType('user_id', int)
 
         # New attributes required by the Dispatching methods.
-        expected_duration = attribute_type('expected_duration', int)
-        queue = attribute_type('queue', int)
+        expected_duration = AttributeType('expected_duration', int)
+        queue = AttributeType('queue', int)
 
         # Default system resources: core and mem.
-        total_cores = attribute_type('core', int)
-        total_mem = attribute_type('mem', int)
+        total_cores = AttributeType('core', int)
+        total_mem = AttributeType('mem', int)
 
         return [total_cores, total_mem, expected_duration, queue, user_id]

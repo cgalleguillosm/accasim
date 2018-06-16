@@ -21,54 +21,164 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-import re
-import os
-import logging
-import json
+import socket
+
+from re import compile
+from os import path, remove 
+from json import dump, dumps, load, loads
 from datetime import datetime
-import time
+from time import gmtime, clock
 from collections import Mapping
 from bisect import bisect, bisect_left, bisect_right
-import socket
-import threading
+from threading import Thread
 from _functools import reduce
 from itertools import islice
-from builtins import int, str
-from weakref import WeakValueDictionary as _WeakValueDictionary
-from inspect import getmembers as _getmembers, isclass as _isclass
-from sys import modules as _modules
 
 # ===============================================================================
 # Patterns for SWF files
 # ===============================================================================
-_swf_int_pattern = ('\s*(?P<{}>[-+]?\d+)', int)
-_swf_float_pattern = ('\s*(?P<{}>[-+]?\d+\.\d+|[-+]?\d+)', float)
-_swf_avoid_regexps = [r'^;.*']
-default_swf_parse_config = (
-    {
-        'job_number': _swf_int_pattern,
-        'queued_time': _swf_int_pattern,
-        'wait_time': _swf_int_pattern,
-        'duration': _swf_int_pattern,
-        'allocated_processors': _swf_int_pattern,
-        'avg_cpu_time': _swf_float_pattern,
-        'used_memory': _swf_int_pattern,
-        'requested_number_processors': _swf_int_pattern,
-        'requested_time': _swf_int_pattern,
-        'requested_memory': _swf_int_pattern,
-        'status': _swf_int_pattern,
-        'user_id': _swf_int_pattern,
-        'group_id': _swf_int_pattern,
-        'executable_number': _swf_int_pattern,
-        'queue_number': _swf_int_pattern,
-        'partition_number': _swf_int_pattern,
-        'preceding_job_number': _swf_int_pattern,
-        'think_time_prejob': _swf_int_pattern
-    }, _swf_avoid_regexps)
+_SWF_INT_PATTERN = ('\s*(?P<{}>[-+]?\d+)', int)
+_SWF_FLOAT_PATTERN = ('\s*(?P<{}>[-+]?\d+\.\d+|[-+]?\d+)', float)
+_SWF_AVOID_REGEXPS = [r'^;.*']
+DEFAULT_SWF_PARSE_CONFIG = (
+    (
+        ('job_number', _SWF_INT_PATTERN),
+        ('queued_time', _SWF_INT_PATTERN),
+        ('wait_time', _SWF_INT_PATTERN),
+        ('duration', _SWF_INT_PATTERN),
+        ('allocated_processors', _SWF_INT_PATTERN),
+        ('avg_cpu_time', _SWF_FLOAT_PATTERN),
+        ('used_memory', _SWF_INT_PATTERN),
+        ('requested_number_processors', _SWF_INT_PATTERN),
+        ('requested_time', _SWF_INT_PATTERN),
+        ('requested_memory', _SWF_INT_PATTERN),
+        ('status', _SWF_INT_PATTERN),
+        ('user_id', _SWF_INT_PATTERN),
+        ('group_id', _SWF_INT_PATTERN),
+        ('executable_number', _SWF_INT_PATTERN),
+        ('queue_number', _SWF_INT_PATTERN),
+        ('partition_number', _SWF_INT_PATTERN),
+        ('preceding_job_number', _SWF_INT_PATTERN),
+        ('think_time_prejob', _SWF_INT_PATTERN)
+    ), _SWF_AVOID_REGEXPS)
 
-default_swf_mapper = {
+DEFAULT_SWF_MAPPER = {
     'job_number': 'job_id',
     'requested_time': 'expected_duration'
+}
+
+DEFAULT_SIMULATION = {
+    """
+    Default and base simulation parameters. The following parameters are loaded into the :class:`.CONSTANT`.
+    This constants values can be overridden by passing as kwargs in the :class:`accasim.base.simulator_class.hpc_simulator` class instantiation.
+    
+    :Note:
+    
+        * CONFIG_FOLDER_NAME: Folder where the configuration files are.
+            * "CONFIG_FOLDER_NAME": "config/"
+        * RESULTS_FOLDER_NAME: Folder where the configuration files will be.
+            * "RESULTS_FOLDER_NAME": "results/"
+        * SCHEDULE_OUTPUT: Format of the dispatching plan file.
+            * "SCHEDULE_OUTPUT": 
+            
+            .. code:: 
+                {
+                    "format": "{job_id};{user};{queue_time}__{assignations}__{start_time};{end_time};{total_nodes};{total_cpu};{total_mem};{expected_duration};",
+                    "attributes": {
+                        "job_id": ("id", "str"),
+                        "user": ("user_id", "str"),
+                        "queue_time": ("queued_time", "accasim.utils.misc.str_datetime"),
+                        "start_time": ("start_time", "accasim.utils.misc.str_datetime"),
+                        "end_time": ("end_time", "accasim.utils.misc.str_datetime"),
+                        "assignations": ("assigned_nodes", "requested_resources", "accasim.utils.misc.str_resources"),
+                        "total_nodes": ("requested_nodes", "int"),
+                        "total_cpu": ("core", "int"),
+                        "total_mem": ("mem", "int"),
+                        "expected_duration": ("expected_duration", "int")      
+                    }
+                }
+                
+        * PPRINT_SCHEDULE_OUTPUT: Format of the dispatching plan file in pretty print version. (Human readable version).
+            * "PPRINT_SCHEDULE_OUTPUT":
+            
+            .. code:: 
+            
+                {
+                    "format": "{:>5} {:>15} {:^19} {:^19} {:>8} {:>8} {:>8} {:>5} {:>4} {:>10} {:<20}",
+                    "order": ["n", "job_id", "start_time", "end_time", "wtime", "rtime", "slowdown", "nodes", "core", "mem", "assigned_nodes"],
+                    "attributes":{
+                        "n": ("end_order", "int"),
+                        "job_id": ("id", "str"),
+                        "start_time": ("start_time", "accasim.utils.misc.str_datetime"),
+                        "end_time": ("end_time", "accasim.utils.misc.str_datetime"),
+                        "wtime": ("waiting_time", "int"),
+                        "rtime": ("running_time", "int"),
+                        "slowdown": ("slowdown", "float"),
+                        "nodes": ("requested_nodes", "int"),
+                        "core": ("core", "int"),
+                        "mem": ("mem", "int"),
+                        "assigned_nodes": ("assigned_nodes", "accasim.utils.misc.str_nodes")
+                    }
+                }
+                
+        * SCHED_PREFIX: Prefix of the dispatching plan file.
+            * "SCHED_PREFIX": "sched-"
+        * PPRINT_PREFIX: Prefix of the pprint file.
+            * "PPRINT_PREFIX": "pprint-"
+        * STATISTICS_PREFIX: Prefix of the statistic file.
+            * "STATISTICS_PREFIX": "stats-"
+        * BENCHMARK_PREFIX: Prefix of the benchmark file.
+            * "BENCHMARK_PREFIX": "bench-"
+        * SUBMISSION_ERROR_PREFIX: Prefix of the submission error file.
+            * "SUBMISSION_ERROR_PREFIX": "suberror-"
+        * RESOURCE_ORDER: How resource are sorted for printing purposes.
+            * "RESOURCE_ORDER": ["core", "mem"]
+        * WATCH_PORT: Port used for the system status daemon.
+            * "WATCH_PORT": 8999
+    
+    """
+        "CONFIG_FOLDER_NAME": "config/",
+        "RESULTS_FOLDER_NAME": "results/",
+        "SCHEDULE_OUTPUT": {
+            "format": "{job_id};{user};{queue_time}__{assignations}__{start_time};{end_time};{total_nodes};{total_cpu};{total_mem};{expected_duration};",
+            "attributes": {
+                "job_id": ("id", "str"),
+                "user": ("user_id", "str"),
+                "queue_time": ("queued_time", "accasim.utils.misc.str_datetime"),
+                "start_time": ("start_time", "accasim.utils.misc.str_datetime"),
+                "end_time": ("end_time", "accasim.utils.misc.str_datetime"),
+                "assignations": ("assigned_nodes", "requested_resources", "accasim.utils.misc.str_resources"),
+                "total_nodes": ("requested_nodes", "int"),
+                "total_cpu": ("core", "int"),
+                "total_mem": ("mem", "int"),
+                "expected_duration": ("expected_duration", "int")
+            }
+        },
+        "PPRINT_SCHEDULE_OUTPUT": {
+            "format": "{:>5} {:>15} {:^19} {:^19} {:>8} {:>8} {:>8} {:>5} {:>4} {:>10} {:<20}",
+            "order": ["n", "job_id", "start_time", "end_time", "wtime", "rtime", "slowdown", "nodes", "core", "mem",
+                      "assigned_nodes"],
+            "attributes": {
+                "n": ("end_order", "int"),
+                "job_id": ("id", "str"),
+                "start_time": ("start_time", "accasim.utils.misc.str_datetime"),
+                "end_time": ("end_time", "accasim.utils.misc.str_datetime"),
+                "wtime": ("waiting_time", "int"),
+                "rtime": ("running_time", "int"),
+                "slowdown": ("slowdown", "float"),
+                "nodes": ("requested_nodes", "int"),
+                "core": ("core", "int"),
+                "mem": ("mem", "int"),
+                "assigned_nodes": ("assigned_nodes", "accasim.utils.misc.str_nodes")
+            }
+        },
+        "SCHED_PREFIX": "sched-",
+        "PPRINT_PREFIX": "pprint-",
+        "STATISTICS_PREFIX": "stats-",
+        "BENCHMARK_PREFIX": "bench-",
+        "SUBMISSION_ERROR_PREFIX": "suberror-",
+        "RESOURCE_ORDER": ["core", "mem"],
+        "WATCH_PORT": 8999
 }
 
 
@@ -164,7 +274,7 @@ def workload_parser(workload_line, attrs=None, avoid_data_tokens=[';']):
     reg_exp = r''
     for _key in _sequence:
         reg_exp += _dict[_key][0].format(_key)
-    p = re.compile(reg_exp)
+    p = compile(reg_exp)
     _matches = p.match(workload_line)
     _dict_line = _matches.groupdict()
     return {key: _dict[key][1](_dict_line[key]) for key in _sequence}
@@ -187,7 +297,6 @@ def sort_file(input_filepath, lines=None, sort_function=default_sorting_function
 
     """
     assert (callable(sort_function))
-    logging.debug('Sorting File: %s ' % (input_filepath))
     with open(input_filepath) as f:
         sorted_file = list(f if not lines else islice(f, lines))
         sorted_file.sort(
@@ -195,7 +304,6 @@ def sort_file(input_filepath, lines=None, sort_function=default_sorting_function
         )
     if output_filepath is None:
         output_filepath = input_filepath
-    logging.debug("Writing sorted file to %s" % (output_filepath))
     queued_times = sorted_list()
     with open(output_filepath, 'w') as f:
         for line in sorted_file:
@@ -254,123 +362,11 @@ def from_isodatetime_2_timestamp(dtime):
     :return: Timestamp of the dtime 
     
     """
-    p = re.compile(r'(\d{4})-(\d{2})-(\d{2})\s(\d{2}):(\d{2}):(\d{2})')
+    p = compile(r'(\d{4})-(\d{2})-(\d{2})\s(\d{2}):(\d{2}):(\d{2})')
     m = p.search(dtime).groups()
     # year, month, day, hour, minute, second, microsecond
     t = datetime(year=int(m[0]), month=int(m[1]), day=int(m[2]), hour=int(m[3]), minute=int(m[4]), second=int(m[5]))
     return int(t.timestamp())
-
-
-class system_status:
-    """
-    
-    Wathcer Daemon allows to track the simulation process through command line querying.
-    
-    """
-    MAX_LENGTH = 2048
-
-    def __init__(self, port, functions):
-        """
-    
-        System_status daemon constructor
-        
-        :param port: Port of the system_status daemon
-        :param functions: Available functions to call for data.
-    
-        """
-        self.server_address = ['', port]
-        af = socket.AF_INET
-        self.sock = socket.socket(af, socket.SOCK_STREAM)
-        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.sock.settimeout(1)
-        self.thread = None
-        self.hastofinish = False
-        self.const = CONSTANT()
-        self.functions = functions
-
-    def start(self):
-        """
-    
-        Start the daemon
-    
-        """
-        self.thread = threading.Thread(target=self.listenForRequests)
-        self.hastofinish = False
-        self.thread.start()
-
-    def listenForRequests(self):
-        """
-    
-        Listening for requests
-    
-        """
-        # Listen for incoming connections
-        # We retry binding the socket as long as we don't find a valid, unused port
-        while True:
-            try:
-                self.sock.bind(tuple(self.server_address))
-                break
-            except socket.error:
-                self.server_address[1] += 1
-
-        self.sock.listen(5)
-
-        while not self.hastofinish:
-            try:
-                connection, client_address = self.sock.accept()
-                with connection:
-                    # print('connection from %s' % (client_address[0]))
-                    data = json.loads(connection.recv(self.MAX_LENGTH).decode())
-                    if isinstance(data, str):
-                        response = {}
-                        response['actual_time'] = str(str_datetime(self.call_inner_function('current_time_function')))
-                        if data == 'progress':
-                            response['input_filepath'] = self.const.input_filepath
-                            response['progress'] = os.path.getsize(self.const.sched_output_filepath) / os.path.getsize(
-                                self.const.input_filepath)
-                            response['time'] = time.clock() - self.const.start_time
-                        elif data == 'usage':
-                            response['simulation_status'] = self.call_inner_function('simulated_status_function')
-                            response['usage'] = self.call_inner_function('usage_function')
-                        elif data == 'all':
-                            response['input_filepath'] = self.const.input_filepath
-                            response['progress'] = os.path.getsize(self.const.sched_output_filepath) / os.path.getsize(
-                                self.const.input_filepath)
-                            response['time'] = time.clock() - self.const.start_time
-                            response['simulation_status'] = self.call_inner_function('simulated_status_function')
-                            response['usage'] = self.call_inner_function('usage_function')
-                        connection.sendall(json.dumps(response).encode())
-                    connection.close()
-            except socket.timeout:
-                pass
-        self.sock.close()
-
-    def call_inner_function(self, name):
-        """
-    
-        Call a function and retrives it results
-    
-        :param name: name of the function 
-    
-        """
-        if name in self.functions:
-            _func = self.functions[name]
-            if callable(_func):
-                return _func()
-            else:
-                return _func
-        raise Exception('{} was no defined'.format(name))
-
-    def stop(self):
-        """
-    
-        Stop the daemon
-    
-        """
-        self.hastofinish = True
-        if hasattr(self, 'timedemon'):
-            self.timedemon.stop()
-
 
 def generate_config(config_fp, **kwargs):
     """
@@ -385,14 +381,14 @@ def generate_config(config_fp, **kwargs):
     for k, v in kwargs.items():
         _local[k] = v
     with open(config_fp, 'w') as c:
-        json.dump(_local, c, indent=2)
+        dump(_local, c, indent=2)
 
 
 def hinted_tuple_hook(obj):
     """
     
     Decoder for specific object of json files, for preserving the type of the object.
-    It's used with the json.load function.
+    It's used with the load function.
     
     """
     if '__tuple__' in obj:
@@ -413,8 +409,60 @@ def load_config(config_fp):
     """
     _dict = None
     with open(config_fp) as c:
-        _dict = json.load(c, object_hook=hinted_tuple_hook)
+        _dict = load(c, object_hook=hinted_tuple_hook)
     return _dict
+
+def clean_results(*args):
+    """
+
+    Removes the filepaths passed as argument
+
+    :param \*args: List of filepaths 
+
+    """
+    for fp in args:
+        if path.isfile(fp) and path.exists(fp):
+            remove(fp)
+
+def obj_assertion(obj, class_type, error_msg=None, msg_args=None):
+    """
+
+    :param obj:
+    :param class_type:
+    :param error_msg:
+    :param msg_args:
+    :return:
+    """
+    if error_msg:
+        assert (isinstance(obj, class_type)), error_msg.format(*msg_args)
+        return
+    assert (isinstance(obj, class_type))
+
+
+def list_class_assertion(_list, class_type, allow_empty=False, error_msg='List class error exception.{}', msg_args=None):
+    """
+
+    :param _list:
+    :param class_type:
+    :param allow_empty:
+    :param error_msg:
+    :param msg_args:
+    :return:
+    """
+    if not allow_empty: 
+        assert (len(_list) > 0), 'Empty list not allowed.'
+    try:
+        if error_msg:
+            assert (
+                isinstance(_list, list) and all(
+                    [issubclass(_class, class_type) for _class in _list])), error_msg.format(
+                '' if not msg_args else msg_args)
+            return
+        assert (
+            isinstance(_list, list) and all([issubclass(_class, class_type) for _class in _list]))
+    except TypeError:
+        if error_msg:
+            raise Exception(error_msg.format('' if not msg_args else msg_args))
 
 
 class Singleton(object):
@@ -535,12 +583,11 @@ class str_datetime:
 
 class str_time:
     def __init__(self, secs):
-        self.str_time = time.gmtime(int(secs))  # time.strftime('%H:%M:%S', time.gmtime(int(secs)))
+        self.str_time = gmtime(int(secs))  # time.strftime('%H:%M:%S', time.gmtime(int(secs)))
 
     def __str__(self):
         return self.str_time
-
-
+    
 class str_resources:
     SEPARATOR = '#'
     REGEX = '[\d+;|' + SEPARATOR + ']+'
@@ -559,6 +606,32 @@ class str_resources:
         return self.SEPARATOR.join(
             [';'.join([node.split('_')[1]] + [str(self.resources[_k]) for _k in self.order]) for node in
              self.nodes]) + self.SEPARATOR
+
+
+CUSTOM_TYPES = {
+    'accasim.utils.misc.str_datetime': str_datetime.REGEX_GROUP,
+    'accasim.utils.misc.str_resources': str_resources.REGEX_GROUP,
+}
+def type_regexp(_type, new_regexp={}):
+    """
+
+    :param _type:
+    :param new_regexp:
+    :return:
+    """
+    STR_TYPE = 'str'
+    INT_TYPE = 'int'
+
+    if _type == STR_TYPE:
+        return '(?P<{}>[0-9a-zA-Z_\-\.@]+)'
+    if _type == INT_TYPE:
+        return '(?P<{}>\d+)'
+    elif _type in CUSTOM_TYPES:
+        return CUSTOM_TYPES[_type]
+    elif _type in new_regexp:
+        return new_regexp[_type]
+    else:
+        raise Exception('The regular expression for the {} type is not defined.')
 
 
 class str_nodes:
@@ -954,204 +1027,112 @@ class FrozenDict(Mapping):
                 self._hash ^= hash(pair)
         return self._hash
 
-
-def clean_results(*args):
-    """
-
-    Removes the filepaths passed as argument
-
-    :param \*args: List of filepaths 
-
-    """
-    for fp in args:
-        if os.path.isfile(fp) and os.path.exists(fp):
-            os.remove(fp)
-
-
-class DEFAULT_SIMULATION:
+class SystemStatus:
     """
     
-    Default and base simulation parameters. The following parameters are loaded into the :class:`.CONSTANT`.
-    This constants values can be overridden by passing as kwargs in the :class:`accasim.base.simulator_class.hpc_simulator` class instantiation.
-    
-    :Note:
-    
-        * CONFIG_FOLDER_NAME: Folder where the configuration files are.
-            * "CONFIG_FOLDER_NAME": "config/"
-        * RESULTS_FOLDER_NAME: Folder where the configuration files will be.
-            * "RESULTS_FOLDER_NAME": "results/"
-        * SCHEDULE_OUTPUT: Format of the dispatching plan file.
-            * "SCHEDULE_OUTPUT": 
-            
-            .. code:: 
-
-                {
-                    "format": "{job_id};{user};{queue_time}__{assignations}__{start_time};{end_time};{total_nodes};{total_cpu};{total_mem};{expected_duration};",
-                    "attributes": {
-                        "job_id": ("id", "str"),
-                        "user": ("user_id", "str"),
-                        "queue_time": ("queued_time", "accasim.utils.misc.str_datetime"),
-                        "start_time": ("start_time", "accasim.utils.misc.str_datetime"),
-                        "end_time": ("end_time", "accasim.utils.misc.str_datetime"),
-                        "assignations": ("assigned_nodes", "requested_resources", "accasim.utils.misc.str_resources"),
-                        "total_nodes": ("requested_nodes", "int"),
-                        "total_cpu": ("core", "int"),
-                        "total_mem": ("mem", "int"),
-                        "expected_duration": ("expected_duration", "int")      
-                    }
-                }
-                
-        * PPRINT_SCHEDULE_OUTPUT: Format of the dispatching plan file in pretty print version. (Human readable version).
-            * "PPRINT_SCHEDULE_OUTPUT":
-            
-            .. code:: 
-            
-                {
-                    "format": "{:>5} {:>15} {:^19} {:^19} {:>8} {:>8} {:>8} {:>5} {:>4} {:>10} {:<20}",
-                    "order": ["n", "job_id", "start_time", "end_time", "wtime", "rtime", "slowdown", "nodes", "core", "mem", "assigned_nodes"],
-                    "attributes":{
-                        "n": ("end_order", "int"),
-                        "job_id": ("id", "str"),
-                        "start_time": ("start_time", "accasim.utils.misc.str_datetime"),
-                        "end_time": ("end_time", "accasim.utils.misc.str_datetime"),
-                        "wtime": ("waiting_time", "int"),
-                        "rtime": ("running_time", "int"),
-                        "slowdown": ("slowdown", "float"),
-                        "nodes": ("requested_nodes", "int"),
-                        "core": ("core", "int"),
-                        "mem": ("mem", "int"),
-                        "assigned_nodes": ("assigned_nodes", "accasim.utils.misc.str_nodes")
-                    }
-                }
-                
-        * SCHED_PREFIX: Prefix of the dispatching plan file.
-            * "SCHED_PREFIX": "sched-"
-        * PPRINT_PREFIX: Prefix of the pprint file.
-            * "PPRINT_PREFIX": "pprint-"
-        * STATISTICS_PREFIX: Prefix of the statistic file.
-            * "STATISTICS_PREFIX": "stats-"
-        * BENCHMARK_PREFIX: Prefix of the benchmark file.
-            * "BENCHMARK_PREFIX": "bench-"
-        * SUBMISSION_ERROR_PREFIX: Prefix of the submission error file.
-            * "SUBMISSION_ERROR_PREFIX": "suberror-"
-        * RESOURCE_ORDER: How resource are sorted for printing purposes.
-            * "RESOURCE_ORDER": ["core", "mem"]
-        * WATCH_PORT: Port used for the system status daemon.
-            * "WATCH_PORT": 8999
+    Wathcer Daemon allows to track the simulation process through command line querying.
     
     """
+    MAX_LENGTH = 2048
 
-    parameters = {
-        "CONFIG_FOLDER_NAME": "config/",
-        "RESULTS_FOLDER_NAME": "results/",
-        "SCHEDULE_OUTPUT": {
-            "format": "{job_id};{user};{queue_time}__{assignations}__{start_time};{end_time};{total_nodes};{total_cpu};{total_mem};{expected_duration};",
-            "attributes": {
-                "job_id": ("id", "str"),
-                "user": ("user_id", "str"),
-                "queue_time": ("queued_time", "accasim.utils.misc.str_datetime"),
-                "start_time": ("start_time", "accasim.utils.misc.str_datetime"),
-                "end_time": ("end_time", "accasim.utils.misc.str_datetime"),
-                "assignations": ("assigned_nodes", "requested_resources", "accasim.utils.misc.str_resources"),
-                "total_nodes": ("requested_nodes", "int"),
-                "total_cpu": ("core", "int"),
-                "total_mem": ("mem", "int"),
-                "expected_duration": ("expected_duration", "int")
-            }
-        },
-        "PPRINT_SCHEDULE_OUTPUT": {
-            "format": "{:>5} {:>15} {:^19} {:^19} {:>8} {:>8} {:>8} {:>5} {:>4} {:>10} {:<20}",
-            "order": ["n", "job_id", "start_time", "end_time", "wtime", "rtime", "slowdown", "nodes", "core", "mem",
-                      "assigned_nodes"],
-            "attributes": {
-                "n": ("end_order", "int"),
-                "job_id": ("id", "str"),
-                "start_time": ("start_time", "accasim.utils.misc.str_datetime"),
-                "end_time": ("end_time", "accasim.utils.misc.str_datetime"),
-                "wtime": ("waiting_time", "int"),
-                "rtime": ("running_time", "int"),
-                "slowdown": ("slowdown", "float"),
-                "nodes": ("requested_nodes", "int"),
-                "core": ("core", "int"),
-                "mem": ("mem", "int"),
-                "assigned_nodes": ("assigned_nodes", "accasim.utils.misc.str_nodes")
-            }
-        },
-        "SCHED_PREFIX": "sched-",
-        "PPRINT_PREFIX": "pprint-",
-        "STATISTICS_PREFIX": "stats-",
-        "BENCHMARK_PREFIX": "bench-",
-        "SUBMISSION_ERROR_PREFIX": "suberror-",
-        "RESOURCE_ORDER": ["core", "mem"],
-        "WATCH_PORT": 8999
-    }
-    """dict: Default Simulation parameters """
+    def __init__(self, port, functions):
+        """
+    
+        SystemStatus daemon constructor
+        
+        :param port: Port of the SystemStatus daemon
+        :param functions: Available functions to call for data.
+    
+        """
+        self.server_address = ['', port]
+        af = socket.AF_INET
+        self.sock = socket.socket(af, socket.SOCK_STREAM)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.sock.settimeout(1)
+        self.thread = None
+        self.hastofinish = False
+        self.const = CONSTANT()
+        self.functions = functions
 
+    def start(self):
+        """
+    
+        Start the daemon
+    
+        """
+        self.thread = Thread(target=self.listenForRequests)
+        self.hastofinish = False
+        self.thread.start()
 
-def obj_assertion(obj, class_type, error_msg=None, msg_args=None):
-    """
+    def listenForRequests(self):
+        """
+    
+        Listening for requests
+    
+        """
+        # Listen for incoming connections
+        # We retry binding the socket as long as we don't find a valid, unused port
+        while True:
+            try:
+                self.sock.bind(tuple(self.server_address))
+                break
+            except socket.error:
+                self.server_address[1] += 1
 
-    :param obj:
-    :param class_type:
-    :param error_msg:
-    :param msg_args:
-    :return:
-    """
-    if error_msg:
-        assert (isinstance(obj, class_type)), error_msg.format(*msg_args)
-        return
-    assert (isinstance(obj, class_type))
+        self.sock.listen(5)
 
+        while not self.hastofinish:
+            try:
+                connection, client_address = self.sock.accept()
+                with connection:
+                    # print('connection from %s' % (client_address[0]))
+                    data = loads(connection.recv(self.MAX_LENGTH).decode())
+                    if isinstance(data, str):
+                        response = {}
+                        response['actual_time'] = str(str_datetime(self.call_inner_function('current_time_function')))
+                        if data == 'progress':
+                            response['input_filepath'] = self.const.input_filepath
+                            response['progress'] = path.getsize(self.const.sched_output_filepath) / path.getsize(
+                                self.const.input_filepath)
+                            response['time'] = clock() - self.const.start_time
+                        elif data == 'usage':
+                            response['simulation_status'] = self.call_inner_function('simulated_status_function')
+                            response['usage'] = self.call_inner_function('usage_function')
+                        elif data == 'all':
+                            response['input_filepath'] = self.const.input_filepath
+                            response['progress'] = path.getsize(self.const.sched_output_filepath) / path.getsize(
+                                self.const.input_filepath)
+                            response['time'] = clock() - self.const.start_time
+                            response['simulation_status'] = self.call_inner_function('simulated_status_function')
+                            response['usage'] = self.call_inner_function('usage_function')
+                        connection.sendall(dumps(response).encode())
+                    connection.close()
+            except socket.timeout:
+                pass
+        self.sock.close()
 
-def list_class_assertion(_list, class_type, allow_empty=False, error_msg='List class error exception.{}', msg_args=None):
-    """
+    def call_inner_function(self, name):
+        """
+    
+        Call a function and retrives it results
+    
+        :param name: name of the function 
+    
+        """
+        if name in self.functions:
+            _func = self.functions[name]
+            if callable(_func):
+                return _func()
+            else:
+                return _func
+        raise Exception('{} was no defined'.format(name))
 
-    :param _list:
-    :param class_type:
-    :param allow_empty:
-    :param error_msg:
-    :param msg_args:
-    :return:
-    """
-    if not allow_empty: 
-        assert (len(_list) > 0), 'Empty list not allowed.'
-    try:
-        if error_msg:
-            assert (
-                isinstance(_list, list) and all(
-                    [issubclass(_class, class_type) for _class in _list])), error_msg.format(
-                '' if not msg_args else msg_args)
-            return
-        assert (
-            isinstance(_list, list) and all([issubclass(_class, class_type) for _class in _list]))
-    except TypeError:
-        if error_msg:
-            raise Exception(error_msg.format('' if not msg_args else msg_args))
-
-
-CUSTOM_TYPES = {
-    'accasim.utils.misc.str_datetime': str_datetime.REGEX_GROUP,
-    'accasim.utils.misc.str_resources': str_resources.REGEX_GROUP,
-}
-
-
-def type_regexp(_type, new_regexp={}):
-    """
-
-    :param _type:
-    :param new_regexp:
-    :return:
-    """
-    STR_TYPE = 'str'
-    INT_TYPE = 'int'
-
-    if _type == STR_TYPE:
-        return '(?P<{}>[0-9a-zA-Z_\-\.@]+)'
-    if _type == INT_TYPE:
-        return '(?P<{}>\d+)'
-    elif _type in CUSTOM_TYPES:
-        return CUSTOM_TYPES[_type]
-    elif _type in new_regexp:
-        return new_regexp[_type]
-    else:
-        raise Exception('The regular expression for the {} type is not defined.')
+    def stop(self):
+        """
+    
+        Stop the daemon
+    
+        """
+        self.hastofinish = True
+        if hasattr(self, 'timedemon'):
+            self.timedemon.stop()

@@ -1,13 +1,38 @@
+"""
+MIT License
+
+Copyright (c) 2017 AlessioNetti, cgalleguillosm
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+"""
+
 from collections import deque
 from threading import Thread, Semaphore
+from multiprocessing import Process
 
 
-class async_writer:
+class AsyncWriter:
     """
     This class handles asynchronous IO of files, using a thread and queue-based implementation.
     """
 
-    def __init__(self, path, pre_process_fun=None):
+    def __init__(self, path, pre_process_fun=None, buffer_size=10000):
         """
         Constructor for the class
 
@@ -15,16 +40,13 @@ class async_writer:
         :param pre_process_fun: A pre-processing function for objects pushed to the queue. It MUST be a function that
             receives an object as input, and returns a string representation of it
         """
-        self._path = path
-        self._outfile = None
         self._toTerminate = False
         self._thread = None
         self._deque = deque()
         self._sem = Semaphore(value=0)
-        if pre_process_fun is None:
-            self._pre_processor = async_writer._dummy_pre_process
-        else:
-            self._pre_processor = pre_process_fun
+        self._buffer_size = buffer_size
+        self._buf_counter = 0
+        self._pre_processor_wrapper = QueueFlusher(path, pre_process_fun)
 
     def push(self, data_obj):
         """
@@ -33,7 +55,10 @@ class async_writer:
         :param data_obj: The object to be pre-processed to string format, and written to output
         """
         self._deque.append(data_obj)
-        self._sem.release()
+        self._buf_counter += 1
+        if self._buf_counter >= self._buffer_size:
+            self._buf_counter = 0
+            self._sem.release()
 
     def start(self):
         """
@@ -51,26 +76,42 @@ class async_writer:
             self._sem.release()
             self._thread.join()
             self._thread = None
-        if self._outfile is not None:
-            self._outfile.close()
-            self._outfile = None
+
         self._deque.clear()
 
     def _working_loop(self):
-        self._outfile = open(self._path, 'a')
         while not self._toTerminate or len(self._deque) > 0:
             self._sem.acquire()
-            if len(self._deque) > 0:
-                entry = self._deque.popleft()
-                str_out = self._pre_processor(entry)
-                if isinstance(str_out, (list, tuple)) and len(str_out) > 1:
-                    for str_el in str_out:
-                        self._outfile.write(str_el)
-                else:
-                    self._outfile.write(str_out)
-        self._outfile.close()
-        self._outfile = None
+            process = Process(target=self._pre_processor_wrapper.flush, args=(self._deque, self._buffer_size))
+            process.start()
+            process.join()
+            counter_pop = 0
+            while counter_pop < self._buffer_size and len(self._deque) > 0:
+                self._deque.popleft()
+                counter_pop += 1
 
     @staticmethod
     def _dummy_pre_process(data_obj):
         return str(data_obj)
+
+class QueueFlusher:
+
+    def __init__(self, path, func=AsyncWriter._dummy_pre_process):
+        self._path = path
+        self._func = func
+
+    def flush(self, data, buffer_size, **kwargs):
+        buffer = ''
+        counter_flushed = 0
+        while counter_flushed < buffer_size and len(data) > 0:
+            entry = data.popleft()
+            str_out = self._func(entry)
+            if isinstance(str_out, (list, tuple)) and len(str_out) > 1:
+                for str_el in str_out:
+                    buffer += str_el
+            else:
+                buffer += str_out
+            counter_flushed += 1
+
+        with open(self._path, 'a') as f:
+            f.write(buffer)

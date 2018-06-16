@@ -21,16 +21,15 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-import re
-from abc import abstractmethod, ABC
-from accasim.utils.misc import CONSTANT, default_swf_parse_config, obj_assertion
-from accasim.base.resource_manager_class import resources_class
-import sys
-from builtins import issubclass
-from math import gcd
-from _functools import reduce
 
-class workload_parser_base(ABC):
+from abc import abstractmethod, ABC
+from re import compile
+
+from accasim.utils.misc import CONSTANT, DEFAULT_SWF_PARSE_CONFIG, obj_assertion
+from accasim.base.resource_manager_class import Resources
+
+
+class WorkloadParserBase(ABC):
     """
     
     Workload Parser Abstract class 
@@ -49,9 +48,9 @@ class workload_parser_base(ABC):
         """
         raise NotImplementedError()
     
-class default_workload_parser(workload_parser_base):
+class DefaultWorkloadParser(WorkloadParserBase):
     def __init__(self):
-        workload_parser_base.__init__(self)
+        WorkloadParserBase.__init__(self)
         """
             workloader_paser is a general class for parsing workload files.
             :param reg_exp: Dictionary where the name of the group is the key and the value
@@ -60,15 +59,17 @@ class default_workload_parser(workload_parser_base):
             :param avoid_token: List of reg_exp to avoid reading lines. The lines that are avoided 
                 won't be readed by the parser. 
         """
-        self.reg_exp_dict, self.avoid_tokens = default_swf_parse_config
+        self.reg_exp, self.avoid_tokens = DEFAULT_SWF_PARSE_CONFIG
+        self.reg_exp_dict = {}
+        self._compile_job_regexp()
+        self._compile_infeasible_regexp()
         
     def feasible_line(self, line):
         """
             :param line: Line to be checked
             :return: True if it can be parse (it does not match to any avoid token), False otherwise.
         """
-        for _token in self.avoid_tokens:
-            p = re.compile(_token)
+        for p in self._compiled_infeasible_regexp:
             if p.fullmatch(line):
                 return False
         return True        
@@ -83,11 +84,7 @@ class default_workload_parser(workload_parser_base):
         """
         if not self.feasible_line(line):
             return None
-        reg_exp = r''
-        for _key, _reg_exp in self.reg_exp_dict.items():
-            reg_exp += _reg_exp[0].format(_key)
-        p = re.compile(reg_exp)
-        _matches = p.match(line)
+        _matches = self._compiled_job_regexp.match(line)
         if not _matches:
             return None
         _dict = {k:self.reg_exp_dict[k][1](v) for k, v in _matches.groupdict().items()}
@@ -106,14 +103,26 @@ class default_workload_parser(workload_parser_base):
             return None 
         return _dict
 
-class reader_class(ABC):
+    def _compile_job_regexp(self):
+        reg_exp = r''
+        for (_key, _reg_exp) in self.reg_exp:
+            self.reg_exp_dict[_key] = _reg_exp
+            reg_exp += _reg_exp[0].format(_key)
+        self._compiled_job_regexp = compile(reg_exp)
+        
+    def _compile_infeasible_regexp(self):
+        self._compiled_infeasible_regexp = []
+        for _token in self.avoid_tokens:
+            self._compiled_infeasible_regexp.append(compile(_token))
+
+class Reader(ABC):
     """
     This class is used to simulate the creation of jobs from HPC users.
     This is an abstract class. The main method is read, which must be implemented to return the set of next submission for the system.
     
     :Note:
     
-        A default implementation is named as default_reader_class. This class read from a single file, and use a SWF parser to extract the jobs.
+        A default implementation is named as DefaultReader. This class read from a single file, and use a SWF parser to extract the jobs.
     
     """
     
@@ -152,9 +161,9 @@ class reader_class(ABC):
         # the next_jobs variable.
         #=======================================================================
         time_samples = time_points
-        next_points, next_jobs = self.reload_jobs(current_time, stime_name)
+        next_points, next_jobs = self._reload_jobs(current_time, stime_name)
         while self.submission_enabled and time_samples >= 0:
-            _dict = self.read(current_time)
+            _dict = self._read(current_time)
             if not _dict:
                 continue
             if self.last_time != _dict[stime_name]:
@@ -172,7 +181,7 @@ class reader_class(ABC):
             
         return (next_points, next_jobs)
     
-    def reload_jobs(self, current_time, stime_name):
+    def _reload_jobs(self, current_time, stime_name):
         """
         
         Takes the already loaded jobs from a previous load process which exceeded the time steps requested.
@@ -195,7 +204,7 @@ class reader_class(ABC):
         return (time_points, jobs_dict)
     
     @abstractmethod
-    def read(self, current_time):
+    def _read(self, current_time):
         """
         
         This method must return a dictionary with all the required keys for covering the job attributes. 
@@ -216,7 +225,7 @@ class reader_class(ABC):
         """
         self.submission_enabled = False
     
-class default_reader_class(reader_class):
+class DefaultReader(Reader):
     """
     
     A default implementation of the reader class. 
@@ -230,30 +239,30 @@ class default_reader_class(reader_class):
         
         :param filepath: Filepath to the workload file.
         :param job_factory: A :class:`.job_factory` object
-        :param parser: An implementation of :class:`.workload_parser_base` object. By default, :class:`.default_workload_parser` is used to handle SWF files. 
+        :param parser: An implementation of :class:`.WorkloadParserBase` object. By default, :class:`.DefaultWorkloadParser` is used to handle SWF files. 
         :param tweak_function: Function that allows to tweak a dictionary.
         :param max_lines: Optional. Number of lines to read. None for reading the entire file.
         :param equivalence: Optional. Transforms from workload format a key:value to a new key with a new value in regards of the equivalence.
         
         """
-        reader_class.__init__(self, job_factory)
+        Reader.__init__(self, job_factory)
         self.parser = None
         self.tweak_function = None
         if parser:
-            if not isinstance(parser, workload_parser_base):
-                assert(issubclass(parser, workload_parser_base)), 'Only :class:`.workload_parser_base` class can be used as parsers'
+            if not isinstance(parser, WorkloadParserBase):
+                assert(issubclass(parser, WorkloadParserBase)), 'Only :class:`.WorkloadParserBase` class can be used as parsers'
                 self.parser = parser()
             else:
-                assert(isinstance(parser, workload_parser_base)), 'Only :class:`.workload_parser_base` object can be used as parsers'
+                assert(isinstance(parser, WorkloadParserBase)), 'Only :class:`.WorkloadParserBase` object can be used as parsers'
                 self.parser = parser                
         else:
-            self.parser = default_workload_parser()
+            self.parser = DefaultWorkloadParser()
             if not tweak_function:
-                resources = self.job_factory.resource_manager.resources
-                self.tweak_function = default_tweak_class(start_time, equivalence, resources)
+                _resources = self.job_factory.resource_manager.system_resources()
+                self.tweak_function = DefaultTweaker(start_time, _resources, equivalence)
 
         if tweak_function:
-            assert(isinstance(tweak_function, tweak_class)), 'The tweak_function argument must be an implementation of the :class:`.tweak_class`'
+            assert(isinstance(tweak_function, Tweaker)), 'The tweak_function argument must be an implementation of the :class:`.Tweaker`'
             self.tweak_function = tweak_function
         elif not self.tweak_function:
             self.tweak_function = None
@@ -287,7 +296,7 @@ class default_reader_class(reader_class):
             self.EOF = False    
         return self.file
     
-    def read_next_lines(self, n_lines=1):
+    def _read_next_lines(self, n_lines=1):
         """
 
         :param n_lines:
@@ -310,13 +319,13 @@ class default_reader_class(reader_class):
             return lines
         return None
     
-    def read(self, current_time=0):
+    def _read(self, current_time=0):
         """
 
         :param current_time:
         :return:
         """
-        line = self.read_next_lines()
+        line = self._read_next_lines()
         # No more lines. End of File
         if not line:
             return None
@@ -327,7 +336,7 @@ class default_reader_class(reader_class):
             parsed_line = self.tweak_function.tweak_function(parsed_line)
         return parsed_line
 
-class tweak_class(ABC):
+class Tweaker(ABC):
     
     def __init__(self, **kwargs):
         """
@@ -345,35 +354,17 @@ class tweak_class(ABC):
         """
         pass
 
-class default_tweak_class(tweak_class):
+class DefaultTweaker(Tweaker):
 
-    def __init__(self, start_time, equivalence, system_resources):
+    def __init__(self, start_time, system_resources, equivalence):
         """
 
         :param start_time:
         :param equivalence:
         """
-        obj_assertion(system_resources, resources_class)
+        obj_assertion(system_resources, Resources)
         self.start_time = start_time
-        self.equivalence = equivalence
-        #self.generic_request = self._min_max_generic_request([d['resources'] for d in system_resources.definition])
-        
-    #===========================================================================
-    # def _min_max_generic_request(self, system_resources):
-    #     """
-    #         Finds the GCD for all the node groups in the system. It will be useful to pack job in less requested nodes.             
-    #     """
-    #     _min = { r: 0 for r in list(set().union(*(d.keys() for d in system_resources)))}
-    #     for res in _min:
-    #         if len(system_resources) > 2:
-    #         
-    #             node_res = [node.get(res, 0) for node in system_resources]
-    #             _min[res] = 0 if 0 in node_res else reduce(gcd, node_res)
-    #         else:
-    #             _min[res] = d.get(res, 0)
-    #     return _min
-    #===========================================================================
-        
+        self.equivalence = equivalence if equivalence else {'processor': {'core': 1}}       
         
     def tweak_function(self, _dict):
         """
@@ -398,22 +389,6 @@ class default_tweak_class(tweak_class):
         
         """
         _processors = _dict['total_processors']
-#===============================================================================
-#         debug = False
-#         if debug:
-#             max_min_request = self.generic_request
-#             print('Core Requested {} - MaxMin {}'.format(_processors, max_min_request['core']))
-#             min_core = gcd(max_min_request['core'], _processors)
-#             print('Core Requested {} - MaxMin {}: {} Fit'.format(_processors, max_min_request['core'], min_core))
-# 
-#             print('Mem Requested {} - MaxMin {}'.format(_dict['mem'], max_min_request['mem']))
-#             min_mem = gcd(max_min_request['mem'], _dict['mem'] * _processors)
-#             print('Mem Requested {} - MaxMin {}: {} Fit'.format(_dict['mem'], max_min_request['mem'], min_mem))
-#             
-#             _min = gcd(min_core, min_mem)
-#             print('Job packing {}'.format(_min))
-#             raise Exception('Testing')            
-#===============================================================================
         
         _dict['requested_resources'] = {}
         for k, v in self.equivalence.items():
@@ -424,7 +399,6 @@ class default_tweak_class(tweak_class):
             #===================================================================
             if k == 'processor':
                 for k2, v2 in v.items():
-                    # cores_per_node = self.generic_request[k2]
                     _dict[k2] = v2 * _processors
                     _dict['requested_resources'][k2] = v2
         _dict['requested_nodes'] = _processors

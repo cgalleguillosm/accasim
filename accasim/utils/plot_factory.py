@@ -25,20 +25,22 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.backends.backend_pdf import PdfPages
 from math import floor
-from accasim.utils.reader_class import default_reader_class
-from accasim.utils.misc import load_config, from_isodatetime_2_timestamp as _timestamp, str_resources
-from accasim.utils.file import path_leaf, load_jsonfile
-from accasim.base.resource_manager_class import resources_class
-from accasim.experimentation.schedule_parser import define_result_parser
-from accasim.utils.misc import DEFAULT_SIMULATION
 from copy import deepcopy
 from os.path import splitext as _splitext, join as _join
 from scipy.signal import savgol_filter
 from os.path import isfile
 import numpy as np
 
+from accasim.utils.reader_class import DefaultReader
+from accasim.utils.misc import load_config, from_isodatetime_2_timestamp as _timestamp, str_resources
+from accasim.utils.file import path_leaf, load_jsonfile
+from accasim.base.resource_manager_class import Resources
+from accasim.experimentation.schedule_parser import define_result_parser
+from accasim.utils.misc import DEFAULT_SIMULATION
 
-class plot_factory:
+
+
+class PlotFactory:
     """
     A class for plot production and schedule files pre-processing.
     
@@ -218,7 +220,7 @@ class plot_factory:
         """
         if not self._preprocessed:
             self.pre_process()
-            print("Plot_factory: Files were not pre-processed yet. Calling the pre_process method.")
+            print("PlotFactory: Files were not pre-processed yet. Calling the pre_process method.")
 
         if type == self.SLOWDOWN_PLOT and self._plot_class == self.SCHEDULE_CLASS:
             self.box_plot(self._slowdowns, title=title, ylabel='Slowdown', scale=scale, xlim=xlim, ylim=ylim, figsize=figsize, meansonly=meansonly, output=output, groups=groups, **kwargs)
@@ -353,9 +355,9 @@ class plot_factory:
                 _resource_order = self._resource_order
 
             if self._workload_parser is not None:
-                reader = default_reader_class(filepath, parser=self._workload_parser, equivalence=equiv)
+                reader = DefaultReader(filepath, parser=self._workload_parser, equivalence=equiv)
             else:
-                reader = default_reader_class(filepath, parser=define_result_parser(_sim_params_path), equivalence=equiv)
+                reader = DefaultReader(filepath, parser=define_result_parser(_sim_params_path), equivalence=equiv)
 
             slowdowns = []
             timePoints = set()
@@ -573,15 +575,15 @@ class plot_factory:
 
     def _generateSystemConfig(self, config_path):
         """
-        Generates a resources_class object from a system configuration file.
+        Generates a Resources object from a system configuration file.
         
         :param config_path: the path to the config file;
-        :return: the resources_class job, and the resource equivalence;
+        :return: the Resources job, and the resource equivalence;
         """
         try:
             config = load_config(config_path)
             equiv = config.pop('equivalence', {})
-            resources = resources_class(**config, node_prefix='')
+            resources = Resources(**config, node_prefix='')
             return resources, equiv
         except Exception as e:
             if config_path != '':
@@ -1033,7 +1035,7 @@ if __name__=='__main__':
                   'Path/to/benchmark/file2']
     resultlabel = ['Label',
                    'Label2']
-    plots = plot_factory('benchmark')
+    plots = PlotFactory('benchmark')
     plots.set_files(resultpath,resultlabel)
     plots.pre_process()
     plots.produce_plot(type='scalability', title='My Scalability Plot')

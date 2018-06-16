@@ -21,18 +21,19 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-from builtins import str
-from os.path import join as _join
-from accasim.base.allocator_class import allocator_base
-from accasim.base.scheduler_class import scheduler_base
-from accasim.base.simulator_class import hpc_simulator
+from os.path import join
+from time import sleep
+
+from accasim.base.allocator_class import AllocatorBase
+from accasim.base.scheduler_class import SchedulerBase
+from accasim.base.simulator_class import Simulator
 from accasim.utils.file import file_exists, dir_exists, remove_dir, find_file_by
 from accasim.utils.misc import obj_assertion, list_class_assertion
-from accasim.utils.plot_factory import plot_factory
+from accasim.utils.plot_factory import PlotFactory
 from accasim.experimentation.schedule_parser import define_result_parser
 
 
-class experiment_class:
+class Experiment:
     CUSTOM_ATTRIBUTES = {'SEPARATOR': '_SEPARATOR', 'RESULTS_FOLDER': '_RESULTS_FOLDER',
                          'SCHEDULE_PREFIX': '_SCHEDULE_PREFIX', 'BENCHMARK_PREFIX': '_BENCHMARK_PREFIX'}
 
@@ -47,8 +48,8 @@ class experiment_class:
     _BENCHMARK_PREFIX = 'bench-'
     _SIMULATOR_PARAMS_FILENAME = 'simulator_parameters.json'
     _PLOT_INPUTS = {
-        plot_factory.SCHEDULE_CLASS: _SCHEDULE_PREFIX,
-        plot_factory.BENCHMARK_CLASS: _BENCHMARK_PREFIX
+        PlotFactory.SCHEDULE_CLASS: _SCHEDULE_PREFIX,
+        PlotFactory.BENCHMARK_CLASS: _BENCHMARK_PREFIX
     }
 
     def __init__(self, name, workload, sys_config, simulator_config=None, job_factory=None,
@@ -97,7 +98,7 @@ class experiment_class:
         """
         Add a dispatcher to the set of dispatchers.
 
-        The dispatcher must be supplied in the form of a fully instanced scheduler_base object, which includes an
+        The dispatcher must be supplied in the form of a fully instanced SchedulerBase object, which includes an
         allocator as well.
 
         :param name: Dispatcher name.
@@ -106,8 +107,8 @@ class experiment_class:
         """
         obj_assertion(name, str, 'Received {} type as dispatcher name. str type expected.',
                       [dispatcher.__class__.__name__])
-        obj_assertion(dispatcher, scheduler_base, 'Received {} type as dispatcher. {} subclass expected.',
-                      [dispatcher.__class__.__name__, scheduler_base.__name__])
+        obj_assertion(dispatcher, SchedulerBase, 'Received {} type as dispatcher. {} subclass expected.',
+                      [dispatcher.__class__.__name__, SchedulerBase.__name__])
         if name in self.dispatchers:
             print('Dispatcher {} already set. Skipping it'.format(name))
         self.dispatchers[name] = dispatcher
@@ -119,16 +120,16 @@ class experiment_class:
         The input is given as a list of class names for schedulers and allocators: the method will then automatically
         generate all objects corresponding to all possible combinations of the supplied schedulers and allocators.
 
-        :param scheduler_list: List of schedulers (:class:`accasim.base.scheduler_class.scheduler_base`).
-        :param allocator_list: List of allocators (:class:`accasim.base.allocator_class.allocator_base`).
+        :param scheduler_list: List of schedulers (:class:`accasim.base.scheduler_class.SchedulerBase`).
+        :param allocator_list: List of allocators (:class:`accasim.base.allocator_class.AllocatorBase`).
 
         """
-        list_class_assertion(scheduler_list, scheduler_base,
+        list_class_assertion(scheduler_list, SchedulerBase,
                              error_msg='Scheduler objects must belong only to {} subclass',
-                             msg_args=[scheduler_base.__name__])
-        list_class_assertion(allocator_list, allocator_base,
+                             msg_args=[SchedulerBase.__name__])
+        list_class_assertion(allocator_list, AllocatorBase,
                              error_msg='Allocator objects must belong only to {} subclass',
-                             msg_args=[allocator_base.__name__])
+                             msg_args=[AllocatorBase.__name__])
 
         for _alloc_class in allocator_list:
             _alloc = _alloc_class()
@@ -144,12 +145,12 @@ class experiment_class:
 
         :param dispatcher: A dispatcher instantiation
         """
-        simulator = hpc_simulator(self.workload, self.sys_config, dispatcher,
+        simulator = Simulator(self.workload, self.sys_config, dispatcher,
             simulator_config=self.simulator_config, **
             self.SIMULATOR_ATTRIBUTES)
         simulator.start_simulation(**self.RUN_SIMULATOR_ATTRIBUTES)
 
-    def run_simulation(self, generate_plot=True):
+    def run_simulation(self, generate_plot=False, wait=10):
         """
         Starts the simulation process. Its uses each instance of dispatching method to create the experiment.
         After that all experiments are run, the comparing plots are generated the :attr:`.generate_plot` option is set as True.
@@ -167,6 +168,7 @@ class experiment_class:
             print('{}/{}: Starting simulation of {}'.format(i + 1, _total, _name))
             self._run_simulation(_dispatcher)
             print('\n')
+            sleep(wait)
         
         # Generate all plots available in the plot factory class
         if generate_plot:
@@ -203,28 +205,28 @@ class experiment_class:
         filepaths = []
         for _name, _path in dispatcher_results.items():
             labels.append(_name)
-            filepaths.append(_join(_path, find_file_by(_path, **kwargs)))
+            filepaths.append(join(_path, find_file_by(_path, **kwargs)))
         return labels, filepaths
 
     def generate_plots(self, experiment_folder):
         """
-        Generate the all plots available in the :class:`accasim.utils.plot_factory` class.
+        Generate the all plots available in the :class:`accasim.utils.PlotFactory` class.
 
         All plots are generated using the default parameters for each plot type. If users wish to produce plots with
-        custom features and attributes, a plot_factory object with its produce_plot method must be explicitly used,
+        custom features and attributes, a PlotFactory object with its produce_plot method must be explicitly used,
         pointing at the result files produced by the simulations.
         
         :param experiment_folder: Path where the plots will be placed.
         """
-        for plot_class, plot_types in plot_factory.PLOT_TYPES.items():
+        for plot_class, plot_types in PlotFactory.PLOT_TYPES.items():
             _prefix = self._PLOT_INPUTS[plot_class]
             resultlabel, resultpath = self.retrieve_filepaths(self.results, prefix=_prefix)
-            _plot_factory = plot_factory(plot_class, self._SIMULATOR_PARAMS_FILENAME, config=self.sys_config,
+            _plot_factory = PlotFactory(plot_class, self._SIMULATOR_PARAMS_FILENAME, config=self.sys_config,
                                          workload_parser=self.parser)
             _plot_factory.set_files(resultpath, resultlabel)
             _plot_factory.pre_process()
             for plot_type in plot_types:
-                output_fpath_ = _join(experiment_folder, '{}.pdf'.format(plot_type))
+                output_fpath_ = join(experiment_folder, '{}.pdf'.format(plot_type))
                 _plot_factory.produce_plot(type=plot_type, output=output_fpath_)
                 
     def _generate_name(self, _sched_name, _alloc_name):

@@ -27,7 +27,7 @@ from scipy import stats as _statistical_distributions
 from numpy import sum as _sum, power as _power, roll as _roll, histogram as _histogram
 
 
-class distribution_fit:
+class DistributionFit:
     KINT64MAX = 2 ** 63 - 1
     CONTINUOUS_DISTRIBUTIONS = {
         'alpha': 'An alpha continuous random variable.',

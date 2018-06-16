@@ -21,43 +21,52 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-from accasim.base.resource_manager_class import resource_manager as resource_manager_class 
-from accasim.base.allocator_class import allocator_base
-from accasim.utils.misc import CONSTANT
 from copy import deepcopy, copy
 from abc import abstractmethod, ABC
-import sys
-import random
-import logging
-import time
+from sys import maxsize
+from random import seed
+from enum import Enum
+
+from accasim.base.resource_manager_class import ResourceManager 
+from accasim.base.allocator_class import AllocatorBase
 
 
-class scheduler_base(ABC):
+class DispatcherError(Exception):
+    pass
+    
+class JobVerification(Enum):
+    
+    REJECT = -1  # All jobs are rejected
+    NO_CHECK = 0  # No verification
+    CHECK_TOTAL = 1  # Total requested resources are verified  
+    CHECK_REQUEST = 2  # Each node x resources are verified
+
+
+class SchedulerBase(ABC):
     
     """
     
-        This class allows to implement dispatching methods by integrating with an implementation of this class an allocator (:class:`accasim.base.allocator_class.allocator_base`). 
+        This class allows to implement dispatching methods by integrating with an implementation of this class an allocator (:class:`accasim.base.allocator_class.AllocatorBase`). 
         An implementation of this class could also serve as a entire dispatching method if the allocation class is not used as default (:class:`.allocator` = None), but the resource manager must
-        be set on the allocator using :func:`accasim.base.allocator_class.allocator_base.set_resource_manager`.
+        be set on the allocator using :func:`accasim.base.allocator_class.AllocatorBase.set_resource_manager`.
         
     """
     
-    def __init__(self, seed, resource_manager, allocator=None):
+    def __init__(self, _seed, resource_manager, allocator=None):
         """
         
         Construct a scheduler
             
-        :param seed: Seed for the random state
+        :param _seed: Seed for the random state
         :param resource_manager: A Resource Manager object for dealing with system resources.
         :param allocator: Allocator object to be used by the scheduler to allocater after schedule generation. If an allocator isn't defined, the scheduler class must generate the entire dispatching plan.
                  
         """
-        random.seed(seed)
+        seed(_seed)
         self._counter = 0
-        self.constants = CONSTANT()
         self.allocator = None
         if allocator:
-            assert isinstance(allocator, allocator_base), 'Allocator not valid for scheduler'
+            assert isinstance(allocator, AllocatorBase), 'Allocator not valid for scheduler'
             self.allocator = allocator
         self.set_resource_manager(resource_manager)
         self.internal_ref = {}
@@ -109,7 +118,7 @@ class scheduler_base(ABC):
         if resource_manager:
             if self.allocator:
                 self.allocator.set_resource_manager(resource_manager)
-            assert isinstance(resource_manager, resource_manager_class), 'Resource Manager not valid for scheduler'
+            assert isinstance(resource_manager, ResourceManager), 'Resource Manager not valid for scheduler'
             self.resource_manager = resource_manager
         else:
             self.resource_manager = None
@@ -147,7 +156,7 @@ class scheduler_base(ABC):
     def __str__(self):
         return self.get_id()
     
-class simple_heuristic(scheduler_base):
+class SimpleHeuristic(SchedulerBase):
     """
     
     Simple scheduler, sorts the event depending on the chosen policy.
@@ -158,7 +167,7 @@ class simple_heuristic(scheduler_base):
     """
 
     def __init__(self, seed, resource_manager, allocator, name, sorting_parameters, **kwargs):
-        scheduler_base.__init__(self, seed, resource_manager, allocator)
+        SchedulerBase.__init__(self, seed, resource_manager, allocator)
         self.name = name
         self.sorting_parameters = sorting_parameters
 
@@ -202,7 +211,7 @@ class simple_heuristic(scheduler_base):
         # return allocated_events
 
     
-class fifo_sched(simple_heuristic):
+class FirstInFirstOut(SimpleHeuristic):
     """
 
     **FIFO scheduling policy.** 
@@ -226,9 +235,9 @@ class fifo_sched(simple_heuristic):
         FIFO Constructor
         
         """
-        simple_heuristic.__init__(self, _seed, _resource_manager, _allocator, self.name, self.sorting_arguments, **kwargs)
+        SimpleHeuristic.__init__(self, _seed, _resource_manager, _allocator, self.name, self.sorting_arguments, **kwargs)
         
-class ljf_sched(simple_heuristic):
+class LongestJobFirst(SimpleHeuristic):
     """
     
     **LJF scheduling policy.**
@@ -251,9 +260,9 @@ class ljf_sched(simple_heuristic):
         LJF Constructor
         
         """
-        simple_heuristic.__init__(self, _seed, _resource_manager, _allocator, self.name, self.sorting_arguments, **kwargs)
+        SimpleHeuristic.__init__(self, _seed, _resource_manager, _allocator, self.name, self.sorting_arguments, **kwargs)
         
-class sjf_sched(simple_heuristic):
+class ShortestJobFirst(SimpleHeuristic):
     """
     
     **SJF scheduling policy.**
@@ -276,9 +285,9 @@ class sjf_sched(simple_heuristic):
         SJF Constructor
     
         """
-        simple_heuristic.__init__(self, _seed, _resource_manager, _allocator, self.name, self.sorting_arguments, **kwargs)
+        SimpleHeuristic.__init__(self, _seed, _resource_manager, _allocator, self.name, self.sorting_arguments, **kwargs)
 
-class easybf_sched(scheduler_base):
+class EASYBackfilling(SchedulerBase):
     """
     
     EASY Backfilling scheduler. 
@@ -291,7 +300,7 @@ class easybf_sched(scheduler_base):
      
     """
     
-    name = 'EASY_Backfilling'
+    name = 'EBF'
     """ Name of the Scheduler policy. """
     
     def __init__(self, allocator, resource_manager=None, seed=0, **kwargs):
@@ -300,7 +309,7 @@ class easybf_sched(scheduler_base):
         Easy BackFilling Constructor
     
         """
-        scheduler_base.__init__(self, seed, resource_manager, allocator=None)
+        SchedulerBase.__init__(self, seed, resource_manager, allocator=None)
         self.blocked_job_id = None
         self.reserved_slot = (None, [])
         self.blocked_resources = False
@@ -485,7 +494,7 @@ class easybf_sched(scheduler_base):
     def _event_fits_node(self, resources, requested_resources):
         # min_availability is the number of job units fitting in the node. It is initialized at +infty,
         # since we must compute a minimum
-        min_availability = sys.maxsize
+        min_availability = maxsize
         # if a job requests 0 resources, the request is deemed as not valid
         valid_request = False
         for k, v in requested_resources.items():

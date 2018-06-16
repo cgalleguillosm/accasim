@@ -21,11 +21,10 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-import logging
 from copy import deepcopy
-from accasim.utils.misc import CONSTANT, FrozenDict
+from accasim.utils.misc import FrozenDict
 
-class resources_class:
+class Resources:
     """
     
         resources class: Stablish the resources, allocate and release their use.
@@ -46,7 +45,6 @@ class resources_class:
         
         """
         self.definition = [{'nodes': q, 'resources':groups[k]} for k, q in resources.items() ]
-        self.constants = CONSTANT()
         self.groups = {}
         self.resources = {}
         self.resources_status = {}
@@ -226,7 +224,7 @@ class resources_class:
         :return: Resource manager object. 
         
         """
-        return resource_manager(self)
+        return ResourceManager(self)
     
     def available_resource_key(self, _key):
         """
@@ -268,7 +266,7 @@ class resources_class:
             if not (res in _system_resource_types):
                 self.full[res] = False
 
-class resource_manager:
+class ResourceManager:
 
     def __init__(self, _resource):
         """
@@ -279,7 +277,7 @@ class resource_manager:
         :param _resource: An instance of the resources class. It defines the system capacity.  
         
         """
-        assert(isinstance(_resource, resources_class)), ('Only %s class is acepted for resources' % resources_class.__name__)
+        assert(isinstance(_resource, Resources)), ('Only %s class is acepted for resources' % Resources.__name__)
         self.resources = _resource
         self.actual_events = {}
 
@@ -293,7 +291,6 @@ class resource_manager:
         
         :return: Tuple: First element True if the event was allocated, False otherwise. Second element a message. 
         """
-        logging.debug('Allocating %s event in nodes %s' % (event.id, ', '.join([node for node in node_names])))
         _resources = event.requested_resources
         _attrs = event.requested_resources.keys()
 
@@ -400,3 +397,6 @@ class resource_manager:
             return _group
         _group_key = self.resources.available_resource_key(_key)
         return {_group:_v[_group_key]  for _group, _v in self.resources.groups.items()} 
+    
+    def system_resources(self):
+        return self.resources 

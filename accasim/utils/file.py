@@ -146,7 +146,7 @@ def load_jsonfile(filepath):
     with open(filepath) as file:
         return _load(file)
 
-class plain_file_reader:
+class PlainFileReader:
     
     def __init__(self, filepath):
         """
