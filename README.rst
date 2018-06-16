@@ -1,5 +1,5 @@
-AccaSim: HPC Simulator for Workload Management 
-==============================================
+AccaSim: a Workload Management Simulator for Job Dispatching Research
+=====================================================================
 
 *current version:* |version|
 
