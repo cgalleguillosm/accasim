@@ -4,7 +4,7 @@ Before run the batsim_exec.py you will need to place the platforms and workload 
 The following files must exist:
  	./platform/{instance}.xml
 	./workloads/{instance}.json
-Where instance coudl be seth, ricc or mc. 
+Where instance could be seth (HPC2N-2002-2.2-cln.swf), ricc (RICC-2010-2.swf) or mc (METACENTRUM-2013-2.swf). 
 
 This files can be generated based on the gist instructions (https://gist.github.com/mpoquet/56ec34c71fbe73bc8fb6ead959bdc2e9#file-prepare_instances-bash):
 
@@ -35,5 +35,5 @@ Accasim Experiments
 ===================
 
 The following files must exist:
-	./workloads/{instance}.swf Where instance could be seth, ricc or mc. 
+	./workloads/{instance}.swf Where instance could be seth (HPC2N-2002-2.2-cln.swf), ricc (RICC-2010-2.swf) or mc (METACENTRUM-2013-2.swf). 
 To run Accasim experiments execute the accasim_exec.py script with python 3.5 or newer. To calculate the performance metrics run the metrics_calculation.py script.
