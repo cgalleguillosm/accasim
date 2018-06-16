@@ -1,0 +1,44 @@
+{
+	"system_name": "Dummy - System",
+	"start_time": 0,
+	"equivalence": {
+		"processor": {
+			"core": 1
+		}
+	},
+	"groups": {
+		"g0": {
+			"core": 2,
+			"mem": 4
+		},
+		"g1": {
+			"core": 4,
+			"gpu": 2,
+			"mem": 8
+		},
+		"g2": {
+			"core": 3,
+			"mic": 1,
+			"mem": 5
+		},
+		"g3": {
+			"core": 3,
+			"gpu": 2,
+			"mic": 2,
+			"mem": 13
+		},
+		"g4": {
+			"core": 40,
+			"fpga": 20,
+			"mem": 120
+		}
+		
+	},
+	"resources": {
+		"g0": 4,
+		"g1": 8,
+		"g2": 8,
+		"g3": 4,
+		"g4": 1
+	}
+}
