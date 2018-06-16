@@ -178,7 +178,7 @@ class FirstFit(AllocatorBase):
     
     """
 
-    name = 'First_Fit'
+    name = 'FF'
 
     def __init__(self, seed=0, resource_manager=None, **kwargs):
         """
@@ -494,7 +494,7 @@ class BestFit(FirstFit):
     
     """
     
-    name = 'Best_Fit'
+    name = 'BF'
 
     def __init__(self, seed=0, resource_manager=None, **kwargs):
         """

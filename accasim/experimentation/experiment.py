@@ -42,7 +42,7 @@ class Experiment:
                             'save_parameters': ['RESOURCE_ORDER'], 'timeout': None, 'id': None, 'skip':False}
     RUN_SIMULATOR_ATTRIBUTES = {'debug': False}
     
-    _SEPARATOR = '_'
+    _SEPARATOR = '-'
     _RESULTS_FOLDER = 'results/{}/{}'
     _SCHEDULE_PREFIX = 'sched-'
     _BENCHMARK_PREFIX = 'bench-'
