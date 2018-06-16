@@ -32,6 +32,10 @@ class Resources:
     """
     ON = 1
     OFF = 0
+    GROUPS = None
+    SYSTEM_CAPACITY_TOTAL = None
+    SYSTEM_CAPACITY_NODES = None
+    NODE_LIST = []
     
     def __init__(self, groups, resources, **kwargs):
         """
@@ -45,7 +49,6 @@ class Resources:
         
         """
         self.definition = [{'nodes': q, 'resources':groups[k]} for k, q in resources.items() ]
-        self.groups = {}
         self.resources = {}
         self.resources_status = {}
         self.system_resource_types = []
@@ -62,22 +65,49 @@ class Resources:
         # This is performed in case that the user doesn't assign an absent attribute in the system config.
         # For instance when a group has gpu and an another group hasn't and that attribute must be 0. 
         #=======================================================================
+        _groups = {}
         for group_name, group_values in groups.items():
             resource_group = { '%s%s' % (p, attr): group_values.get(attr, 0) if p == self.available_prefix else 0
 #                for attr, q in group_values.items() for p in [self.available_prefix, self.used_prefix]
                 for attr in self.system_resource_types for p in [self.available_prefix, self.used_prefix]
             }
-            self.define_group(group_name, resource_group)
+            self.define_group(_groups, group_name, resource_group)
+        self.GROUPS = FrozenDict(**_groups)
+
+        #=======================================================================
+        # Define system capacity and usage of the system
+        #=======================================================================
+        _node_capacity = {res:0 for res in self.system_resource_types}
+        _nodes_capacity = {}
+        _system_capacity = deepcopy(_node_capacity)
 
         j = 0
         for group_name, q in resources.items():
+            # for res, value in self.GROUPS[group_name].items():
+            _group_cap = {}
+            for res in self.system_resource_types:
+                value = self.GROUPS[group_name]['{}{}'.format(self.available_prefix, res)]
+                _system_capacity[res] += value * q
+                _group_cap[res] = value
+                            
             for i in range(q):
                 _node_name = '%s%i' % (self.node_prefix, j + 1)
-                _attrs_values = self.groups[group_name]
+                _attrs_values = self.GROUPS[group_name]
+                
+                
+                _nodes_capacity[_node_name] = _group_cap
                 self.resources[_node_name] = deepcopy(_attrs_values)
                 self.resources_status[_node_name] = self.ON
+                self.NODE_LIST.append(_node_name)
                 j += 1              
         self.full = { r:False for r in self.system_resource_types}
+        
+        self.SYSTEM_CAPACITY_NODES = FrozenDict(**_nodes_capacity)
+        self.SYSTEM_CAPACITY_TOTAL = FrozenDict(**_system_capacity)
+        
+        # print([ (k, v) for k, v in self.SYSTEM_CAPACITY_TOTAL.items()])
+        # print([ (k, v) for k, v in self.SYSTEM_CAPACITY_NODES.items()])
+        # raise Exception()
 
     def total_resources(self):
         """
@@ -95,7 +125,7 @@ class Resources:
         self.system_total_resources = FrozenDict(**avl_types)
         return avl_types
 
-    def define_group(self, name, group):
+    def define_group(self, _groups, name, group):
         """
         
          Internal method for defining groups of resources.
@@ -105,8 +135,8 @@ class Resources:
         
         """
         assert(isinstance(group, dict))
-        assert(name not in self.groups), ('Repreated name group: %s. Select another one.' % (name))
-        self.groups[name] = group
+        assert(name not in _groups), ('Repreated name group: %s. Select another one.' % (name))
+        _groups[name] = group
 
     def allocate(self, node_name, **kwargs):
         """
@@ -202,19 +232,22 @@ class Resources:
         else:
             raise NotImplementedError()
 
-    def system_capacity(self):
+    def system_capacity(self, type='total'):
         """
         
-        :return: Return total system capacity 
+        :param type: 
+            'total' to return the total per resource type
+            'nodes' to return the capacity of nodes
+                        
+        
+        :return: Return system capacity 
         
         """
-        _capacity = {
-            r: {'total':
-                sum([attrs[self.available_prefix + r] for _, attrs in self.resources.items()]) 
-            } 
-            for r in self.system_resource_types
-        }
-        return _capacity
+        if type == 'total':
+            return self.SYSTEM_CAPACITY_TOTAL
+        elif type == 'nodes':
+            return self.SYSTEM_CAPACITY_NODES
+        raise ResourceError('System Capacity: \'{}\' type not defined'.format(type))
     
     def resource_manager(self):
         """
@@ -392,7 +425,7 @@ class ResourceManager:
         """
         if not _key:
             _group = {}
-            for k, v in self.resources.groups.items():
+            for k, v in self.resources.GROUPS.items():
                 _group[k] = {_type: v[self.resources.available_resource_key(_type)] for _type in self.resources.system_resource_types} 
             return _group
         _group_key = self.resources.available_resource_key(_key)
@@ -400,3 +433,13 @@ class ResourceManager:
     
     def system_resources(self):
         return self.resources 
+    
+    def system_capacity(self, type):
+        """        
+        :param type: 
+            'total' to return the total per resource type
+            'nodes' to return the capacity of nodes            
+        
+        :return: Return system capacity 
+        """
+        return self.resources.system_capacity(type)

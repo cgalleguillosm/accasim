@@ -74,6 +74,7 @@ class Event(ABC):
         self.end_time = None
         self.duration = duration
         self.end_order = 0
+        self._checked = False
 
     def subattr(self, obj, attrs):
         """
@@ -103,6 +104,12 @@ class Event(ABC):
             return getattr(obj, sp_attr[0])
         except AttributeError as e:
             return 'NA'
+        
+    def set_checked(self, state):
+        self._checked = state
+
+    def get_checked(self):
+        return self._checked
 
 
 class JobFactory:

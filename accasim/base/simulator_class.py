@@ -499,6 +499,7 @@ class Simulator(SimulatorBase):
         # =======================================================================
         # Loop until there are not loaded, queued and running jobs
         # =======================================================================
+        rejected_jobs = 0
         while events or self.mapper.has_events():
             _actual_time = self.mapper.current_time
             benchStartTime = _clock() * 1000
@@ -535,10 +536,20 @@ class Simulator(SimulatorBase):
             if events:  # and (not self._skip or self._skip and time_stuck_counter <= 1):
                 if debug:
                     print('{} DUR: To Schedule {}'.format(_actual_time, len(events)))
-                simulated_jobs = (self._loaded_jobs() + len(self.mapper.queued) + len(events) + len(self.mapper.running) + len(self.mapper.finished))
+                simulated_jobs = (self._loaded_jobs() + len(self.mapper.queued) + len(events) + len(self.mapper.running) + len(self.mapper.finished) + rejected_jobs)
                 assert(self.loaded_jobs == simulated_jobs), 'Some jobs were lost. {} != {}'.format(self.loaded_jobs, simulated_jobs)
-                to_dispatch = self.dispatcher.schedule(self.mapper.current_time, event_dict, events, debug)
-                assert(len(events) == len(to_dispatch)), 'Some queued jobs ({}/{}) were not included in the dispatching decision. Check the Dispatching algorithm:\nQueued: {}\nDispatching decision: {}'.format(len(to_dispatch), len(events), events, to_dispatch)
+                to_dispatch, rejected = self.dispatcher.schedule(self.mapper.current_time, event_dict, events, debug)
+                
+                for r in rejected:
+                    del event_dict[r]
+                
+                dispatched_len = len(to_dispatch)
+                rejected_len = len(rejected)
+                rejected_jobs += rejected_len
+                
+                assert(queuelen == dispatched_len + rejected_len), \
+                    'Some queued jobs ({}/{}) were not included in the dispatching decision.'.format(dispatched_len + rejected_len, queued_len)
+                    
                 if debug:
                     print('{} DUR: To Dispatch {}. {}'.format(_actual_time, len(to_dispatch),
                                                               self.resource_manager.resources.usage()))
@@ -594,9 +605,9 @@ class Simulator(SimulatorBase):
 
         self.end_simulation_time = _clock()
         if not self.timeout or self.timeout and ontime:
-            assert (self.loaded_jobs == len(self.mapper.finished)), 'Loaded {} and Finished {}'.format(self.loaded_jobs,
+            assert (self.loaded_jobs == len(self.mapper.finished) + rejected_jobs), 'Loaded {} and Finished {}'.format(self.loaded_jobs,
                                                                                                    len(
-                                                                                                       self.mapper.finished))
+                                                                                                       self.mapper.finished) + rejected_jobs)
 
         self.statics_write_out(self.constants.SHOW_STATISTICS, self.constants.STATISTICS_OUTPUT)
         print('Simulation process completed.')
@@ -637,9 +648,9 @@ class Simulator(SimulatorBase):
         sim_time_ = 'Simulation time: {0:.2f} secs\n'.format(self.end_simulation_time - self.start_simulation_time)
         disp_method_ = 'Dispathing method: {}\n'.format(self.dispatcher)
         total_jobs_ = 'Total jobs: {}\n'.format(self.loaded_jobs)
-        makespan_ = 'Makespan: {}\n'.format(self.mapper.last_run_time - self.mapper.first_time_dispatch)
-        avg_wtimes_ = 'Avg. waiting times: {}\n'.format(reduce(lambda x, y: x + y, wtimes) / float(len(wtimes)))
-        avg_slowdown_ = 'Avg. slowdown: {}\n'.format(reduce(lambda x, y: x + y, slds) / float(len(slds)))
+        makespan_ = 'Makespan: {}\n'.format(self.mapper.last_run_time - self.mapper.first_time_dispatch if wtimes else 'NA')
+        avg_wtimes_ = 'Avg. waiting times: {}\n'.format(reduce(lambda x, y: x + y, wtimes) / float(len(wtimes)) if wtimes else 'NA')
+        avg_slowdown_ = 'Avg. slowdown: {}\n'.format(reduce(lambda x, y: x + y, slds) / float(len(slds))if wtimes else 'NA')
         if show:
             print('\n\t' + '\t'.join([sim_time_, disp_method_, total_jobs_, makespan_, avg_wtimes_, avg_slowdown_]))
         if save:
@@ -669,6 +680,7 @@ class Simulator(SimulatorBase):
         tmp_dict = {}
         job_list = []
         for nt_point, jobs in ps_jobs.items():
+            # TODO
             for job in jobs:
                 if self._check_job_validity(job):
                     self.loaded_jobs += 1

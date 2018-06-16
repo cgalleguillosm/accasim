@@ -52,7 +52,9 @@ class SchedulerBase(ABC):
         
     """
     
-    def __init__(self, _seed, resource_manager, allocator=None):
+    ALLOW_MAPPING_SAME_NODE = True
+    
+    def __init__(self, _seed, resource_manager, allocator=None, job_check=JobVerification.CHECK_REQUEST, **kwargs):
         """
         
         Construct a scheduler
@@ -65,11 +67,18 @@ class SchedulerBase(ABC):
         seed(_seed)
         self._counter = 0
         self.allocator = None
+        self._system_capacity = None
+        self._nodes_capacity = None
+        
         if allocator:
             assert isinstance(allocator, AllocatorBase), 'Allocator not valid for scheduler'
             self.allocator = allocator
         self.set_resource_manager(resource_manager)
         self.internal_ref = {}
+        assert(isinstance(job_check, JobVerification)), 'job_check invalid type. {}'.format(job_check.__class__)
+        if job_check == JobVerification.REJECT:
+            print('All jobs will be rejected, and for performance purposes the rejection messages will be omitted.')
+        self._job_check = job_check
         
     @property
     def name(self):
@@ -137,21 +146,95 @@ class SchedulerBase(ABC):
         
         """
         assert(self.resource_manager is not None), 'The resource manager is not defined. It must defined prior to run the simulation.'
+        self._counter += 1
+        
+        rejected = []
+        accepted = []
+        # Verify jobs with the defined Job Policy
+        for e in es:
+            job = es_dict[e]
+            if not job.get_checked() and not self._check_job_request(job):
+                if self._job_check != JobVerification.REJECT:
+                    self._logger.warning('{} has been rejected by the dispatcher. ({})'.format(e, self._job_check))
+                rejected.append(e)
+                continue
+            accepted.append(e)
+        
         # At least each job need 1 core and 1 kb/mb/gb of mem to run
         min_required_avl = ['core', 'mem']
         if any([self.resource_manager.resources.full[res] for res in min_required_avl]):
             if _debug:
                 print("There is no availability of one of the min required resource to run a job. The dispatching process will be delayed until there is enough resources.")
-            return [ (None, e, []) for e in es]        
+            return [ (None, e, []) for e in accepted], rejected      
+          
         if _debug:
             print('{}: {} queued jobs to be considered in the dispatching plan'.format(cur_time, len(es)))
-        dispatching_plan = self.scheduling_method(cur_time, es_dict, es, _debug)
-        if self.allocator:
-            dispatching_plan = self.allocator.allocate(dispatching_plan, cur_time, _debug)
-        self._counter += 1
+        
+        to_allocate = []
+        # On accepted jobs by policy, try to schedule with the scheduling policy
+        if accepted:
+            to_allocate, to_reject = self.scheduling_method(cur_time, es_dict, es, _debug)
+            rejected += to_reject
+            if _debug:
+                for e in to_reject:
+                    self._logger.warning('{} has been rejected by the dispatcher. (Scheduling policy)'.format(e)) 
+            
+        if to_allocate and self.allocator:
+            dispatching_plan = self.allocator.allocate(to_allocate, cur_time, _debug)
+        else:
+            dispatching_plan = to_allocate
+        
         if _debug:
             print("################## Dispatching decision n: {} #######################".format(self._counter))
-        return dispatching_plan
+        
+        return dispatching_plan, rejected
+
+    def _check_job_request(self, _job):
+        """
+        Simple method that checks if the loaded _job violates the system's resource constraints.
+        :param _job: Job object
+        :return: True if the _job is valid, false otherwise
+        """
+        _job.set_checked(True)
+        if self._job_check == JobVerification.REJECT:
+            return False
+        
+        elif self._job_check == JobVerification.NO_CHECK:
+            return True
+        
+        elif self._job_check == JobVerification.CHECK_TOTAL:
+            # We verify that the _job does not violate the system's resource constraints by comparing the total
+            if not self._system_capacity:
+                self._system_capacity = self.resource_manager.system_capacity('total')
+            return not any([_job.requested_resources[res] * _job.requested_nodes > self._system_capacity[res] for res in _job.requested_resources.keys()])
+                
+        elif self._job_check == JobVerification.CHECK_REQUEST:
+            if not self._nodes_capacity:
+                self._nodes_capacity = self.resource_manager.system_capacity('nodes')
+            # We verify the _job request can be fitted in the system        
+            _requested_resources = _job.requested_resources
+            _requested_nodes = _job.requested_nodes
+
+            _fits = 0
+            _diff_node = 0 
+            for _node, _attrs in self._nodes_capacity.items():
+                # How many time a request fits on the node
+                _nfits = min([_attrs[_attr] // req for _attr, req in _requested_resources.items() if req > 0 ])
+                # Update current number of times the current job fits in the nodes
+                if _nfits > 0:
+                    _fits += _nfits
+                    _diff_node += 1
+                    
+                if self.ALLOW_MAPPING_SAME_NODE:
+                    # Since _fits >> _diff_node this logical comparison is omitted.
+                    if _fits >= _requested_nodes: 
+                        return True
+                else:
+                    if _diff_node >= _requested_nodes:
+                        return True
+            
+            return False
+        raise DispatcherError('Invalid option.') 
     
     def __str__(self):
         return self.get_id()
@@ -167,7 +250,7 @@ class SimpleHeuristic(SchedulerBase):
     """
 
     def __init__(self, seed, resource_manager, allocator, name, sorting_parameters, **kwargs):
-        SchedulerBase.__init__(self, seed, resource_manager, allocator)
+        SchedulerBase.__init__(self, seed, resource_manager, allocator, **kwargs)
         self.name = name
         self.sorting_parameters = sorting_parameters
 
@@ -205,7 +288,7 @@ class SimpleHeuristic(SchedulerBase):
         to_schedule_e.sort(**self.sorting_parameters)
         _time = cur_time
 
-        return to_schedule_e
+        return to_schedule_e, []
         # allocated_events = self.allocator.allocate(to_schedule_e, _time, skip=False, debug=_debug)
 
         # return allocated_events
@@ -309,7 +392,7 @@ class EASYBackfilling(SchedulerBase):
         Easy BackFilling Constructor
     
         """
-        SchedulerBase.__init__(self, seed, resource_manager, allocator=None)
+        SchedulerBase.__init__(self, seed, resource_manager, allocator=None, **kwargs)
         self.blocked_job_id = None
         self.reserved_slot = (None, [])
         self.blocked_resources = False
@@ -389,7 +472,7 @@ class EASYBackfilling(SchedulerBase):
             _jobs_allocated += [_j[0] for _j in _tmp_jobs_allocated]
             _ready_dispatch += [_j[1] for _j in _tmp_jobs_allocated]
             if not _id_jobs_nallocated:
-                return  _jobs_allocated
+                return  _jobs_allocated, []
         else:
             _id_jobs_nallocated = queued_jobs
 
@@ -433,7 +516,7 @@ class EASYBackfilling(SchedulerBase):
         
         if not for_backfilling:
             # If there are not jobs for backfilling return the allocated job plus the blocked one
-            return _jobs_allocated  
+            return _jobs_allocated, []  
         
         if _debug:
             print('{}: To fill: {}'.format(cur_time, for_backfilling))
@@ -448,7 +531,7 @@ class EASYBackfilling(SchedulerBase):
                                                                debug=_debug)
         _jobs_allocated += backfill_allocation
 
-        return _jobs_allocated
+        return _jobs_allocated, []
 
     def _search_slot(self, avl_resources, future_endings, e, _debug):
         """
