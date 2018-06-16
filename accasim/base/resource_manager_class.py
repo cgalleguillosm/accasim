@@ -34,10 +34,6 @@ class Resources:
     """
     ON = 1
     OFF = 0
-    SYSTEM_CAPACITY_TOTAL = None
-    SYSTEM_CAPACITY_NODES = None
-    GROUPS = None
-    NODE_LIST = []
     
     def __init__(self, groups, resources, **kwargs):
         """
@@ -50,6 +46,11 @@ class Resources:
             - used_prefix: This will set the prefix of the used resources. Internal use
         
         """
+        self.SYSTEM_CAPACITY_TOTAL = None
+        self.SYSTEM_CAPACITY_NODES = None
+        self.GROUPS = None
+        self.NODE_LIST = []
+        
         self._definition = tuple([{'nodes': q, 'resources':groups[k]} for k, q in resources.items()])
         self._resources = {}
         self._current_capacity = {}
