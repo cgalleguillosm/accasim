@@ -1,7 +1,9 @@
-Advanced allocators
-====================
+Allocators
+==========
 
-In this page, some advanced allocators implemented using AccaSim are shown. :ref:`Balanced`, :ref:`Weighted` and :ref:`Hybrid`. 
+In this page, some allocators implemented using AccaSim are shown. 
+
+As our knowledge, the simulator has been used for experimentation in [NettiGKSB18]_. In this paper are introduced :ref:`Balanced`, :ref:`Weighted` and :ref:`Hybrid`. 
 
 .. _Balanced:
 
@@ -83,3 +85,4 @@ the Balanced allocator; however, each of those lists is sorted individually like
 
 Citations
 ---------
+.. [NettiGKSB18] Alessio Netti, Cristian Galleguillos, Zeynep Kiziltan, Alina Sirbu, Ozalp Babaoglu. *Heterogeneity-Aware Resource Allocation in HPC Systems*. In Proc. of ISC 2018.

@@ -18,6 +18,8 @@
    modules
    tools
    
+.. include:: publications.rst
+   
 .. include:: installation.rst
 
 .. include:: tools.rst

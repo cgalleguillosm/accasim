@@ -1,7 +1,7 @@
-Advanced dispatchers
-====================
+Dispatchers
+===========
 
-In this page, the advanced dispatchers implemented using AccaSim are shown. 
+In this page, the dispatchers implemented using AccaSim are shown. 
 
 As our knowledge, the simulator has been used for experimentation in [GalleguillosMOD17]_. In this paper, several dispatching methods were used, most of them are available in AccaSim library:
 
@@ -57,6 +57,5 @@ This scheduler uses `OR-Tools library <https://developers.google.com/optimizatio
 
 Citations
 ---------
-
-.. [BorghesiCLMB15] Borghesi et al. *Power Capping in High Performance Computing Systems* in Proc. of CP 2015.
-.. [GalleguillosMOD17] Galleguillos et al. *Data-driven job dispatching in HPC systems* in Proc. of MOD 2017.
+.. [BorghesiCLMB15] Andrea Borghesi, Francesca Collina, Michele Lombardi, Michela Milano, Luca Benini. *Power Capping in High Performance Computing Systems* in Proc. of CP 2015.
+.. [GalleguillosMOD17] Cristian Galleguillos, Alina Sirbu, Zeynep Kiziltan, Ozalp Babaoglu, Andrea Borghesi, Thomas Bridi. *Data-Driven Job Dispatching* in Proc. of MOD 2017.
