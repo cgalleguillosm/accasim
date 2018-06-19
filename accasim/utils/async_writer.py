@@ -46,6 +46,8 @@ class AsyncWriter:
         self._sem = Semaphore(value=0)
         self._buffer_size = buffer_size
         self._buf_counter = 0
+        if not pre_process_fun:
+            pre_process_fun = self._dummy_pre_process
         self._pre_processor_wrapper = QueueFlusher(path, pre_process_fun)
 
     def push(self, data_obj):
@@ -96,7 +98,7 @@ class AsyncWriter:
 
 class QueueFlusher:
 
-    def __init__(self, path, func=AsyncWriter._dummy_pre_process):
+    def __init__(self, path, func):
         self._path = path
         self._func = func
 

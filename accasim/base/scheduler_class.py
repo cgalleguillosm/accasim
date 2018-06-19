@@ -159,7 +159,7 @@ class SchedulerBase(ABC):
         self._counter += 1
         self._logger.debug("{} Dispatching: #{} decision".format(cur_time, self._counter))
         self._logger.debug('{} Dispatching: {} queued jobs'.format(cur_time, len(es)))
-        self._logger.debug('{} Dispatching: {}'.format(cur_time, self.resource_manager.current_usage()))
+        self._logger.debug('{} Dispatching: {}'.format(cur_time, self.resource_manager.current_usage))
 
         rejected = []
         
@@ -532,7 +532,7 @@ class EASYBackfilling(SchedulerBase):
         :return: a tuple of time of the slot and nodes
         """    
         
-        current_allocations = self.resource_manager.current_allocations()
+        current_allocations = self.resource_manager.current_allocations
         # Creates a list the jobs sorted by soonest ending time first
         future_endings = SortedListWithKey(key=lambda x:x[1])
                 

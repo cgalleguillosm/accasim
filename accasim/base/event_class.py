@@ -580,7 +580,7 @@ class EventManager:
         :return: Return the usage of the system
 
         """
-        return self.resource_manager.current_usage()
+        return self.resource_manager.current_usage
 
     def simulated_current_time(self):
         """

@@ -406,9 +406,11 @@ class ResourceManager:
     def system_resources(self):
         return self._resources 
     
+    @property    
     def current_usage(self):
         return self._resources.usage()
     
+    @property
     def current_allocations(self):
         return self._running_jobs
 
