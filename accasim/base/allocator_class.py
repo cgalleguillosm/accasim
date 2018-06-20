@@ -152,7 +152,7 @@ class AllocatorBase(ABC):
         self._logger.debug('{}: {} queued jobs to be considered in the dispatching plan'.format(cur_time, len(es) if isinstance(es, (list, tuple, SortedList)) else 1))
 
         # Update current available resources
-        self.set_resources(self.resource_manager.current_availability())
+        self.set_resources(self.resource_manager.current_availability)
         dispatching_decision = self.allocating_method(es, cur_time, skip=skip, reserved_time=reserved_time, reserved_nodes=reserved_nodes)
         
         return dispatching_decision 
@@ -172,7 +172,7 @@ class AllocatorBase(ABC):
             
     def _define_mappers(self):
         if not self.node_names:
-            self.node_names = self.resource_manager.node_names()
+            self.node_names = self.resource_manager.node_names
 
     def __str__(self):
         """

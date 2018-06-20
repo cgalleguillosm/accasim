@@ -330,6 +330,8 @@ class ResourceManager:
         for arg in args:
             print(arg, self._resources._resources[arg])
 
+    
+    @property
     def current_availability(self):
         """
         
@@ -338,6 +340,7 @@ class ResourceManager:
         """        
         return self._resources.availability()
 
+    @property
     def resource_types(self):
         """
         
@@ -346,6 +349,7 @@ class ResourceManager:
         """
         return self._resources._system_resource_types
 
+    @property
     def node_names(self):
         """
         
@@ -371,7 +375,7 @@ class ResourceManager:
             return {k: v for k, v in _resources.items()}
         avl_types = {}
         for arg in args:
-            assert(arg in _resources), '{} is not a resource of the system. Available resource are {}'.format(arg, self.resource_types()) 
+            assert(arg in _resources), '{} is not a resource of the system. Available resource are {}'.format(arg, self.resource_types) 
             avl_types[arg] = _resources[arg]
         return avl_types
 

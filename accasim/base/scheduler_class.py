@@ -418,7 +418,7 @@ class EASYBackfilling(SchedulerBase):
             self.allocator_rm_set = True   
 
                    
-        avl_resources = self.resource_manager.current_availability()
+        avl_resources = self.resource_manager.current_availability
         self.nonauto_allocator.set_resources(avl_resources)
                
         to_dispatch = []

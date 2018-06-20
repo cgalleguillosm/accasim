@@ -570,7 +570,7 @@ class EventManager:
         :return: Return the availability of the system.
 
         """
-        return self.resource_manager.current_availability()
+        return self.resource_manager.current_availability
 
     def usage(self):
         """
