@@ -66,7 +66,9 @@ DEFAULT_SWF_PARSE_CONFIG = (
 
 DEFAULT_SWF_MAPPER = {
     'job_number': 'job_id',
-    'requested_time': 'expected_duration'
+    'requested_time': 'expected_duration',
+    'executable_number': 'executable',
+    'partition_number': 'partition'
 }
 
 DEFAULT_SIMULATION = {

@@ -43,7 +43,7 @@ from accasim.base.event_class import EventManager, AttributeType
 from accasim.base.resource_manager_class import Resources, ResourceManager
 from accasim.base.scheduler_class import SchedulerBase
 from accasim.base.event_class import JobFactory
-from accasim.base.additional_data import AdditionalData
+from accasim.base.additional_data import AdditionalData, AdditionalDataError
 from accasim.utils.async_writer import AsyncWriter
 import traceback
 
@@ -75,7 +75,7 @@ class SimulatorBase(ABC):
         self._logger, self._logger_listener = self.define_logger()
         self.real_init_time = datetime.now()
         
-        self.dispatcher = None
+        # self.dispatcher = None
         self.reader = None
         self.resource_manager = None
         self.job_factory = None
@@ -141,20 +141,23 @@ class SimulatorBase(ABC):
 
         Initializes the additional_data classes or set the event manager in the objects
 
-        :param _additional_data: A list of additional_data objects or classes
+        :param _additional_data: A list of AdditionalData objects or classes
 
-        :return: Return a list with all the additional_data objects ready to be executed
+        :return: Return a list with all the AdditionalData objects ready to be executed
 
         """
         _ad = []
         for ad in _additional_data:
-            if isinstance(ad, additional_data):
+            if not ad:
+                raise AdditionalDataError('AdditionalData class/object is None')
+                
+            if isinstance(ad, AdditionalData):
                 ad.set_event_manager(self.mapper)
                 _ad.append(ad)
-            elif issubclass(ad, additional_data):
+            elif issubclass(ad, AdditionalData):
                 _ad.append(ad(self.mapper))
             else:
-                raise ('Additional data class must be a subclass of the additional_data class')
+                raise Exception('Additional data class must be a subclass of the AdditionalData class. Received {}'.format(AdditionalData.__class__))
         return _ad
 
     def check_request(self, attrs_names):
@@ -340,7 +343,7 @@ class Simulator(SimulatorBase):
         :param resource_manager: Optional. Instantiation of the resource_manager class.
         :param reader: Optional. Instantiation of the reader class.
         :param job_factory: Optional. Instantiation of the job_factory class.
-        :param additional_data: Optional. Array of Objects or Classes of additional_data class.
+        :param additional_data: Optional. Array of Objects or Classes of AdditionalData class.
         :param simulator_config: Optional. Filepath to the simulator config. For replacing the misc.DEFAULT_SIMULATION parameters.
         :param overwrite_previous: Default True. Overwrite previous results.
         :param scheduling_output: Default True. Dispatching plan output. Format modificable in DEFAULT_SIMULATION
@@ -371,7 +374,10 @@ class Simulator(SimulatorBase):
             kwargs['start_time'] = start_time
         if not job_factory:
             kwargs['job_mapper'] = DEFAULT_SWF_MAPPER
-            kwargs['job_attrs'] = self.default_job_description()
+            if not kwargs.get('EXTENDED_JOB_DESCRIPTION', False):
+                kwargs['job_attrs'] = self.default_job_description()
+            else:
+                kwargs['job_attrs'] = self.extended_job_description()
             _jf_arguments = ['job_class', 'job_attrs', 'job_mapper']
             args = self.prepare_arguments(_jf_arguments, kwargs)
             _uargs += _jf_arguments
@@ -387,8 +393,8 @@ class Simulator(SimulatorBase):
         SimulatorBase.__init__(self, config_file=simulator_config, **kwargs)
         
         if not isinstance(additional_data, list):
-            assert (isinstance(additional_data, additional_data) or issubclass(additional_data,
-                                                                               additional_data)), 'Only subclasses of additional_data class are acepted as additional_data argument '
+            assert (isinstance(additional_data, AdditionalData) or issubclass(additional_data,
+                                                                               AdditionalData)), 'Only subclasses of AdditionalData class are acepted as additional_data argument '
             additional_data = [additional_data]
         
         assert (isinstance(resource_manager, ResourceManager))
@@ -396,16 +402,16 @@ class Simulator(SimulatorBase):
         
         assert (isinstance(dispatcher, SchedulerBase))
         dispatcher.set_resource_manager(resource_manager)
-        self.dispatcher = dispatcher
+        # self.dispatcher = dispatcher
             
         assert (isinstance(reader, Reader))
         self.reader = reader
                 
         assert (isinstance(job_factory, JobFactory))
         self.job_factory = job_factory
-
-        self.mapper = EventManager(self.resource_manager)
-        self.additional_data = self.additional_data_init(additional_data)
+        
+        additional_data = self.additional_data_init(additional_data)
+        self.mapper = EventManager(self.resource_manager, dispatcher, additional_data)
 
         if save_parameters:
             self._save_parameters(save_parameters)
@@ -483,7 +489,8 @@ class Simulator(SimulatorBase):
             self.start_hpc_simulation(**kwargs)
         except Exception as e:
             sleep(1)
-            print('The simulation will be stopped. Reason: {}'.format(e))            
+            print('The simulation will be stopped. Reason: {}'.format(e))
+            raise e            
         
         [d['object'].stop() for d in self.daemons.values() if d['object']]
                      
@@ -532,12 +539,13 @@ class Simulator(SimulatorBase):
             # ===================================================================
             # External behavior
             # ===================================================================
-            self.execute_additional_data()
+            # self.execute_additional_data()
 
             schedEndTime = schedStartTime = clock() * 1000
 
             if events:
-                to_dispatch, rejected = self.dispatcher.schedule(self.mapper.current_time, event_dict, events)
+                # to_dispatch, rejected = self.dispatcher.schedule(self.mapper.current_time, event_dict, events)
+                to_dispatch, rejected = self.mapper.call_dispatcher(event_dict, events)
                 for r in rejected:
                     del event_dict[r]
                 dispatched_len = len(to_dispatch)
@@ -619,7 +627,7 @@ class Simulator(SimulatorBase):
         wtimes = self.mapper.wtimes
         slds = self.mapper.slowdowns
         sim_time_ = 'Simulation time: {0:.2f} secs\n'.format(self.end_simulation_time - self.start_simulation_time)
-        disp_method_ = 'Dispathing method: {}\n'.format(self.dispatcher)
+        disp_method_ = 'Dispathing method: {}\n'.format(self.mapper.dispatcher)
         total_jobs_ = 'Total jobs: {}\n'.format(self.loaded_jobs)
         makespan_ = 'Makespan: {}\n'.format(self.mapper.last_run_time - self.mapper.first_time_dispatch if self.mapper.last_run_time and self.mapper.first_time_dispatch else 'NA')
         if wtimes:
@@ -699,15 +707,6 @@ class Simulator(SimulatorBase):
             self.daemons[_name]['object'] = _class(*_args)
             self.daemons[_name]['object'].start()
 
-    def execute_additional_data(self):
-        """
-        
-        Executes all additional_data implementations
-                
-        """
-        for ad in self.additional_data:
-            ad.execute()
-
     def default_job_description(self):
         """
 
@@ -728,3 +727,21 @@ class Simulator(SimulatorBase):
         total_mem = AttributeType('mem', int)
 
         return [total_cores, total_mem, expected_duration, queue, user_id]
+
+
+    def extended_job_description(self):
+        """
+
+        Method that returns extra attributes of a job. By default it includes the default attributes: ID, Expected Duration, CORE and MEM.
+        
+        :return: Array of Attributes
+
+        """
+        description = self.default_job_description()
+        
+        executable = AttributeType('executable', str, optional=True)
+        group_id = AttributeType('group_id', int, optional=True)
+        status = AttributeType('status', int, optional=True)
+        partition = AttributeType('partition', int, optional=True)
+        
+        return description + [executable, group_id, status]

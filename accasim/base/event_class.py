@@ -148,12 +148,13 @@ class JobFactory:
         self.job_mapper = job_mapper
         self.checked = False
         self._logger = logging.getLogger('accasim')
+        self.remove_req_resources = []
 
         for attr in job_attrs:
             _attr_name = attr.name
             assert(_attr_name not in self.attrs_names + self.obj_parameters), '{} attribute name already set. Names must be unique'.format(_attr_name)
             if attr.optional:
-                assert(_attr_name in self.obj_parameters), '{} attribute name is mandatory.'.format(_attr_name)
+                # assert(_attr_name in self.obj_parameters), '{} attribute name is mandatory.'.format(_attr_name)
                 self.optional_attrs[_attr_name] = attr
             else:
                 self.mandatory_attrs[_attr_name] = attr
@@ -167,15 +168,22 @@ class JobFactory:
         """
         _req_resources = job_attrs['requested_resources']
         missing_res = {r for r in self.system_resources if r not in _req_resources.keys()}
+        remove_req = set(_req_resources.keys()) - set(self.system_resources) 
+        
         if missing_res:
             self._logger.info('Some resources has not been included in the parser, assigning 0 to the {} resources in the job request.'.format(missing_res))
-            required = {'core', 'mem'}
+            # required = {'core', 'mem'}
             inter = missing_res & required
             if inter and len(inter) != len(required):
                 self._logger.error('Some mandatory attributes are missing: {}. The simulation will stop.'.format(inter))
                 exit()
             self.missing_resources = missing_res
+            
+        if remove_req:
+            self._logger.info('Job requests contains {} resources, but there are only {} resources. All the requests will be adapted.'.format(list(_req_resources.keys()), self.system_resources))
+            
         self.checked = True
+        return remove_req
 
     def resource_manager_setup(self):
         """
@@ -204,7 +212,6 @@ class JobFactory:
 
         """
         assert(self.resource_manager), 'Missing resource_manager attribute. It must be added via :func:`.set_resource_manager`.'
-
         for _old, _new in self.job_mapper.items():
             value = kwargs.pop(_old)
             kwargs[_new] = value
@@ -214,8 +221,11 @@ class JobFactory:
         _obj_attr = {k:kwargs[k] for k in self.obj_parameters}
 
         if not self.checked:
-            self.check_requested_resources(_obj_attr)
-
+            self.remove_req_resources = self.check_requested_resources(_obj_attr)
+        
+        for r in self.remove_req_resources:
+            _obj_attr['requested_resources'].pop(r)        
+        
         if hasattr(self, 'missing_resources'):
             for r in self.missing_resources:
                 _obj_attr['requested_resources'][r] = 0
@@ -262,11 +272,11 @@ class JobFactory:
             setattr(obj, 'requested_nodes', _times)
         if not hasattr(obj, 'requested_resources'):
             _times = getattr(obj, 'requested_nodes')
-            setattr(obj, 'requested_resources', {_res: getattr(obj, _res) // _times for _res in self.system_resources})
+            setattr(obj, 'requested_resources', {_res: getattr(obj, _res) // _times for _res in self.system_resources})            
 
 class EventManager:
 
-    def __init__(self, resource_manager, debug=False, **kwargs):
+    def __init__(self, resource_manager, dispatcher, additional_data, **kwargs):
         """
 
         This class coordinates events submission, queueing and ending.
@@ -277,8 +287,10 @@ class EventManager:
         """
         assert(isinstance(resource_manager, ResourceManager)), 'Wrong type for the resource_manager argument.'
         self.resource_manager = resource_manager
+        self.dispatcher = dispatcher
+        self.additional_data = additional_data
         self.constants = CONSTANT()
-        self.debug = debug
+        # self.debug = debug
         # Stats
         self.first_time_dispatch = None
         self.last_run_time = None
@@ -315,6 +327,9 @@ class EventManager:
         :param es: List of jobs. Jobs must be subclass of event class.
 
         """
+        for ad in self.additional_data:
+            ad.exec_before_submission()
+               
         if isinstance(es, list):
             for e in es:
                 assert(isinstance(e, Event)), 'Only subclasses of event can be simulated.'
@@ -322,6 +337,9 @@ class EventManager:
         else:
             assert(isinstance(es, Event)), 'Only subclasses of event can be simulated.'
             self.load_event(es)
+
+        for ad in self.additional_data:
+            ad.exec_after_submission()
 
     def load_event(self, e):
         """
@@ -364,7 +382,7 @@ class EventManager:
                 e = events_dict[e_id]
                 self.finish_event(e)
                 _es.append(e_id)
-        if _es:
+        if (not self.loaded and not self.running and not self.queued) and _es:
             self.last_run_time = self.current_time
         return _es
 
@@ -484,6 +502,26 @@ class EventManager:
 
         """
         return (self.loaded or self.queued or self.running)
+    
+    def call_dispatcher(self, event_dict, events):
+        """
+            Call the defined dispatcher. In addition, before the dispatcher call, the exec_before_dispatching method of 
+            AdditionalData objects is called passing the job dictionary and current queue job ids. After the dispatcher call, 
+            it calls the exec_after_dispatching and pass the job dictionary, the dispatching tuple and the rejected list.    
+            
+            :return: Return a tuple with a list of jobs to dispatch and to reject.  
+        """
+        for ad in self.additional_data:
+            ad.exec_before_dispatching(event_dict, events)
+                         
+        to_dispatch, rejected = self.dispatcher.schedule(self.current_time, event_dict, events)
+        
+        for ad in self.additional_data:
+            _tmp = ad.exec_after_dispatching(event_dict, to_dispatch, rejected)
+            if _tmp:
+                to_dispatch, rejected = _tmp
+        return to_dispatch, rejected
+        
 
     def dispatch_events(self, event_dict, to_dispatch, time_diff, omit_timediff=True):
         """
@@ -497,7 +535,7 @@ class EventManager:
             in [current time, current time + time diff] are moved to the new current time (current time + time diff). The latter isn't implemented. 
 
         :return return a tuple of (#dispatched, #Dispatched + Finished (0 duration), #postponed)
-        """
+        """       
         if omit_timediff:
             time_diff = 0
         
@@ -532,7 +570,7 @@ class EventManager:
             n_disp += dispatched
             n_disp_finish += ended
             n_post += postponed   
-                         
+                      
         return (n_disp, n_disp_finish, n_post)
 
     def release_ended_events(self, event_dict):
@@ -545,11 +583,21 @@ class EventManager:
         :return: return Array list of jobs objects.
 
         """
+        for ad in self.additional_data:
+            ad.exec_before_completion()
+            
         _es = self.move_to_finished(event_dict)
-        for _e in _es:
-            self.resource_manager.remove_event(_e)
-            # Freeing mem (finished events)
-            event_dict.pop(_e)
+        
+        if _es:
+            _removed_jobs = []
+            for _e in _es:
+                self.resource_manager.remove_event(_e)
+                # Freeing mem (finished events)
+                _removed_jobs.append(event_dict.pop(_e))
+            
+            for ad in self.additional_data:
+                ad.exec_after_completion(_removed_jobs)
+                        
         return _es
 
     def simulated_status(self):
@@ -599,7 +647,10 @@ class EventManager:
         for i in range(len(self._writers)):
             self._writers[i].stop()
             self._writers[i] = None
-
+        
+        for ad in self.additional_data:
+            ad.stop()
+            
     @staticmethod
     def _schd_write_preprocessor(event):
         """

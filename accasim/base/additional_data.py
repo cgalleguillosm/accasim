@@ -57,7 +57,7 @@ class AdditionalData(ABC):
     The current state of the system is maintained in the :class:`accasim.base.event_class.EventManager` object.
 
     """
-    
+          
     def __init__(self, event_manager=None):
         """
         
@@ -68,14 +68,60 @@ class AdditionalData(ABC):
         
         """
         self.event_mapper = event_manager
+        
+    @abstractmethod
+    def exec_before_dispatching(self, job_dict, queued_jobs):
+        """
+            Executed before the dispatcher call.
+            
+            :param job_dict: Dictionary containing all the loaded jobs.
+            :param queued_jobs: A list containing the ids of the queued jobs.
+
+            :return: Nothing to return. All modifications must be performed directly to the job object.
+        """
+        pass
     
     @abstractmethod
-    def execute(self):
+    def exec_after_dispatching(self, job_dict, to_dispatch_jobs, rejected_jobs):
         """
+            Executed after the dispatcher call.
+            
+            :param job_dict: Dictionary containing all the loaded jobs.
+            :param to_dispatch_jobs: A list containing the dispatching tuples [(start_time, job_id, node_allocation), ...]
+            :param rejected_jobs: A list of job ids with rejected jobs by the dispatcher.
+            
+            :return: Nothing to return if there is no modification to the to_dispatch_jobs and rejected_jobs. 
+                Otherwise these lists must be returned as tuple (to_dispatch_jobs, rejected_jobs,)  
+        """
+        pass
+    
+    @abstractmethod
+    def exec_before_submission(self, **kwargs):
+        pass
 
-        This method is called at every simulation step by the simulator to update the aditional data. 
-        The user must ensure that any current existent variable will be overwritten by using the add_data function to update/create a single variable.
+    @abstractmethod
+    def exec_after_submission(self, **kwargs):
+        pass
 
+    @abstractmethod
+    def exec_before_completion(self, **kwargs):
+        pass
+
+    @abstractmethod
+    def exec_after_completion(self, removed_jobs):
+        """
+            Executed after releasing the resources of the jobs which have to finish at the current time. 
+            
+            :param removed_jobs: List of removed job object with their updated attributes.
+            
+            :return: Nothing 
+        """
+        pass
+
+    @abstractmethod
+    def stop(self):
+        """
+        Executed after the simulation ends.
         """
         pass
     
@@ -125,3 +171,6 @@ class AdditionalData(ABC):
         self.allocator.set_resource_manager(event_manager)
         assert isinstance(event_manager, EventManager), 'Event Mapper not valid for scheduler'
         self.event_mapper = event_manager
+
+class AdditionalDataError(Exception):
+    pass

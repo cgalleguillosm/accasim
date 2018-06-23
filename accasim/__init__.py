@@ -1,2 +1,2 @@
 # __all__ = ['base', 'utils', 'experimentation']
-__version__ = '1.0.0'
+__version__ = '1.1.0'

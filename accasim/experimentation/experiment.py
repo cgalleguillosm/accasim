@@ -35,6 +35,7 @@ from string import Template
 from inspect import isclass
 from enum import Enum
 import sys
+from time import sleep
 
 
 _TEMPLATE = """
@@ -164,47 +165,56 @@ class Experiment:
                 self.add_dispatcher(_name, (_sched_class, _alloc_class, kwargs,))
 
 
-    def _run_simulation(self, name, dispatcher):
+    def _run_simulation(self, name, dispatcher, create_script):
         """
         Runs a single simulation instance, with a specified dispatcher
 
         :param dispatcher: A dispatcher instantiation
         """
-        imports = ''
-        import_vars = [(dispatcher[0].__module__, dispatcher[0].__name__,), (dispatcher[1].__module__, dispatcher[1].__name__,)] + \
-                [ (v.__module__, v.__name__,) for k, v  in dispatcher[2].items() if isclass(v)]
-        for vars in import_vars:
-            imports += 'from {} import {}\n'.format(*vars)
-                           
-        template = Template(_TEMPLATE)
-        script = template.substitute(
-            {
-                'workload': self.workload,
-                'sys_config': self.sys_config,
-                'imports': imports,
-                'sched_name': dispatcher[0].__name__,
-                'alloc_name': dispatcher[1].__name__,
-                'kwargs': {kw: v.value if isinstance(v, Enum) else v for kw, v in dispatcher[2].items()},
-                'sim_kwargs': self.SIMULATOR_ATTRIBUTES,
-                'run_kwargs': self.RUN_SIMULATOR_ATTRIBUTES
-            }
-        )
+        if create_script:
+            imports = ''
+            import_vars = [(dispatcher[0].__module__, dispatcher[0].__name__,), (dispatcher[1].__module__, dispatcher[1].__name__,)] + \
+                    [ (v.__module__, v.__name__,) for k, v  in dispatcher[2].items() if isclass(v)]
+            for vars in import_vars:
+                imports += 'from {} import {}\n'.format(*vars)
+                               
+            template = Template(_TEMPLATE)
+            script = template.substitute(
+                {
+                    'workload': self.workload,
+                    'sys_config': self.sys_config,
+                    'imports': imports,
+                    'sched_name': dispatcher[0].__name__,
+                    'alloc_name': dispatcher[1].__name__,
+                    'kwargs': {kw: v.value if isinstance(v, Enum) else v for kw, v in dispatcher[2].items()},
+                    'sim_kwargs': self.SIMULATOR_ATTRIBUTES,
+                    'run_kwargs': self.RUN_SIMULATOR_ATTRIBUTES
+                }
+            )
+            
+            fp = '{}_{}.py'.format(self.name, name)
+            with open(fp, 'w+') as f:
+                f.write(script)
+    
+            executable = sys.executable
+            if not executable:
+                executable = 'python3'
+    
+            _cmd = '{},-u,{}'.format(executable, fp)
+            cwd = '.'
+            FNULL = open(devnull, 'w')
+            p_sim = subprocess.Popen(_cmd.split(','), cwd=cwd, stderr=subprocess.STDOUT)
+            p_sim.wait()
+        else:
+            sched_class = dispatcher[0]
+            alloc_class = dispatcher[1]
+            kwargs = dispatcher[2]
+            _dispatcher = sched_class(alloc_class(), **kwargs) if alloc_class else sched_class(**kwargs)
+            simulator = Simulator(self.workload, self.sys_config, _dispatcher,
+            simulator_config=self.simulator_config, **self.SIMULATOR_ATTRIBUTES)
+            simulator.start_simulation(**self.RUN_SIMULATOR_ATTRIBUTES)
         
-        fp = '{}_{}.py'.format(self.name, name)
-        with open(fp, 'w+') as f:
-            f.write(script)
-
-        executable = sys.executable
-        if not executable:
-            executable = 'python3'
-
-        _cmd = '{},-u,{}'.format(executable, fp)
-        cwd = '.'
-        FNULL = open(devnull, 'w')
-        p_sim = subprocess.Popen(_cmd.split(','), cwd=cwd, stderr=subprocess.STDOUT)
-        p_sim.wait()
-        
-    def run_simulation(self, generate_plot=False):
+    def run_simulation(self, generate_plot=False, generate_scripts=False, wait=10):
         """
         Starts the simulation process. Its uses each instance of dispatching method to create the experiment.
         After that all experiments are run, the comparing plots are generated the :attr:`.generate_plot` option is set as True.
@@ -220,8 +230,9 @@ class Experiment:
             self.SIMULATOR_ATTRIBUTES['id'] = '{}_{}'.format(self.name, _name)
             self.SIMULATOR_ATTRIBUTES['RESULTS_FOLDER_NAME'] = result_folder
             print('{}/{}: Starting simulation of {}'.format(i + 1, _total, _name))
-            self._run_simulation(_name, _dispatcher)
+            self._run_simulation(_name, _dispatcher, generate_scripts)
             print('\n')
+            sleep(wait)
         
         # Generate all plots available in the plot factory class
         if generate_plot:
