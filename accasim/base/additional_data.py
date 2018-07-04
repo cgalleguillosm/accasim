@@ -22,8 +22,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 from abc import abstractmethod, ABC
+
 from accasim.base.event_class import EventManager
-from builtins import int
+from accasim.utils.misc import CONSTANT
 
 class AdditionalDataType:
     """
@@ -67,6 +68,7 @@ class AdditionalData(ABC):
         :param event_manager: Event manager object.
         
         """
+        self.constant = CONSTANT()
         self.event_mapper = event_manager
         
     @abstractmethod
