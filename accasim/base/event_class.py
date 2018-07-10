@@ -69,8 +69,8 @@ class Event(ABC):
         self.constants = CONSTANT()
         self.id = str(job_id)
         self.queued_time = queued_time
-        self.requested_nodes = requested_nodes        
-        self.requested_resources = FrozenDict(**requested_resources)
+        self._requested_nodes = requested_nodes        
+        self._requested_resources = requested_resources
         self.start_time = None
         self.end_time = None
         self.duration = duration
@@ -117,6 +117,15 @@ class Event(ABC):
 
     def __repr__(self):
         return 'Job_{}'.format(self.id)
+    
+    @property
+    def requested_nodes(self):
+        return self._requested_nodes
+
+    @property
+    def requested_resources(self):
+        return self._requested_resources
+
 
 class JobFactory:
     def __init__(self, resource_manager=None, job_class=Event, job_attrs=[], job_mapper={}):
