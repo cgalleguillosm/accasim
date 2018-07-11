@@ -435,8 +435,8 @@ class EventManager:
         
         #=======================================================================
         # started, started_ended, postponed
-        #=======================================================================
         # state = (0, 0, 0)
+        #=======================================================================
         assert(self.current_time == start_time), 'Start _time is different to the current _time'
 
         # Try to allocate
@@ -456,25 +456,24 @@ class EventManager:
             self.first_time_dispatch = start_time
             for writer in self._writers:
                 writer.start()
-
+        ans = (1, 0, 0)
+        real_end_time = _job.start_time + _job.duration
         if _job.duration == 0:
             self._logger.trace('{}: {} Dispatched and Finished at the same moment. Job Lenght 0'.format(self.current_time, _id))
-            self.finish_event(_job)
-            return (0, 1, 0)
+            ans = (0, 1, 0)
+        else:
+            # Include real ending time int time points
+            self.time_points.add(real_end_time)
 
         # Move to running jobs
         self.running.append(_id)
-
-        # Include real ending time int time points
-        real_end_time = _job.start_time + _job.duration
-        self.time_points.add(real_end_time)
 
         # Relate ending time with job id
         if real_end_time not in self.real_ending:
             self.real_ending[real_end_time] = []
         self.real_ending[real_end_time].append(_id)
 
-        return (1, 0, 0)    
+        return ans    
 
     def submit_event(self, _id):
         """
@@ -579,7 +578,9 @@ class EventManager:
             n_disp += dispatched
             n_disp_finish += ended
             n_post += postponed   
-                      
+        
+        if n_disp_finish > 0:
+            self.release_ended_events(event_dict)        
         return (n_disp, n_disp_finish, n_post)
 
     def release_ended_events(self, event_dict):

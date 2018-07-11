@@ -485,12 +485,13 @@ class Simulator(SimulatorBase):
         self.daemon_init()
         
         self.show_config()
+        sim_error = None
         try:
             self.start_hpc_simulation(**kwargs)
         except Exception as e:
             sleep(1)
-            print('The simulation will be stopped. Reason: {}'.format(e))
-            raise e            
+            print('The simulation will be stopped. Reason: {}'.format(e))        
+            sim_error = e
         
         [d['object'].stop() for d in self.daemons.values() if d['object']]
                      
@@ -504,7 +505,8 @@ class Simulator(SimulatorBase):
         filepaths = self._generated_filepaths()
         self._clean_simulator_constants()
         self._logger_listener.stop()
-
+        if sim_error:
+            raise sim_error
         return filepaths
 
     def start_hpc_simulation(self, **kwargs):
