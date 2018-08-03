@@ -125,6 +125,12 @@ class Event(ABC):
     @property
     def requested_resources(self):
         return self._requested_resources
+    
+    def override_requested_nodes(self, requested_nodes):
+        self._requested_nodes = requested_nodes
+        
+    def override_requested_resources(self, type, value):
+        self._requested_resources[type] = value
 
 
 class JobFactory:
