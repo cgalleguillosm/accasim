@@ -193,7 +193,10 @@ class Resources:
         
         if not type:
             for res, value in self.SYSTEM_CAPACITY_TOTAL.items():
-                _str_usage.append("{}: {:.2%}".format(res, self._total_resources[res] / value))
+                if value > 0:
+                    _str_usage.append("{}: {:.2%}".format(res, self._total_resources[res] / value))
+                else:
+                    _str_usage.append("{}: -".format(res))
             return (_str + ', '.join(_str_usage))
         elif type == 'dict':
             return {
