@@ -343,7 +343,7 @@ class EventManager:
 
         """
         for ad in self.additional_data:
-            ad.exec_before_submission()
+            ad.exec_before_submission(es)
                
         if isinstance(es, list):
             for e in es:
