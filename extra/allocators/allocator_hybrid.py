@@ -21,8 +21,9 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-from extra.allocators.allocator_weighted import allocator_weighted
-from accasim.base.allocator_class import ff_alloc
+# from extra.allocators.allocator_weighted import allocator_weighted
+from allocator_weighted import allocator_weighted
+from accasim.base.allocator_class import FirstFit
 
 
 class allocator_hybrid(allocator_weighted):
@@ -35,7 +36,7 @@ class allocator_hybrid(allocator_weighted):
 
     name = 'Hybrid'
 
-    def __init__(self, seed, res_man, **kwargs):
+    def __init__(self, seed, resource_manager, **kwargs):
         """
         Constructor for the class.
 
@@ -44,7 +45,7 @@ class allocator_hybrid(allocator_weighted):
         :param kwargs: critical_res = defines the set of resource types to be preserved (default mic,gpu); 
                        window_size = defines the window size for job resource analysis(default 100);            
         """
-        ff_alloc.__init__(self, seed, res_man)
+        FirstFit.__init__(self, seed)
 
         win_key = 'window_size'
         res_key = 'critical_res'
@@ -52,9 +53,9 @@ class allocator_hybrid(allocator_weighted):
         # If the user doesn't supply the set of resources to balance, mic and gpu are used by default
         if res_key in kwargs.keys():
             self._critical_resources = kwargs[res_key]
-            assert all(res in self.resource_manager.resource_types() for res in self._critical_resources), 'Selected resource types for interleaving are not correct'
+            assert all(res in resource_manager.resource_types for res in self._critical_resources), 'Selected resource types for interleaving are not correct'
         else:
-            self._critical_resources = [r for r in ('mic', 'gpu') if r in self.resource_manager.resource_types()]
+            self._critical_resources = [r for r in ('mic', 'gpu') if r in resource_manager.resource_types]
         # The default window size to be used for job analysis is 100
         self._windowsize = (kwargs[win_key] if win_key in kwargs.keys() and kwargs[win_key] >= 0 else 100)
 
@@ -67,7 +68,7 @@ class allocator_hybrid(allocator_weighted):
             self._critical_modifier[k] = self._modifierbounds[0]
 
         # The resource types in the system; stored for efficiency
-        self._types = self.resource_manager.resource_types()
+        self._types = resource_manager.resource_types
         # The scheduling plan computed by the scheduler, if present
         self._schedule = None
         # The event dictionary used to retrieve job information from the schedule
@@ -102,18 +103,18 @@ class allocator_hybrid(allocator_weighted):
         """
         # The amount of current used resources in the system. Used to compute the load rate
         used_resources = {}
+        base = self.resource_manager.system_capacity('total')
         for t in self._types:
-            base = self.resource_manager.get_total_resources(t)
-            avl = self.resource_manager.availability()
+            avl = self.resource_manager.current_availability
             qt = base[t] - sum([avl[node][t] for node in avl.keys()])
             used_resources[t] = qt
-        #used_resources = self.resource_manager.get_used_resources()
+        # used_resources = self.resource_manager.get_used_resources()
         for k in self._types:
             self._weights[k] = (self._rescounters[k] + self._schedulecounters[k]) / (
             self._jobstoallocate + self._jobstoschedule + 1)
             # Might be useful to smooth out and compress average values
             # self._weights[k] = sqrt(self._weights[k])
-            self._weights[k] *= (used_resources[k] + 1) / (self._base_availability[k] * self._base_availability[k])
+            self._weights[k] *= (used_resources[k] + 1) / (base[k] * base[k])
             # Alternative weighting strategy, considers only the load factor: simpler, but with worse results
             # self._weights[k] *= (used_resources[k] + 1) / (self._base_availability[k])
 
@@ -125,7 +126,7 @@ class allocator_hybrid(allocator_weighted):
         :param e: The event to be allocated
         :return: The sorted list of nodes that best fit the job
         """
-        assert self._avl_resources is not None, 'The dictionary of available resources must be non-empty.'
+        assert self.avl_resources is not None, 'The dictionary of available resources must be non-empty.'
 
         # res_lists is a dictionary containing, for each resource type, the list of nodes that have them. The lists
         # do not overlap, and each node falls in the list whose resource it has in the greatest quantity.
@@ -137,8 +138,8 @@ class allocator_hybrid(allocator_weighted):
         # All the nodes in the avl_resources dictionary are classified, according to the critical resources
         # they possess
         s_nodes = self._find_sat_nodes(e.requested_resources)
-        for node in s_nodes: #self._avl_resources.items():
-            res_lists[self._critical_list_select(self._avl_resources[node])].append(node)
+        for node in s_nodes:  # self.avl_resources.items():
+            res_lists[self._critical_list_select(self.avl_resources[node])].append(node)
 
         res_lists[self._noneID] = self._get_sorted_node_sublist(e, res_lists[self._noneID])
         for key in self._critical_resources:
@@ -173,7 +174,7 @@ class allocator_hybrid(allocator_weighted):
         nodelist = []
         # For each node in the system, the job "fit", which is the number of job units fitting the node, is computed
         for node in nodes:
-            fits = self._event_fits_node(self._avl_resources[node], e.requested_resources)
+            fits = self._event_fits_node(self.avl_resources[node], e.requested_resources)
             # If the node has not enough resources to fit the job, it is simply discarded
             if fits == 0:
                 continue
@@ -181,10 +182,10 @@ class allocator_hybrid(allocator_weighted):
                 fits = e.requested_nodes
             # The nodes are ranked by the amount of weighted resources left after allocating the job
             rank = sum(
-                (self._avl_resources.get(node).get(k) - e.requested_resources[k] * fits) * self._weights[k] for k in
+                (self.avl_resources.get(node).get(k) - e.requested_resources[k] * fits) * self._weights[k] for k in
                 self._types)
             # Alternative ranking, similar to a weighted consolidate; usually performs worse than the above
-            # rank = sum((self._avl_resources.get(node).get(k)) * self._weights[k] for k in self._types)
+            # rank = sum((self.avl_resources.get(node).get(k)) * self._weights[k] for k in self._types)
             # We use a temporary list to store the node ID and its ranking
             nodelist.append((node, rank))
         # Lastly, sorting is performed. Note that sorting is performed only on nodes that actually fit the job, thus

@@ -21,10 +21,13 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-from accasim.base.allocator_class import ff_alloc
+from accasim.base.allocator_class import FirstFit
+from sortedcontainers.sortedset import SortedSet
+from re import split
+from _functools import reduce
 
 
-class allocator_weighted(ff_alloc):
+class allocator_weighted(FirstFit):
     """
     An allocator which tries to perform optimization on the allocation of all events in the queue.
 
@@ -46,7 +49,7 @@ class allocator_weighted(ff_alloc):
 
     name = 'Weighted'
 
-    def __init__(self, seed, res_man, **kwargs):
+    def __init__(self, seed, resource_manager, **kwargs):
         """
         Constructor for the class.
 
@@ -57,7 +60,7 @@ class allocator_weighted(ff_alloc):
                        critical_steps = the number of steps in the scale between the critical_bounds (default 9);
                        window_size = defines the window size for job resource analysis(default 100);            
         """
-        ff_alloc.__init__(self, seed, res_man)
+        FirstFit.__init__(self, seed)
 
         win_key = 'window_size'
         res_key = 'critical_res'
@@ -67,9 +70,9 @@ class allocator_weighted(ff_alloc):
         # If the user doesn't supply the set of resources to balance, mic and gpu are used by default
         if res_key in kwargs.keys():
             self._critical_resources = kwargs[res_key]
-            assert all(res in self.resource_manager.resource_types() for res in self._critical_resources), 'Selected resource types for interleaving are not correct'
+            assert all(res in resource_manager.resource_types for res in self._critical_resources), 'Selected resource types for interleaving are not correct'
         else:
-            self._critical_resources = [] # Priority-Weighted heuristic is disabled by default
+            self._critical_resources = []  # Priority-Weighted heuristic is disabled by default
         # The default window size to be used for job analysis is 100
         self._windowsize = (kwargs[win_key] if win_key in kwargs.keys() and kwargs[win_key] >= 0 else 100)
         # The lower and upper bounds for the weight modifier of critical resources
@@ -89,7 +92,7 @@ class allocator_weighted(ff_alloc):
             self._critical_modifier[k] = self._modifierbounds[0]
 
         # The resource types in the system; stored for efficiency
-        self._types = self.resource_manager.resource_types()
+        self._types = resource_manager.resource_types
         # The scheduling plan computed by the scheduler, if present
         self._schedule = None
         # The event dictionary used to retrieve job information from the schedule
@@ -115,15 +118,6 @@ class allocator_weighted(ff_alloc):
         self._cumulative_length = 0
         # Same as above, but for jobs overlapping the current one in the schedule (for CP)
         self._cumulative_schedule = 0
-
-    def set_resources(self, res):
-        """
-        Sets in the internal variable avl_resources the current available resources for the system.
-
-        :param res: the list of currently available resources for the system
-        """
-        self._avl_resources = res
-        self._sorted_keys = self._trim_nodes(list(self._avl_resources.keys()))
 
     def set_attr(self, **kwargs):
         """
@@ -180,7 +174,7 @@ class allocator_weighted(ff_alloc):
         # The required resources' counters are initialized according to the event queue given as input
         self._initialize_counters(es)
         if debug:
-            print('Queue length %i - Window size %i' % (len(es),self._jobstoallocate))
+            print('Queue length %i - Window size %i' % (len(es), self._jobstoallocate))
             print('Distribution: ')
             print(self._rescounters.values())
 
@@ -188,13 +182,9 @@ class allocator_weighted(ff_alloc):
             requested_nodes = e.requested_nodes
             requested_resources = e.requested_resources
 
-            # We verify that the job does not violate the system's resource constraints
-            for t in requested_resources.keys():
-                assert requested_resources[t] * requested_nodes <= self._base_availability[t], 'There are %i %s total resources in the system, requested %i ' % (self._base_availability[t], t, requested_resources[t])
-
             # If the input arguments relative to backfilling are not supplied, the method operates in regular mode.
             # Otherwise, backfilling mode is enabled, allowing the allocator to skip jobs and consider the reservation.
-            nodes_to_discard = self._compute_reservation_overlaps(e, cur_time, reserved_time, reserved_nodes, debug)
+            nodes_to_discard = self._compute_reservation_overlaps(e, cur_time, reserved_time, reserved_nodes)
             backfilling_overlap = False if len(nodes_to_discard) == 0 else True
 
             self._find_overlapping_jobs(e, cur_time)
@@ -208,7 +198,7 @@ class allocator_weighted(ff_alloc):
             for node in nodekeys:
                 # The algorithm check whether the given node belongs to the list of reserved nodes, in backfilling.
                 # If it does, the node is discarded.
-                resources = self._avl_resources[node]
+                resources = self.avl_resources[node]
                 if backfilling_overlap and node in nodes_to_discard:
                     continue
                 # We compute the number of job units fitting in the current node, and update the assignment
@@ -328,18 +318,20 @@ class allocator_weighted(ff_alloc):
         """
         # The amount of current used resources in the system. Used to compute the load rate
         used_resources = {}
+        base = self.resource_manager.system_capacity('total')
         for t in self._types:
-            base = self.resource_manager.get_total_resources(t)
-            avl = self.resource_manager.availability()
+            # base = self.resource_manager.get_total_resources(t)
+            avl = self.resource_manager.current_availability
             qt = base[t] - sum([avl[node][t] for node in avl.keys()])
             used_resources[t] = qt
-        #used_resources = self.resource_manager.get_used_resources()
+        # used_resources = self.resource_manager.get_used_resources()
         for k in self._types:
-            #self._weights[k] = (self._rescounters[k] + self._schedulecounters[k]) / (self._jobstoallocate + self._jobstoschedule + 1)
+            # self._weights[k] = (self._rescounters[k] + self._schedulecounters[k]) / (self._jobstoallocate + self._jobstoschedule + 1)
             self._weights[k] = (self._rescounters[k] + self._schedulecounters[k]) / (self._cumulative_length + self._cumulative_schedule + 1)
             # Might be useful to smooth out and compress average values
             # self._weights[k] = sqrt(self._weights[k])
-            self._weights[k] *= (used_resources[k] + 1) / (self._base_availability[k] * self._base_availability[k])
+            # self._weights[k] *= (used_resources[k] + 1) / (self._base_availability[k] * self._base_availability[k])
+            self._weights[k] *= (used_resources[k] + 1) / (base[k] * base[k])
             # Alternative weighting strategy, considers only the load factor: simpler, but with worse results
             # self._weights[k] *= (used_resources[k] + 1) / (self._base_availability[k])
             # The weights related to critical resources are multiplied by the allocation fail heuristic
@@ -422,25 +414,89 @@ class allocator_weighted(ff_alloc):
         :param e: The event to be allocated
         :return: The sorted list of nodes that best fit the job
         """
-        assert self._avl_resources is not None, 'The dictionary of available resources must be non-empty.'
+        assert self.avl_resources is not None, 'The dictionary of available resources must be non-empty.'
         nodelist = []
         s_nodes = self._find_sat_nodes(e.requested_resources)
         # For each node in the system, the job "fit", which is the number of job units fitting the node, is computed
-        for node in s_nodes: #self._avl_resources.keys():
-            fits = self._event_fits_node(self._avl_resources[node], e.requested_resources)
+        for node in s_nodes:  # self.avl_resources.keys():
+            fits = self._event_fits_node(self.avl_resources[node], e.requested_resources)
             # If the node has not enough resources to fit the job, it is simply discarded
             if fits == 0:
                 continue
             elif fits > e.requested_nodes:
                 fits = e.requested_nodes
             # The nodes are ranked by the amount of weighted resources left after allocating the job
-            rank = sum((self._avl_resources.get(node).get(k) - e.requested_resources[k] * fits) * self._weights[k] for k in self._types)
+            rank = sum((self.avl_resources.get(node).get(k) - e.requested_resources[k] * fits) * self._weights[k] for k in self._types)
             # Alternative ranking, similar to a weighted consolidate; usually performs worse than the above
-            # rank = sum((self._avl_resources.get(node).get(k)) * self._weights[k] for k in self._types)
+            # rank = sum((self.avl_resources.get(node).get(k)) * self._weights[k] for k in self._types)
             # We use a temporary list to store the node ID and its ranking
-            nodelist.append((node,rank))
+            nodelist.append((node, rank))
         # Lastly, sorting is performed. Note that sorting is performed only on nodes that actually fit the job, thus
         # resulting in smaller instances and lower times compared to, for example, the consolidate allocator
         nodelist.sort(key=lambda x: x[1])
         # The list of sorted node IDs is returned
         return [x[0] for x in nodelist]
+
+    def _trim_nodes(self, nodes):
+        """
+        Method which removes from a list of node IDs those elements that correspond to nodes that are full, i.e. they
+        have no available Memory or CPU resources and are thus useless for allocation.
+        
+        :param nodes: A list of node IDs
+        :return: The trimmed list of nodes
+        """
+        trimNodes = [n for n in nodes if all(self.avl_resources[n][r] > 0 for r in self.nec_res_types)]
+        return trimNodes
+    
+    def _set_aux_resources(self):
+        """
+        @todo: Check how to improve
+        """
+        # Generate an aux structure to speedup the allocation process
+        resource_types = self.resource_manager.resource_types        
+        self.aux_resources = {}
+        for res_type in resource_types:
+            if not (res_type in self.aux_resources):
+                self.aux_resources[res_type] = {}
+            for node in self.sorted_keys:
+                n_res = self.avl_resources[node][res_type]
+                if n_res == 0:  # This works similar to trim_nodes
+                    continue
+                if not (n_res in self.aux_resources[res_type]):
+                    self.aux_resources[res_type][n_res] = SortedSet()
+                self.aux_resources[res_type][n_res].add(node)
+                
+    def _find_sat_nodes(self, req_resources):
+        sat_nodes = {}
+        # fitting_nodes = {}
+        for t_res, n_res in req_resources.items():
+            if n_res == 0:
+                continue
+            if not(t_res in sat_nodes):
+                sat_nodes[t_res] = SortedSet(key=self._natural_keys)
+            for n, nodes in self.aux_resources[t_res].items():
+                if n >= n_res:
+                    sat_nodes[t_res].update(nodes)
+                    #===========================================================
+                    # for node in nodes:
+                    #     if not (node in fitting_nodes):
+                    #         fitting_nodes[node] = {}
+                    #     fitting_nodes[node][t_res] = n // n_res
+                    #===========================================================
+        # nodes = list(reduce(set.intersection, (set(val) for val in sat_nodes.values())))
+        # tot_fitting_reqs = sum([min(fitting_nodes[n].values()) for n in nodes])
+        nodes = reduce(SortedSet.intersection, sat_nodes.values())
+        return nodes  # , tot_fitting_reqs
+    
+    
+
+    def _atoi(self, text):
+        return int(text) if text.isdigit() else text
+
+    def _natural_keys(self, text):
+        '''
+        alist.sort(key=natural_keys) sorts in human order
+        http://nedbatchelder.com/blog/200712/human_sorting.html
+        (See Toothy's implementation in the comments)
+        '''
+        return [ self._atoi(c) for c in split('(\d+)', text) ]

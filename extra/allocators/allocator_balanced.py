@@ -21,11 +21,11 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-from accasim.base.allocator_class import ff_alloc
+from accasim.base.allocator_class import FirstFit
 from copy import copy
 
 
-class allocator_balanced(ff_alloc):
+class allocator_balanced(FirstFit):
     """
     An allocator which considers a set of critical and scarce resource types (like GPUs or MICs), and tries to balance 
     the allocation to the respective nodes in order to avoid fragmentation and waste.
@@ -40,27 +40,33 @@ class allocator_balanced(ff_alloc):
 
     name = 'Balanced'
 
-    def __init__(self, seed, res_man, **kwargs):
+    def __init__(self, seed, resource_manager, **kwargs):
         """
         Constructor for the class.
         :param seed: seed for random events (not used)
         :param resource_manager: reference to the system resource manager
         :param kwargs: critical_res = defines the set of resource types to be balanced (default mic,gpu); 
         """
-        ff_alloc.__init__(self, seed, res_man)
-
+        FirstFit.__init__(self, seed)
+        # The ID to associate to nodes/jobs that possess no critical resources
+        self._noneID = 'None'
+        
         res_key = 'critical_res'
         # If the user doesn't supply the set of resources to balance, mic and gpu are used by default
         if res_key in kwargs.keys():
             self._critical_resources = kwargs[res_key]
-            assert all(res in self.resource_manager.resource_types() for res in
+            assert all(res in resource_manager.resource_types for res in
                        self._critical_resources), 'Selected resource types for interleaving are not correct'
         else:
-            self._critical_resources = [r for r in ('mic', 'gpu') if r in self.resource_manager.resource_types()]
-        # The ID to associate to nodes/jobs that possess no critical resources
-        self._noneID = 'None'
+            self._critical_resources = [r for r in ('mic', 'gpu') if r in resource_manager.resource_types]
+    
         # The lists containing the single node IDs, per resource type
         self._res_lists = None
+        
+        #=======================================================================
+        # if resource_manager:
+        #     self.set_resources(resource_manager)
+        #=======================================================================
 
     def _sort_resources(self):
         """
@@ -68,7 +74,7 @@ class allocator_balanced(ff_alloc):
         It is called after the resources are set in the allocator.
         :return: the list of sorted keys (node ids) for the resources
         """
-        assert self._avl_resources is not None, 'The dictionary of available resources must be non-empty.'
+        assert self.avl_resources is not None, 'The dictionary of available resources must be non-empty.'
 
         # res_lists is a dictionary containing, for each resource type, the list of nodes that have them. The lists
         # do not overlap, and each node falls in the list whose resource it has in the greatest quantity.
@@ -79,24 +85,26 @@ class allocator_balanced(ff_alloc):
 
         # All the nodes in the avl_resources dictionary are classified, according to the critical resources
         # they possess
-        for node, res in self._avl_resources.items():
+        for node, res in self.avl_resources.items():
             self._res_lists[self._critical_list_select(res)].append(node)
 
         return self._convert_to_final_list(self._res_lists)
 
-    def _adjust_resources(self, sorted_keys):
+    def _adjust_resources(self, sorted_keys=None):
         """
         Adjusts the sorting of the resources after a successful allocation. 
         In order to improve efficiency, this method uses the self._res_lists dictionary stored after a set_resources
         call. The lists are not built from scratch, and a minor adjustment is performed to restore sorting.
         :param sorted_keys: the list of keys, almost sorted, that needs to be adjusted
         """
-        assert self._avl_resources is not None, 'The dictionary of available resources must be non-empty.'
-        assert sorted_keys is not None, 'The list of keys must be non-empty'
-        assert self._res_lists is not None, 'Cannot adjust resources if they have not been initialized'
-        sorted_keys.clear()
-        sorted_keys += self._convert_to_final_list(self._res_lists)
-        return sorted_keys
+        assert self.avl_resources is not None, 'The dictionary of available resources must be non-empty.'
+        # assert sorted_keys is not None, 'The list of keys must be non-empty'
+        # assert self._res_lists is not None, 'Cannot adjust resources if they have not been initialized'
+        if sorted_keys:
+            self.sorted_keys.clear()
+        else:
+            self._sort_resources()
+        self.sorted_keys = self._convert_to_final_list(self._res_lists)
 
     def _update_resources(self, reserved_nodes, requested_resources):
         """
@@ -113,14 +121,14 @@ class allocator_balanced(ff_alloc):
         for node in set(reserved_nodes):
             # Small trick: if a node belongs to the None list before the update, we do not consider it for the
             # resource adjustment, as it will be placed again in the None list, which is not sorted
-            rr_res = self._critical_list_select(self._avl_resources[node])
+            rr_res = self._critical_list_select(self.avl_resources[node])
             if rr_res is not self._noneID:
-                self._res_lists[self._critical_list_select(self._avl_resources[node])].remove(node)
+                self._res_lists[self._critical_list_select(self.avl_resources[node])].remove(node)
                 temp_node_list.append(node)
-        ff_alloc._update_resources(self, reserved_nodes, requested_resources)
+        FirstFit._update_resources(self, reserved_nodes, requested_resources)
         # Again, nodes that are involved in the update are re-added to the lists, according to their new resources
         for node in temp_node_list:
-            self._res_lists[self._critical_list_select(self._avl_resources[node])].append(node)
+            self._res_lists[self._critical_list_select(self.avl_resources[node])].append(node)
 
     def _convert_to_final_list(self, res_lists):
         """
@@ -136,11 +144,11 @@ class allocator_balanced(ff_alloc):
         res_lists[self._noneID].sort(key=lambda x: x)
         for key in self._critical_resources:
             res_lists[key] = self._trim_nodes(res_lists[key])
-            res_lists[key].sort(key=lambda x: (self._avl_resources.get(x).get(key), x))
+            res_lists[key].sort(key=lambda x: (self.avl_resources.get(x).get(key), x))
 
         # The lists are then combined, by placing in front the 'none' list, which is a buffer for the critical res
         final_list = copy(res_lists[self._noneID])
-        remaining_nodes = len(self._avl_resources) - len(final_list)
+        remaining_nodes = len(self.avl_resources) - len(final_list)
 
         # The algorithm would 'pop' elements from the lists' heads in succession. To avoid this, as it is expensive,
         # we use a dictionary of starting indexes for each list
@@ -188,3 +196,15 @@ class allocator_balanced(ff_alloc):
                 maxval = modifier
                 maxkey = k
         return maxkey
+
+
+    def _trim_nodes(self, nodes):
+        """
+        Method which removes from a list of node IDs those elements that correspond to nodes that are full, i.e. they
+        have no available Memory or CPU resources and are thus useless for allocation.
+        
+        :param nodes: A list of node IDs
+        :return: The trimmed list of nodes
+        """
+        trimNodes = [n for n in nodes if all(self.avl_resources[n][r] > 0 for r in self.nec_res_types)]
+        return trimNodes

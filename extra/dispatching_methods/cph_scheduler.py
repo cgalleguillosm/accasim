@@ -23,10 +23,251 @@ SOFTWARE.
 """
 from collections import namedtuple
 from ortools.constraint_solver import pywrapcp
-from accasim.base.scheduler_class import scheduler_base
-from accasim.utils.misc import sorted_object_list 
+from accasim.base.scheduler_class import SchedulerBase 
+from _functools import reduce
+from _bisect import bisect_left
+from bisect import bisect_right
 
-class cph_scheduler(scheduler_base):
+class sorted_object_list():
+    """
+    
+    Sorted Object list, with two elements for comparison, the main and the tie breaker. Each object must have an id for identification
+    
+    """
+
+    def __init__(self, sorting_priority, _list=[]):
+        """
+    
+        Sorted object list constructor. 
+        
+        :param sorting_priority: Dictionary with the 'main' and 'break_tie' keys for selecting the attributes for sorting. The value of the key corresponds to the object attribute.
+        :param _list: Optional. Initial list  
+    
+        """
+        assert (isinstance(sorting_priority, dict) and set(['main', 'break_tie']) <= set(sorting_priority.keys()))
+
+        self.main_sort = sorting_priority['main']
+        self.break_tie_sort = sorting_priority['break_tie']
+        self.list = []
+        self.main = []
+        self.secondary = []
+        self.map = {
+            'pos': {},
+            'id': {}
+        }
+        self.objects = {}
+        # dict values, function or inner attributes of wrappred objs
+        self._iter_func = lambda act, next: act.get(next) if isinstance(act, dict) else (
+            getattr(act, next)() if callable(getattr(act, next)) else getattr(act, next))
+
+        if _list:
+            self.add(*_list)
+
+    def add(self, *args):
+        """
+    
+        Add new elements to the list
+        
+        :param \*args: List of new elements 
+    
+        """
+        for arg in args:
+            _id = getattr(arg, 'id')
+            if _id in self.map['id']:
+                continue
+            self.objects[_id] = arg
+            _main = reduce(self._iter_func, self.main_sort.split('.'), arg)
+            _sec = reduce(self._iter_func, self.break_tie_sort.split('.'), arg)
+            _pos = bisect_left(self.main, _main)
+            main_pos_r = bisect_right(self.main, _main)
+            if _pos == main_pos_r:
+                self.list.insert(_pos, _id)
+                self.main.insert(_pos, _main)
+                self.secondary.insert(_pos, _sec)
+            else:
+                _pos = bisect_left(self.secondary[_pos:main_pos_r], _sec) + _pos
+                self.list.insert(_pos, _id)
+                self.main.insert(_pos, _main)
+                self.secondary.insert(_pos, _sec)
+            self.map_insert(self.map['id'], self.map['pos'], _pos, _id)
+
+    def map_insert(self, ids_, poss_, new_pos, new_id):
+        """
+    
+        Maps the new element to maintain the sorted list.
+    
+        :param ids_: Current id of the object
+        :param poss_: Current position of the object
+        :param new_pos: New position
+        :param new_id: New id
+    
+        """
+        n_items = len(ids_)
+        if n_items > 0:
+            if not (new_pos in poss_):
+                poss_[new_pos] = new_id
+                ids_[new_id] = new_pos
+            else:
+                self.make_map(ids_, poss_, new_pos)
+        else:
+            ids_[new_id] = new_pos
+            poss_[new_pos] = new_id
+
+    def make_map(self, ids_, poss_, new_pos=0, debug=False):
+        """
+    
+        After a removal of a element the map must be reconstructed.
+    
+        """
+        for _idx, _id in enumerate(self.list[new_pos:]):
+            ids_[_id] = _idx + new_pos
+            poss_[_idx + new_pos] = _id
+        if len(ids_) == len(poss_):
+            return
+        for p in list(poss_.keys()):
+            if p > _idx:
+                del poss_[p]
+
+    def remove(self, *args, **kwargs):
+        """
+    
+        Removal of an element
+    
+        :param \*args: List of elements
+    
+        """
+        for id in args:
+            assert (id in self.objects)
+            del self.objects[id]
+            self._remove(self.map['id'][id], **kwargs)
+
+    def _remove(self, _pos, **kwargs):
+        """
+        
+        Removal of an element
+        
+        :param \*args: List of elements
+        
+        """
+        del self.list[_pos]
+        del self.secondary[_pos]
+        del self.main[_pos]
+
+        _id = self.map['pos'].pop(_pos)
+        del self.map['id'][_id]
+        self.make_map(self.map['id'], self.map['pos'], **kwargs)
+
+    def get(self, pos):
+        """
+        
+        Return an element in a specific position
+        
+        :param pos: Position of the object 
+        
+        :return: Object in the specified position
+        
+        """
+        return self.list[pos]
+
+    def get_object(self, id):
+        """
+        
+        Return an element with a specific id.
+        
+        :param id: Id of the object 
+        
+        :return: Obect with the specific id
+        
+        """
+        return self.objects[id]
+
+    def get_list(self):
+        """
+        
+        :return: The sorted list of ids of elements
+        
+        """
+        return self.list
+
+    def get_object_list(self):
+        """
+        
+        :return: The sorted list of objects
+        
+        """
+        return [self.objects[_id] for _id in self.list]
+
+    def __len__(self):
+        return len(self.list)
+
+    # Return None if there is no coincidence
+    def pop(self, id=None, pos=None):
+        """
+        
+        Pop an element of the sorted list. 
+        
+        :param id: id to be poped
+        :param pos: pos to be poped
+        
+        :return: Object
+        
+        """
+        assert (not all([id, pos])), 'Pop only accepts one or zero arguments'
+        if not self.list:
+            return None
+        elif id:
+            return self._specific_pop_id(id)
+        elif pos:
+            return self._specific_pop_pos(pos)
+        else:
+            _id = self.list[0]
+            self._remove(0)
+            return self.objects.pop(_id)
+
+    def _specific_pop_id(self, id):
+        _obj = self.objects.pop(id, None)
+        if _obj:
+            self._remove(self.map['id'][id])
+        return _obj
+
+    def _specific_pop_pos(self, pos):
+        _id = self.map['pos'].pop(pos, None)
+        if _id:
+            self.map['pos'][pos] = _id
+            self._remove(pos)
+        return self.objects.pop(_id, None)
+
+    def __iter__(self):
+        self.actual_index = 0
+        return self
+
+    def __next__(self):
+        try:
+            self.actual_index += 1
+            return self.list[self.actual_index - 1]
+        except IndexError:
+            raise StopIteration
+
+    def get_reversed_list(self):
+        """
+        
+        :return:  Reversed list of ids
+        
+        """
+        return list(reversed(self.list))
+
+    def get_reversed_object_list(self):
+        """
+        
+        :return: Reversed list of objects
+        
+        """
+        return [self.objects[_id] for _id in reversed(self.list)]
+
+    def __str__(self):
+        return str(self.list)
+
+class cph_scheduler(SchedulerBase):
     """
     A scheduler which uses constraint programming to plan a sub-optimal schedule.
     This scheduler don't use the automatic feature of the automatic allocation, then it isn't
@@ -35,7 +276,7 @@ class cph_scheduler(scheduler_base):
     name = 'CPH'
     
     def __init__(self, allocator, resource_manager=None, _seed=0, _ewt={'default': 1800}, **kwargs):
-        scheduler_base.__init__(self, _seed, resource_manager, None)
+        SchedulerBase.__init__(self, _seed, None)
         self.ewt = _ewt
         self.manual_allocator = allocator
         
@@ -43,11 +284,10 @@ class cph_scheduler(scheduler_base):
         self.QueuedJobClass = namedtuple('Job', ['id', 'first', 'second'])
         self.queued_jobs = sorted_object_list({'main': 'first', 'break_tie':'second'})
         self.numberOfIterations = 1
-        self.max_timelimite = 150000  # 2.5min
-        self.prev_solved = None
+        self.max_timelimit = 150000  # 2.5min
         
            
-    def scheduling_method(self, cur_time, es_dict, es, _debug):
+    def scheduling_method(self, cur_time, es, es_dict):
         """
             This function must map the queued events to available nodes at the current time.
             
@@ -58,17 +298,18 @@ class cph_scheduler(scheduler_base):
             
             :return a tuple of (time to schedule, event id, list of assigned nodes)  
         """
+        _debug = False
         if not self.manual_allocator.resource_manager:
             self.manual_allocator.set_resource_manager(self.resource_manager)
         allocation = []
-        avl_resources = self.resource_manager.availability()
+        avl_resources = self.resource_manager.current_availability
         self.manual_allocator.set_resources(avl_resources)
         for i in range(self.numberOfIterations):
             timelimit = 1000
             solve_tries = 1
             sol_found = False
             temp_sched = {}
-            while not sol_found and timelimit < self.max_timelimite:                        
+            while not sol_found and timelimit < self.max_timelimit:                        
                 sol_found = self.cp_model(es, es_dict, temp_sched, timelimit, cur_time,
                                           self.queued_jobs, avl_resources, _debug)
                 if _debug:
@@ -104,7 +345,7 @@ class cph_scheduler(scheduler_base):
                     print('{} incorrect allocation. {}'.format(_id, 'Postponed job (Estimated time: {})'.format(_time)))
         # Trying to allocate all jobs scheduled now
         self.manual_allocator.set_attr(schedule=(es_dict, schedule_plan))
-        allocation = self.manual_allocator.allocate(to_schedule_now, cur_time, skip=True, debug=_debug)
+        allocation = self.manual_allocator.allocate(to_schedule_now, cur_time, skip=True)
 
         for (time, idx, nodes) in allocation:
             if time is not None:
@@ -118,7 +359,7 @@ class cph_scheduler(scheduler_base):
         allocated_events += allocation
         # All jobs to be scheduled later are considered as discarded by the allocator
         allocated_events += [(None, ev.id, []) for ev in to_schedule_later]
-        return allocated_events
+        return allocated_events, []
 
     def cp_model(self, es, es_dict, temp_sched, timelimit, cur_time, queued_jobs, avl_resources, _debug):
         """
@@ -143,7 +384,7 @@ class cph_scheduler(scheduler_base):
         q_length = 100
         job_real_vars_count = 0 
         
-        running_events = self.resource_manager.actual_events
+        running_events = self.resource_manager.current_allocations
         max_mks = 0 
         job_map = {}
         for _e in running_events:
@@ -153,15 +394,15 @@ class cph_scheduler(scheduler_base):
             if mks >= 0:
                 max_mks += mks
         
-        for i, _e in enumerate(es):
+        for i, job_obj in enumerate(es):
             if i < q_length:
                 # To be scheduled
-                e = es_dict[_e]
-                max_mks += es_dict[_e].expected_duration
-                job_map[_e] = e
+                # e = es_dict[_e]
+                max_mks += job_obj.expected_duration  # es_dict[_e].expected_duration
+                job_map[job_obj.id] = job_obj
             else:
                 # Postponed
-                temp_sched[_e] = None
+                temp_sched[job_obj.id] = None
         
         self.queued_jobs.add(*self.prepare_job(job_map.values(), cur_time))
         prb_vars = []
@@ -175,10 +416,7 @@ class cph_scheduler(scheduler_base):
                 start_max = start_min
 
                 elapsed_time = (cur_time - job_map[_id].start_time)
-                estimated_remaining_time = (duration - elapsed_time)
-
-                # FIX the (-remaining time) where sometimes the job length is overestimated. Just use 1 to speed up the search process
-                duration = 1 if estimated_remaining_time <= 0 else estimated_remaining_time
+                duration = (duration - elapsed_time)
             else:
                 """
                 Arguments: int64 start_min, int64 start_max, int64 duration, bool optional, const std::string& name
@@ -197,7 +435,7 @@ class cph_scheduler(scheduler_base):
         
         if search_needed:
             solved = False
-            _keys = self.resource_manager.resource_types()
+            _keys = self.resource_manager.resource_types  # ()
             total_capacity = {}
             total_demand = {}
             for _key in _keys:
@@ -216,9 +454,9 @@ class cph_scheduler(scheduler_base):
                 _job = es_dict[_sjob]
                 _id = _job.id
                 ewt = self.get_ewt(_job.queue) 
-                wgt = int(self.max_ewt / ewt)
-                jstart = prb_vars[i].StartExpr()
-                qtime = jstart - (_job.queued_time - cur_time)
+                wgt = int((self.max_ewt * 100000) / ewt)  #  5 digits
+                jstart = prb_vars[i].SafeStartExpr(max_mks - _job.expected_duration)
+                qtime = jstart + (_job.queued_time - cur_time)
                 prod = (qtime * wgt)
                 wt.append(prod.Var())
                 
@@ -227,7 +465,6 @@ class cph_scheduler(scheduler_base):
             objective_monitor = solver.Minimize(objective_var, 1)           
             db = solver.HeuristicSearch(prb_vars)
 
-            restart = solver.ConstantRestart(1000)
             limit = solver.TimeLimit(timelimit)
 
             log = solver.SearchLog(10000)

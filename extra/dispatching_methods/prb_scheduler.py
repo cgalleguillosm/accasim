@@ -21,9 +21,9 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-from accasim.base.scheduler_class import scheduler_base
+from accasim.base.scheduler_class import SchedulerBase
 
-class prb_scheduler(scheduler_base):
+class prb_scheduler(SchedulerBase):
     """
     PRB type scheduler. Sorts the events depending on their expected and accumulated waiting time in the queue.
     
@@ -32,7 +32,7 @@ class prb_scheduler(scheduler_base):
     """
     name = 'PRB'
     def __init__(self, _allocator, _resource_manager=None, _seed=0, _ewt={'default': 1800}, **kwargs):
-        scheduler_base.__init__(self, _seed, _resource_manager, _allocator)
+        SchedulerBase.__init__(self, _seed, allocator=_allocator)
         self.ewt = _ewt
 
     def get_id(self):
@@ -43,7 +43,7 @@ class prb_scheduler(scheduler_base):
         """
         return '-'.join([self.__class__.__name__, self.name, self.allocator.get_id()])
 
-    def scheduling_method(self, cur_time, es_dict, es, _debug=False):
+    def scheduling_method(self, cur_time, es, es_dict, _debug=False):
         """
         This function must map the queued events to available nodes at the current time.
 
@@ -54,16 +54,15 @@ class prb_scheduler(scheduler_base):
 
         :return a tuple of (time to schedule, event id, list of assigned nodes)  
         """
-        avl_resources = self.resource_manager.availability()
-        self.allocator.set_resources(avl_resources)
+        avl_resources = self.resource_manager.current_availability
+        # self.allocator.set_resources(avl_resources)
 
         # Sorted by more time in queue time, break ties with more simpliest requests
         sorted_es = self._sort_events(cur_time, es_dict, es)
         
-        event_list = [es_dict[e] for e in sorted_es]
-        allocated_events = self.allocator.allocate(event_list, cur_time, skip=True, debug=_debug)
-
-        return allocated_events
+        event_list = [es_dict[e.id] for e in sorted_es]
+                
+        return event_list, []
 
     def _get_ewt(self, queue_type):
         """
@@ -89,18 +88,18 @@ class prb_scheduler(scheduler_base):
             return events
         
         sort_helper = {
-            e:
+            e.id:
                 {
-                    'qtime': cur_time - events_dict[e].queued_time + 1,
-                    'ewt': self._get_ewt(events_dict[e].queue),
-                    'dur': events_dict[e].expected_duration,
-                    'req': sum([events_dict[e].requested_nodes * val for attr, val in
-                                events_dict[e].requested_resources.items()])
+                    'qtime': cur_time - e.queued_time + 1,
+                    'ewt': self._get_ewt(e.queue),
+                    'dur': e.expected_duration,
+                    'req': sum([e.requested_nodes * val for attr, val in
+                                e.requested_resources.items()])
                 }
             for e in events
         }
         sort_helper['max_ewt'] = max([v['ewt'] for v in sort_helper.values()])
         
         return sorted(events, key=lambda e: (
-        -(sort_helper['max_ewt'] * sort_helper[e]['qtime']) / sort_helper[e]['ewt'],
-        sort_helper[e]['dur'] * sort_helper[e]['req']))
+        -(sort_helper['max_ewt'] * sort_helper[e.id]['qtime']) / sort_helper[e.id]['ewt'],
+        sort_helper[e.id]['dur'] * sort_helper[e.id]['req']))
