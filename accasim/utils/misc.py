@@ -30,7 +30,7 @@ from threading import Thread as _Thread
 from os import path as _path, remove as _remove
 from json import dump as _dump, dumps as _dumps, load as _load, loads as _loads
 from time import perf_counter as clock
-from datetime import datetime as _datetime
+from datetime import datetime as _datetime, timedelta as _timedelta, timezone as _timezone
 from re import compile as _compile
 from collections import Mapping
 from itertools import islice
@@ -356,12 +356,15 @@ def cmp_to_key(mycmp):
     return k
 
 
-def from_isodatetime_2_timestamp(dtime):
+def from_isodatetime_2_timestamp(dtime, hours=0, minutes=0):
     """
     
     Converts a ISO datetime to Unix Timestamp
     
     :param dtime: Datetime in YYYY-MM-DD HH:MM:SS format
+    
+    :param hours: Hours to adjust the timezone
+    :param minutes: Minutes to adjust the timezone
     
     :return: Timestamp of the dtime 
     
@@ -369,7 +372,7 @@ def from_isodatetime_2_timestamp(dtime):
     p = _compile(r'(\d{4})-(\d{2})-(\d{2})\s(\d{2}):(\d{2}):(\d{2})')
     m = p.search(dtime).groups()
     # year, month, day, hour, minute, second, microsecond
-    t = _datetime(year=int(m[0]), month=int(m[1]), day=int(m[2]), hour=int(m[3]), minute=int(m[4]), second=int(m[5]))
+    t = _datetime(year=int(m[0]), month=int(m[1]), day=int(m[2]), hour=int(m[3]), minute=int(m[4]), second=int(m[5]), tzinfo=_timezone(_timedelta(hours=hours, minutes=minutes)))  # UTC
     return int(t.timestamp())
 
 

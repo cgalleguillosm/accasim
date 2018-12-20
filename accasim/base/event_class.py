@@ -376,7 +376,7 @@ class EventManager:
             self.loaded[e.queued_time].append(e.id)
             self.time_points.add(e.queued_time)
         else:
-            raise EventException('Time sync problem, the actual event was loaded after the real submit time. This a programming error, must be checked.')
+            raise EventException('Time sync problem, the actual event {} was loaded after ({}) the real submit time ({}). This a programming error, must be checked.'.format(e.id, self.current_time, e.queued_time))
 
     def move_to_finished(self, events_dict):
         """

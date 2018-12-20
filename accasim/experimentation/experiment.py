@@ -68,7 +68,7 @@ class Experiment:
                          'SCHEDULE_PREFIX': '_SCHEDULE_PREFIX', 'BENCHMARK_PREFIX': '_BENCHMARK_PREFIX'}
 
     SIMULATOR_ATTRIBUTES = {'scheduling_output': True, 'pprint_output': False, 'benchmark_output': True,
-                            'statistics_output': True, 'job_factory': None, 'reader': None, 'additional_data': None,
+                            'statistics_output': True, 'job_factory': None, 'reader': None, 'additional_data': [],
                             'save_parameters': ['RESOURCE_ORDER'], 'timeout': None, 'id': None, 'skip':False, 'LOG_LEVEL': 'INFO',
                             'EXTENDED_JOB_DESCRIPTION': False}
     RUN_SIMULATOR_ATTRIBUTES = {'system_status': False}

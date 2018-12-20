@@ -68,7 +68,13 @@ class SchedulerBase(ABC):
                     - JobVerification.REJECT: Any job is rejected
                     - JobVerification.NO_CHECK: All jobs are accepted
                     - JobVerification.CHECK_TOTAL: If the job requires more resources than the available in the system.
-                    - JobVerification.CHECK_REQUEST: if an individual request by node requests more resources than the available one.        
+                    - JobVerification.CHECK_REQUEST: if an individual request by node requests more resources than the available one.
+                    
+                    
+        :param kwargs:
+            - skip_jobs_on_allocation: If the allocator is predefined and this parameter is true, the allocator will try to allocate jobs as much as possible. 
+                Otherwise, the allocation will stop after the first fail.
+                
         """
         seed(_seed)
         self._counter = 0
@@ -77,7 +83,7 @@ class SchedulerBase(ABC):
         self._system_capacity = None
         self._nodes_capacity = None
         self.resource_manager = None
-        
+                
         if allocator:
             assert isinstance(allocator, AllocatorBase), 'Allocator not valid for scheduler'
             self.allocator = allocator
@@ -89,7 +95,10 @@ class SchedulerBase(ABC):
         self._job_check = job_check
         
         # Check resources
-        self._min_required_availability = kwargs.pop('min_resources', None)  # ['core', 'mem']s        
+        self._min_required_availability = kwargs.pop('min_resources', None)  # ['core', 'mem']s
+        # Skip jobs during allocation
+        self.skip_jobs_on_allocation = kwargs.pop('skip_jobs_on_allocation', False)
+                
         
     @property
     def name(self):
@@ -189,7 +198,8 @@ class SchedulerBase(ABC):
         
         # If there are scheduled jobs and an allocator defined, try to allocate the scheduled jobs. 
         if to_allocate and self.allocator:
-            dispatching_plan = self.allocator.allocate(to_allocate, cur_time)
+            print('Skip ', self.skip_jobs_on_allocation)
+            dispatching_plan = self.allocator.allocate(to_allocate, cur_time, skip=self.skip_jobs_on_allocation)
         else:
             dispatching_plan = to_allocate
             
