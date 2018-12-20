@@ -198,7 +198,6 @@ class SchedulerBase(ABC):
         
         # If there are scheduled jobs and an allocator defined, try to allocate the scheduled jobs. 
         if to_allocate and self.allocator:
-            print('Skip ', self.skip_jobs_on_allocation)
             dispatching_plan = self.allocator.allocate(to_allocate, cur_time, skip=self.skip_jobs_on_allocation)
         else:
             dispatching_plan = to_allocate
