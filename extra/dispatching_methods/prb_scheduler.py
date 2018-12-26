@@ -32,7 +32,7 @@ class prb_scheduler(SchedulerBase):
     """
     name = 'PRB'
     def __init__(self, _allocator, _resource_manager=None, _seed=0, _ewt={'default': 1800}, **kwargs):
-        SchedulerBase.__init__(self, _seed, allocator=_allocator)
+        SchedulerBase.__init__(self, _seed, allocator=_allocator, skip_jobs_on_allocation=True)
         self.ewt = _ewt
 
     def get_id(self):

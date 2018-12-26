@@ -49,7 +49,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'AccaSim'
-copyright = '2017, Cristian Galleguillos'
+copyright = '2018, Cristian Galleguillos'
 author = 'Cristian Galleguillos'
 
 # The version info for the project you're documenting, acts as replacement for
@@ -88,8 +88,8 @@ todo_include_todos = False
 html_theme = "classic"
 html_theme_path = ["."]
 html_theme_options = {
-    "rightsidebar": "true",
-    "stickysidebar": "true",
+    "rightsidebar": "false",
+    "stickysidebar": "false",
     "externalrefs": "true",
     "relbarbgcolor": "black"
 }

@@ -1,6 +1,6 @@
-from accasim.base.scheduler_class import fifo_sched, sjf_sched, ljf_sched, easybf_sched
-from accasim.base.allocator_class import ff_alloc, bf_alloc
-from accasim.experimentation.experiment import experiment_class as experiment
+from accasim.base.scheduler_class import FirstInFirstOut as fifo_sched, ShortestJobFirst as sjf_sched, LongestJobFirst as ljf_sched, EASYBackfilling as easybf_sched
+from accasim.base.allocator_class import FirstFit as ff_alloc, BestFit as bf_alloc
+from accasim.experimentation.experiment import Experiment as experiment
 
 
 if __name__ == '__main__':
@@ -20,21 +20,21 @@ if __name__ == '__main__':
     # Configuration file of the sysmtem under study, the configuration must 
     # hold all the jobs requests. 
     #===========================================================================
-    sys_config = 'config/system.config'
+    sys_config = 'config/system.config'    
     
     #===========================================================================
     # Essentials files are specific settings of the simulator, such as 
     # dispatching plan's format, pprint format, visualization port, etc.
     # If an essential file isn't provided, the simulator will take the default values. 
     #===========================================================================
-    essentials = 'config/essentials.config'
+    essentials = '../config/essentials.config'
 
     #===========================================================================
     # For a minimal experiment class instantiation are required the experiment name,
     # the workload filepath and also the system configuration filpath. In this example
     # some optional arguments are also given: simulator_config, separator and timeout.
     #===========================================================================
-    experimentation = experiment(experiment_name, workload, sys_config, essentials, SEPARATOR='#', timeout=3600)
+    experimentation = experiment(experiment_name, workload, sys_config, simulator_config=essentials, SEPARATOR='#', timeout=3600)
     
     #===========================================================================
     # The lists of scheduler and allocator classes name are defined. 

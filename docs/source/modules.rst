@@ -1,13 +1,6 @@
-Documentation
-=============
+API Documentation
+=================
 
-.. Indices and tables
-	==================
-
-* :ref:`modindex`
-* :doc:`examples`
-* :doc:`advanced_allocators`
-* :doc:`dispatching_methods`
 * Package Documentation
 
 	.. toctree::
