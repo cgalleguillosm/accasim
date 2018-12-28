@@ -7,7 +7,8 @@ use `OR-Tools <https://developers.google.com/optimization/>`_ to model and then 
 `AccaSim <https://accasim.readthedocs.io/en/latest/>`_ simulator. 
 
 **Dispatchers**
-..
+.. ..
+	
 	* **Hybrid CP-based dispatchers**
 		* [../cph_scheduler.py] (HCP)
 		* [HCP/hcp1_scheduler.py] (HCP\ :sub:`1`\)
