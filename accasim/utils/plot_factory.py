@@ -36,6 +36,7 @@ from os.path import splitext, join
 from scipy.signal import savgol_filter
 from os.path import isfile
 import numpy as np
+from matplotlib.pyplot import boxplot
 
 
 class PlotFactory:
@@ -136,7 +137,7 @@ class PlotFactory:
         else:
             self._filepaths = paths
             self._labels = labels
-
+            
         if len(self._filepaths) != len(self._labels):
             if self._debug:
                 print("Filepaths and Labels lists must have the same lengths.")
@@ -327,10 +328,10 @@ class PlotFactory:
         # Generates the dictionary of system resources from the config file
         resobject, equiv = self._generateSystemConfig(config)
         self._base_res = resobject.availability()
-        res_types = resobject.system_resource_types
+        res_types = resobject._system_resource_types
 
         # Makes sure the resource type exists in the system
-        if resource is not None and resource not in resobject.system_resource_types:
+        if resource is not None and resource not in resobject._system_resource_types:
             if self._debug:
                 print("Resource type " + resource + "is not valid. Using all available resources...")
             resource = None
@@ -365,7 +366,7 @@ class PlotFactory:
                 print("Loading jobs...")
             while True:
                 # Jobs are read and their slowdown values are stored
-                job = reader.read()
+                job = reader._read()
                 if job is not None:
                     job['start_time'] = timestamp_func(job['start_time'])
                     job['end_time'] = timestamp_func(job['end_time'])
@@ -485,6 +486,7 @@ class PlotFactory:
         # The metrics values for this instance are added to the internal variables
         self._slowdowns.append(slowdowns)
         self._queuesizes.append(queued)
+               
         self._efficiencies.append(efficiencyperjob)
         self._loadratiosX.append([el[0] for el in efficiency])
         self._loadratiosY.append([el[1] for el in efficiency])
@@ -583,8 +585,8 @@ class PlotFactory:
             equiv = config.pop('equivalence', {})
             # PEP 448 - Additional Unpacking Generalizations 
             # python 3.5 and newer 
-            if not(node_prefix in config):
-                config[node_prefix] = ''
+            if not('node_prefix' in config):
+                config['node_prefix'] = ''
             resources = Resources(**config)
             return resources, equiv
         except Exception as e:
@@ -690,7 +692,7 @@ class PlotFactory:
         stats['quartiles'] = np.percentile(data, range(0, 100, 25))
         return stats
 
-    def box_plot(self, data, title='', ylabel='', scale='linear', xlim=(None, None), ylim=(None, None), figsize=(7, 5), meansonly=False, output='Output.pdf', groups=1):
+    def box_plot(self, data, title='', ylabel='', scale='linear', figsize=(7, 5), meansonly=False, output='Output.pdf', groups=1, **kwargs):
         """
         Produces a box-and-whiskers plot for the input data's distributions.
         
@@ -699,17 +701,29 @@ class PlotFactory:
         :param title: the title of the plot;
         :param ylabel: the Y-axis label;
         :param scale: the scale of the plot;
-        :param xlim: the left-right axis boundaries, is a tuple;
-        :param ylim: the bottom-top axis boundaries, is a tuple;
         :param figsize: the size of the figure, is a tuple;
         :param meansonly: if True only the mean values for each distribution are depicted;
-        :param output: the path to the output PDF file;
+        :param output: the path to the output file;
+        :param **kwargs: 
+            - fig_format: {
+                'format': eps or pdf,
+                'dpi': Int number
+            }
+            - xlim: the left-right axis boundaries, is a tuple;
+            - ylim: the bottom-top axis boundaries, is a tuple;
+
         """
-        cycler = ['b', 'r', 'y', 'g', 'c', 'm', 'k', 'w']
+        color_cycler = ['b', 'r', 'y', 'g', 'c', 'm', 'k', 'w']
+        hatch_cycler = ['/', '\\', '|', '-', '+', 'x', 'o', 'O', '.', '*']
+        ncycle = 2
         fontsize = 12
         plt.rc('xtick', labelsize=fontsize)
         plt.rc('ytick', labelsize=fontsize)
         N = len(data)
+
+        ylim = kwargs.pop('ylim', None)
+        xlim = kwargs.pop('xlim', None)
+        show_legend = kwargs.pop('show_legend', False)
 
         spacing = 0.2
         ind = [i * spacing for i in np.arange(N)]
@@ -718,47 +732,54 @@ class PlotFactory:
         linecol = 'black'
         tricol = 'black'
         vertlinecol = 'gray'
-        # rectcol = 'blue'
 
         fig, ax = plt.subplots(figsize=figsize)
 
         c_group = 0
         c = groups
+        r_hatch = len(hatch_cycler)
+        color_list = []
+        hatch_list = []
         for i, d in enumerate(data):
-            rectcol = cycler[c_group]
-            mydata = self._getDistributionStats(d)
-            if not meansonly:
-                ax.add_patch(patches.Rectangle((ind[i], mydata.get('quartiles')[1]), width, mydata.get('quartiles')[3] - mydata.get('quartiles')[1], facecolor=rectcol, alpha=0.75))
-                ax.plot([ind[i] + width / 2, ind[i] + width / 2], [mydata.get('min'), mydata.get('max')], color=vertlinecol, linestyle='-', linewidth=2, zorder=1)
-                ax.scatter(ind[i] + width / 2, mydata.get('max'), marker='_', s=markersize, zorder=2, color=linecol)
-                ax.scatter(ind[i] + width / 2, mydata.get('min'), marker='_', s=markersize, zorder=2, color=linecol)
-                ax.scatter(ind[i] + width / 2, mydata.get('median'), marker='_', s=markersize, zorder=2, color=linecol)
-                ax.scatter(ind[i] + width / 2, mydata.get('avg'), marker='^', s=markersize / 4, zorder=2, color=tricol)
-            else:
-                # If meansonly is True, only a path is drawn for the mean values.
-                ax.add_patch(patches.Rectangle((ind[i], 0), width, mydata.get('avg'), facecolor=rectcol, alpha=0.75))
-                ax.scatter(ind[i] + width / 2, mydata.get('avg'), marker='_', s=markersize / 4, zorder=0, color=linecol)
+            color_list.append(color_cycler[c_group])
+            hatch_list.append(hatch_cycler[len(hatch_cycler) - r_hatch] * ncycle)
             c -= 1
             if c == 0:
                 c_group += 1
                 c = groups
+            r_hatch -= 1
+            if r_hatch == 0:
+                ncycle += 1
+                r_hatch = len(hatch_cycler)
+        bp = ax.boxplot(data, labels=self._labels, patch_artist=True, sym="", whis=[0, 100], showmeans=True, showfliers=False)
+        
+        for patch, color, hatch in zip(bp['boxes'], color_list, hatch_list):
+            patch.set_facecolor(color)
+            patch.set_alpha(0.75)
+            patch.set_hatch(hatch)
+        
 
         # add some text for labels, title and axes ticks
         ax.set_ylabel(ylabel, fontsize=fontsize)
         ax.set_xlabel('Dispatching method', fontsize=fontsize)
         ax.set_title(title)
-        ax.set_xticks([i + width / 2 for i in ind])
-        ax.set_xticklabels(self._labels)
         ax.set_yscale(scale)
-        ax.set_ylim(top=ylim[1], bottom=ylim[0], emit=True, auto=False)
-        ax.set_xlim(left=xlim[0], right=xlim[1], emit=True, auto=False)
+        
+        if show_legend:
+            ax.legend(bp['boxes'], self._labels, bbox_to_anchor=(0., 1.02, 1., .102), loc=3, ncol=len(self._labels) // 2, mode="expand", borderaxespad=0.)
+        
+        if ylim:
+            ax.set_ylim(top=ylim[1], bottom=ylim[0], emit=True, auto=False)
+        if xlim:
+            ax.set_xlim(left=xlim[0], right=xlim[1], emit=True, auto=False)
 
+        plt.tight_layout()
         plt.grid(linestyle=':', color='gray', zorder=0)
         plt.show()
 
-        ff = PdfPages(output)
-        ff.savefig(fig)
-        ff.close()
+        fig_format = kwargs.pop('fig_format', {})
+        fig.savefig(output, **fig_format)
+        
 
     def box_plot_times(self, dataman, datasched, title='', scale='linear', xlim=(None, None), ylim=(None, None), figsize=(7, 5), legend=True, output='Output.pdf'):
         """
