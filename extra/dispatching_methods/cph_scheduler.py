@@ -489,7 +489,7 @@ class cph_scheduler(SchedulerBase):
             if not solved:
                 solver.EndSearch()
                 for _e in es:
-                    temp_sched[_e] = None                    
+                    temp_sched[_e.id] = None                    
         else:
             solved = True
         for _j in prb_vars:
