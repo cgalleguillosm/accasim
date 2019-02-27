@@ -278,7 +278,8 @@ class ResourceManager:
         
         :return: Tuple: First element True if the event was allocated, False otherwise. Second element a message. 
         """
-        self._logger.trace('Allocating {} in nodes {}'.format(event.id, ', '.join([node for node in node_names])))
+        if hasattr(self._logger, 'trace'):
+            self._logger.trace('Allocating {} in nodes {}'.format(event.id, ', '.join([node for node in node_names])))
         _requested_res = event.requested_resources
         _attrs = _requested_res.keys()
         
