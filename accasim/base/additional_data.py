@@ -169,8 +169,6 @@ class AdditionalData(ABC):
         """       
         if self.event_mapper:
             return
-         
-        self.allocator.set_resource_manager(event_manager)
         assert isinstance(event_manager, EventManager), 'Event Mapper not valid for scheduler'
         self.event_mapper = event_manager
 

@@ -333,6 +333,9 @@ class EventManager:
             _pprint_fp = path.join(self.constants.RESULTS_FOLDER_PATH, self.constants.PPRINT_PREFIX + self.constants.WORKLOAD_FILENAME)
             self._pprint_writer = AsyncWriter(path=_pprint_fp, pre_process_fun=EventManager._schd_pprint_preprocessor)
             self._writers.append(self._pprint_writer)
+            
+        for ad in self.additional_data:
+            ad.set_event_manager(self)
 
     def load_events(self, es):
         """
