@@ -52,6 +52,7 @@ class AttributeType:
         self.type = type_class
         self.optional = optional
 
+
 class Event(ABC):
 
     def __init__(self, job_id, queued_time, duration, requested_nodes, requested_resources):
@@ -134,6 +135,7 @@ class Event(ABC):
 
 
 class JobFactory:
+
     def __init__(self, resource_manager=None, job_class=Event, job_attrs=[], job_mapper={}):
         """
 
@@ -187,7 +189,7 @@ class JobFactory:
         
         if missing_res:
             self._logger.info('Some resources has not been included in the parser, assigning 0 to the {} resources in the job request.'.format(missing_res))
-            # required = {'core', 'mem'}
+            required = {'core'}  # , 'mem'}
             inter = missing_res & required
             if inter and len(inter) != len(required):
                 self._logger.error('Some mandatory attributes are missing: {}. The simulation will stop.'.format(inter))
@@ -214,7 +216,6 @@ class JobFactory:
             assert(isinstance(resource_manager, ResourceManager)), 'Only subclases of :class:`.resource_manager` are accepted.'
             self.resource_manager = resource_manager
             self.resource_manager_setup()
-
 
     def factory(self, **kwargs):
         """
@@ -288,6 +289,7 @@ class JobFactory:
         if not hasattr(obj, 'requested_resources'):
             _times = getattr(obj, 'requested_nodes')
             setattr(obj, 'requested_resources', {_res: getattr(obj, _res) // _times for _res in self.system_resources})            
+
 
 class EventManager:
 
@@ -538,7 +540,6 @@ class EventManager:
             if _tmp:
                 to_dispatch, rejected = _tmp
         return to_dispatch, rejected
-        
 
     def dispatch_events(self, event_dict, to_dispatch, time_diff, omit_timediff=True):
         """
@@ -724,6 +725,7 @@ class EventManager:
 
         """
         return 'Loaded: {}\nQueued: {}\nRunning: {}\nReal job finish on: {},\nFinished: {}\nNext time events: {}'.format(self.loaded, self.queued, self.running, self.real_ending, self.finished, self.time_points)
+
 
 class EventException(Exception):
     pass
