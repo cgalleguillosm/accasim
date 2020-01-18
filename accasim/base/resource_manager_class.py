@@ -26,6 +26,7 @@ from copy import deepcopy
 from accasim.utils.misc import CONSTANT, FrozenDict
 from datetime import datetime
 
+
 class Resources:
     """
     
@@ -252,6 +253,7 @@ class Resources:
         """
         return self.GROUPS
 
+
 class ResourceManager:
 
     def __init__(self, _resource):
@@ -293,7 +295,8 @@ class ResourceManager:
         
         _allocated = True
         _rollback = []
-
+        message = 'OK'
+        
         for node_name, values in _allocation.items():
             done, message = self._resources.allocate(node_name, **values)
             if done:
@@ -333,7 +336,6 @@ class ResourceManager:
         """
         for arg in args:
             print(arg, self._resources._resources[arg])
-
     
     @property
     def current_availability(self):
@@ -421,6 +423,7 @@ class ResourceManager:
     @property
     def current_allocations(self):
         return self._running_jobs
+
 
 class ResourceError(Exception):
     pass  

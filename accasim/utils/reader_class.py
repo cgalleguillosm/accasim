@@ -47,8 +47,10 @@ class WorkloadParserBase(ABC):
         :return: A dictionary of the parsed data. 
         """
         raise NotImplementedError()
+
     
 class DefaultWorkloadParser(WorkloadParserBase):
+
     def __init__(self):
         WorkloadParserBase.__init__(self)
         """
@@ -100,7 +102,7 @@ class DefaultWorkloadParser(WorkloadParserBase):
         elif _dict['used_memory'] != -1:  
             _dict['mem'] = _dict.pop('used_memory')
         else:
-            return None 
+            pass 
         return _dict
 
     def _compile_job_regexp(self):
@@ -114,6 +116,7 @@ class DefaultWorkloadParser(WorkloadParserBase):
         self._compiled_infeasible_regexp = []
         for _token in self.avoid_tokens:
             self._compiled_infeasible_regexp.append(compile(_token))
+
 
 class Reader(ABC):
     """
@@ -224,6 +227,7 @@ class Reader(ABC):
         
         """
         self.submission_enabled = False
+
     
 class DefaultReader(Reader):
     """
@@ -233,6 +237,7 @@ class DefaultReader(Reader):
     
     
     """
+
     def __init__(self, filepath, job_factory=None, parser=None, tweak_function=None, max_lines=None, start_time=0, equivalence={}):
         """
         Class constructor
@@ -336,6 +341,7 @@ class DefaultReader(Reader):
             parsed_line = self.tweak_function.tweak_function(parsed_line)
         return parsed_line
 
+
 class Tweaker(ABC):
     
     def __init__(self, **kwargs):
@@ -354,15 +360,17 @@ class Tweaker(ABC):
         """
         pass
 
+
 class DefaultTweaker(Tweaker):
 
-    def __init__(self, start_time, system_resources, equivalence):
+    def __init__(self, start_time, system_resources=None, equivalence=None):
         """
 
         :param start_time:
         :param equivalence:
         """
-        obj_assertion(system_resources, Resources)
+        if system_resources:
+            obj_assertion(system_resources, Resources)
         self.start_time = start_time
         self.equivalence = equivalence if equivalence else {'processor': {'core': 1}}       
         

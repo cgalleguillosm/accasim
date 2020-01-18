@@ -47,6 +47,7 @@ from accasim.base.additional_data import AdditionalData, AdditionalDataError
 from accasim.utils.async_writer import AsyncWriter
 import traceback
 
+
 class SimulatorBase(ABC):
     
     LOG_LEVEL_INFO = 'INFO'
@@ -111,10 +112,12 @@ class SimulatorBase(ABC):
         def log_logger(self, message, *args, **kwargs):
             if self.isEnabledFor(level):
                 self._log(level, message, args, **kwargs)
+
         logging.getLoggerClass().trace = log_logger
     
         def log_root(msg, *args, **kwargs):
             logging.log(level, msg, *args, **kwargs)
+
         logging.addLevelName(level, "TRACE")
         logging.trace = log_root
         
@@ -322,6 +325,7 @@ class SimulatorBase(ABC):
         ]
         return {f[1]:f[2] for f in possible_filepaths if f[0]}
 
+
 class Simulator(SimulatorBase):
     """
 
@@ -365,7 +369,7 @@ class Simulator(SimulatorBase):
         kwargs['BENCHMARK_OUTPUT'] = benchmark_output
         kwargs['STATISTICS_OUTPUT'] = statistics_output
         kwargs['SHOW_STATISTICS'] = show_statistics
-
+        
         _uargs = []
         
         if not resource_manager:
@@ -594,7 +598,6 @@ class Simulator(SimulatorBase):
         self.statics_write_out(self.constants.SHOW_STATISTICS, self.constants.STATISTICS_OUTPUT)
         self._logger.info('Simulation process completed.')
         self.mapper.current_time = None
-        
 
     @staticmethod
     def usage_metrics_preprocessor(entry):
@@ -726,10 +729,10 @@ class Simulator(SimulatorBase):
 
         # Default system resources: core and mem.
         total_cores = AttributeType('core', int)
-        total_mem = AttributeType('mem', int)
+        # total_mem = AttributeType('mem', int)
 
-        return [total_cores, total_mem, expected_duration, queue, user_id]
-
+        # return [total_cores, total_mem, expected_duration, queue, user_id]
+        return [total_cores, expected_duration, queue, user_id]
 
     def extended_job_description(self):
         """
