@@ -39,7 +39,7 @@ class AllocatorBase(ABC):
 
     MAXSIZE = maxsize
 
-    def __init__(self, _seed, **kwargs):
+    def __init__(self, _seed, resource_types=['core'], **kwargs):
         """
     
         Allocator constructor (based on scheduler)
@@ -57,8 +57,7 @@ class AllocatorBase(ABC):
         self._logger = logging.getLogger('accasim')
         # The list of resource types that are necessary for job execution. Used to determine wether a node can be used
         # for allocation or not
-        self.nec_res_types = ['core', 'mem']
-
+        self.nec_res_types = resource_types
 
     @abstractmethod
     def get_id(self):
@@ -181,6 +180,7 @@ class AllocatorBase(ABC):
         
         """
         return self.get_id()
+
 
 class FirstFit(AllocatorBase):
     """
@@ -410,7 +410,6 @@ class FirstFit(AllocatorBase):
                        break
             for node in to_remove:
                 self.sorted_keys.remove(node)
-                
 
     def _event_fits_node(self, resources, requested_resources):
         _fits = self.MAXSIZE
@@ -427,6 +426,7 @@ class FirstFit(AllocatorBase):
             if _fits > fit:
                 _fits = fit
         return _fits
+
 
 class BestFit(FirstFit):
     """
