@@ -410,14 +410,16 @@ class DefaultTweaker(Tweaker):
                     _dict[k2] = v2 * _processors
                     _dict['requested_resources'][k2] = v2
         _dict['requested_nodes'] = _processors
-        _dict['requested_resources']['mem'] = _dict['mem'] 
-        _dict['mem'] = _dict['mem'] * _processors
+        if 'mem' in _dict:
+            _dict['requested_resources']['mem'] = _dict['mem'] 
+            _dict['mem'] = _dict['mem'] * _processors
         _dict['queue'] = _dict.pop('queue_number')
                 
         _dict['queued_time'] = _dict.pop('queued_time') + self.start_time
         
         assert (
         _dict['core'] >= 0), 'Please consider to clean your data cannot exists requests with any info about core request.'
-        assert (
-        _dict['mem'] >= 0), 'Please consider to clean your data cannot exists requests with any info about mem request.'
+        if 'mem' in _dict:
+            assert (
+            _dict['mem'] >= 0), 'Please consider to clean your data cannot exists requests with any info about mem request.'
         return _dict
